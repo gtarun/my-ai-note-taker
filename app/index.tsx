@@ -1,4 +1,5 @@
 import * as DocumentPicker from 'expo-document-picker';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
@@ -12,9 +13,11 @@ import {
 } from 'react-native';
 
 import { MeetingRow } from '../src/types';
+import { FadeInView } from '../src/components/FadeInView';
+import { ScreenBackground } from '../src/components/ScreenBackground';
 import { createMeetingFromImport, listMeetings } from '../src/services/meetings';
 import { formatDuration, formatTimestamp } from '../src/utils/format';
-import { palette } from '../src/theme';
+import { elevation, palette } from '../src/theme';
 
 export default function HomeScreen() {
   const [meetings, setMeetings] = useState<MeetingRow[]>([]);
@@ -56,30 +59,51 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <ScreenBackground />
       <View style={styles.container}>
-        <View style={styles.hero}>
-          <Text style={styles.eyebrow}>Local-first meeting companion</Text>
+        <FadeInView style={styles.hero}>
+          <View style={styles.heroTopRow}>
+            <Text style={styles.eyebrow}>Local-first meeting companion</Text>
+            <View style={styles.heroPill}>
+              <Text style={styles.heroPillText}>{meetings.length} saved</Text>
+            </View>
+          </View>
           <Text style={styles.heroTitle}>Record it. Upload it. Process it later.</Text>
           <Text style={styles.heroBody}>
             No bots. No calendar magic. Just a fast path from audio to transcript and action items.
           </Text>
-        </View>
+          <View style={styles.heroStats}>
+            <MetricPill label="Manual" value="Safe" />
+            <MetricPill label="Storage" value="Local" />
+            <MetricPill label="Flow" value="Post-call" />
+          </View>
+        </FadeInView>
 
-        <View style={styles.actions}>
-          <ActionButton label="New recording" onPress={() => router.push('/record')} />
+        <FadeInView style={styles.actions} delay={80}>
+          <ActionButton
+            label="New recording"
+            icon={<MaterialCommunityIcons name="microphone-outline" size={18} color={palette.paper} />}
+            onPress={() => router.push('/record')}
+          />
           <ActionButton
             label={isImporting ? 'Importing…' : 'Import audio'}
+            icon={<Feather name="upload" size={18} color={palette.paper} />}
             onPress={handleImport}
             disabled={isImporting}
             secondary
           />
-          <ActionButton label="Settings" onPress={() => router.push('/settings')} tertiary />
-        </View>
+          <ActionButton
+            label="Settings"
+            icon={<Feather name="sliders" size={17} color={palette.ink} />}
+            onPress={() => router.push('/settings')}
+            tertiary
+          />
+        </FadeInView>
 
-        <View style={styles.sectionHeader}>
+        <FadeInView style={styles.sectionHeader} delay={130}>
           <Text style={styles.sectionTitle}>Recent meetings</Text>
           <Text style={styles.sectionBody}>{meetings.length} saved locally</Text>
-        </View>
+        </FadeInView>
 
         <FlatList
           data={meetings}
@@ -89,7 +113,7 @@ export default function HomeScreen() {
             <Pressable style={styles.card} onPress={() => router.push(`/meetings/${item.id}`)}>
               <View style={styles.cardHeader}>
                 <Text style={styles.cardTitle}>{item.title}</Text>
-                <Text style={styles.status}>{item.status.replace('_', ' ')}</Text>
+                <Text style={styles.status}>{statusLabel(item.status)}</Text>
               </View>
               <Text style={styles.cardMeta}>
                 {formatTimestamp(item.createdAt)}
@@ -100,6 +124,15 @@ export default function HomeScreen() {
                   item.transcriptText?.slice(0, 120) ||
                   'No transcript yet. Open this meeting to process it.'}
               </Text>
+              <View style={styles.cardFooter}>
+                <Text style={styles.cardFooterLabel}>
+                  {item.summaryShort ? 'Processed' : 'Needs processing'}
+                </Text>
+                <View style={styles.cardFooterActionWrap}>
+                  <Text style={styles.cardFooterAction}>Open</Text>
+                  <Feather name="arrow-up-right" size={14} color={palette.ink} />
+                </View>
+              </View>
             </Pressable>
           )}
           ListEmptyComponent={
@@ -118,12 +151,14 @@ export default function HomeScreen() {
 
 function ActionButton({
   label,
+  icon,
   onPress,
   disabled,
   secondary,
   tertiary,
 }: {
   label: string;
+  icon?: React.ReactNode;
   onPress: () => void;
   disabled?: boolean;
   secondary?: boolean;
@@ -140,6 +175,7 @@ function ActionButton({
         disabled && styles.actionButtonDisabled,
       ]}
     >
+      {icon ? <View style={styles.actionIconWrap}>{icon}</View> : null}
       <Text
         style={[
           styles.actionButtonText,
@@ -153,6 +189,30 @@ function ActionButton({
   );
 }
 
+function MetricPill({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.metricPill}>
+      <Text style={styles.metricLabel}>{label}</Text>
+      <Text style={styles.metricValue}>{value}</Text>
+    </View>
+  );
+}
+
+function statusLabel(status: MeetingRow['status']) {
+  switch (status) {
+    case 'ready':
+      return 'ready';
+    case 'failed':
+      return 'error';
+    case 'transcribing':
+      return 'transcribing';
+    case 'summarizing':
+      return 'summarizing';
+    default:
+      return 'local only';
+  }
+}
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -164,12 +224,30 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
   },
   hero: {
-    backgroundColor: palette.card,
-    borderRadius: 24,
+    backgroundColor: palette.cardStrong,
+    borderRadius: 30,
     padding: 20,
-    gap: 8,
+    gap: 10,
     borderWidth: 1,
     borderColor: palette.line,
+    ...elevation.card,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  heroPill: {
+    borderRadius: 999,
+    backgroundColor: palette.ink,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  heroPillText: {
+    color: palette.paper,
+    fontWeight: '800',
+    fontSize: 12,
   },
   eyebrow: {
     color: palette.accent,
@@ -189,6 +267,32 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
+  heroStats: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  metricPill: {
+    flex: 1,
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: palette.paper,
+    borderWidth: 1,
+    borderColor: palette.line,
+  },
+  metricLabel: {
+    color: palette.mutedInk,
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  metricValue: {
+    color: palette.ink,
+    fontWeight: '800',
+    fontSize: 15,
+    marginTop: 3,
+  },
   actions: {
     flexDirection: 'row',
     gap: 10,
@@ -197,13 +301,15 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
-    borderRadius: 16,
+    borderRadius: 18,
     backgroundColor: palette.ink,
-    paddingVertical: 14,
+    paddingVertical: 15,
     alignItems: 'center',
+    ...elevation.card,
+    gap: 8,
   },
   actionButtonSecondary: {
-    backgroundColor: palette.accentSoft,
+    backgroundColor: palette.accent,
   },
   actionButtonTertiary: {
     backgroundColor: palette.paper,
@@ -220,8 +326,13 @@ const styles = StyleSheet.create({
     color: palette.paper,
     fontWeight: '700',
   },
+  actionIconWrap: {
+    minWidth: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   actionButtonTextSecondary: {
-    color: palette.ink,
+    color: palette.paper,
   },
   actionButtonTextTertiary: {
     color: palette.ink,
@@ -248,12 +359,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   card: {
-    backgroundColor: palette.card,
+    backgroundColor: palette.cardStrong,
     borderWidth: 1,
     borderColor: palette.line,
-    borderRadius: 20,
+    borderRadius: 24,
     padding: 16,
-    gap: 8,
+    gap: 10,
+    ...elevation.card,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -269,6 +381,10 @@ const styles = StyleSheet.create({
   },
   status: {
     color: palette.accent,
+    backgroundColor: palette.accentMist,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
     textTransform: 'capitalize',
     fontSize: 12,
     fontWeight: '700',
@@ -281,6 +397,27 @@ const styles = StyleSheet.create({
     color: palette.ink,
     fontSize: 14,
     lineHeight: 20,
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 2,
+  },
+  cardFooterActionWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  cardFooterLabel: {
+    color: palette.mutedInk,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  cardFooterAction: {
+    color: palette.ink,
+    fontSize: 13,
+    fontWeight: '800',
   },
   emptyState: {
     alignItems: 'center',

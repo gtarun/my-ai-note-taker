@@ -1,5 +1,12 @@
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { RecordingPresets, requestRecordingPermissionsAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
+import {
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioRecorder,
+  useAudioRecorderState,
+} from 'expo-audio';
 import { useState } from 'react';
 import {
   Alert,
@@ -12,9 +19,11 @@ import {
   View,
 } from 'react-native';
 
+import { FadeInView } from '../src/components/FadeInView';
+import { ScreenBackground } from '../src/components/ScreenBackground';
 import { createMeetingFromRecording } from '../src/services/meetings';
 import { formatDuration } from '../src/utils/format';
-import { palette } from '../src/theme';
+import { elevation, palette } from '../src/theme';
 
 export default function RecordScreen() {
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -27,6 +36,13 @@ export default function RecordScreen() {
       try {
         setIsSaving(true);
         await recorder.stop();
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          interruptionMode: 'duckOthers',
+          allowsRecording: false,
+          shouldPlayInBackground: false,
+          shouldRouteThroughEarpiece: false,
+        });
         const uri = recorder.uri ?? recorderState.url;
 
         if (!uri) {
@@ -57,6 +73,13 @@ export default function RecordScreen() {
     }
 
     try {
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        interruptionMode: 'duckOthers',
+        allowsRecording: true,
+        shouldPlayInBackground: false,
+        shouldRouteThroughEarpiece: false,
+      });
       await recorder.prepareToRecordAsync();
       recorder.record();
     } catch (error) {
@@ -66,15 +89,19 @@ export default function RecordScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <ScreenBackground />
       <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.notice}>
-          <Text style={styles.noticeTitle}>Week-1 safe mode</Text>
+        <FadeInView style={styles.notice}>
+          <View style={styles.noticeHeader}>
+            <Feather name="shield" size={16} color={palette.ink} />
+            <Text style={styles.noticeTitle}>Week-1 safe mode</Text>
+          </View>
           <Text style={styles.noticeBody}>
             Keep the app open while recording. This MVP is built for manual foreground recording, not stealth capture.
           </Text>
-        </View>
+        </FadeInView>
 
-        <View style={styles.card}>
+        <FadeInView style={styles.card} delay={70}>
           <Text style={styles.label}>Meeting title</Text>
           <TextInput
             style={styles.input}
@@ -85,8 +112,18 @@ export default function RecordScreen() {
           />
 
           <View style={styles.timerWrap}>
-            <Text style={styles.timerLabel}>Duration</Text>
+            <View style={styles.liveChip}>
+              {recorderState.isRecording ? (
+                <MaterialCommunityIcons name="record-circle" size={14} color={palette.danger} />
+              ) : (
+                <Feather name="mic" size={13} color={palette.lineStrong} />
+              )}
+              <Text style={styles.liveChipText}>
+                {recorderState.isRecording ? 'Recording live' : 'Ready to record'}
+              </Text>
+            </View>
             <Text style={styles.timerValue}>{formatDuration(recorderState.durationMillis)}</Text>
+            <Text style={styles.timerLabel}>Phone mic, foreground only</Text>
           </View>
 
           <Pressable
@@ -94,18 +131,23 @@ export default function RecordScreen() {
             onPress={handleRecordToggle}
             disabled={isSaving}
           >
+            <MaterialCommunityIcons
+              name={recorderState.isRecording ? 'stop-circle-outline' : 'microphone-outline'}
+              size={20}
+              color={palette.paper}
+            />
             <Text style={styles.recordButtonText}>
               {isSaving ? 'Saving…' : recorderState.isRecording ? 'Stop and save' : 'Start recording'}
             </Text>
           </Pressable>
-        </View>
+        </FadeInView>
 
-        <View style={styles.footerCopy}>
+        <FadeInView style={styles.footerCopy} delay={120}>
           <Text style={styles.footerTitle}>Consent reminder</Text>
           <Text style={styles.footerBody}>
             Make sure everyone in the meeting knows it’s being recorded. You own that responsibility.
           </Text>
-        </View>
+        </FadeInView>
       </ScrollView>
     </SafeAreaView>
   );
@@ -121,10 +163,17 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   notice: {
-    backgroundColor: palette.accentSoft,
-    borderRadius: 20,
+    backgroundColor: palette.accentMist,
+    borderRadius: 22,
     padding: 18,
     gap: 6,
+    borderWidth: 1,
+    borderColor: palette.line,
+  },
+  noticeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   noticeTitle: {
     color: palette.ink,
@@ -136,12 +185,13 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   card: {
-    backgroundColor: palette.card,
-    borderRadius: 24,
-    padding: 18,
+    backgroundColor: palette.cardStrong,
+    borderRadius: 28,
+    padding: 20,
     borderWidth: 1,
     borderColor: palette.line,
     gap: 14,
+    ...elevation.card,
   },
   label: {
     color: palette.ink,
@@ -159,26 +209,43 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   timerWrap: {
-    paddingVertical: 8,
+    paddingVertical: 14,
     alignItems: 'center',
     gap: 6,
+  },
+  liveChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: palette.paper,
+    borderWidth: 1,
+    borderColor: palette.line,
+  },
+  liveChipText: {
+    color: palette.ink,
+    fontWeight: '700',
+    fontSize: 13,
   },
   timerLabel: {
     color: palette.mutedInk,
     fontSize: 13,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 0.4,
   },
   timerValue: {
     color: palette.ink,
-    fontSize: 42,
+    fontSize: 56,
     fontWeight: '800',
   },
   recordButton: {
     backgroundColor: palette.ink,
-    borderRadius: 18,
-    paddingVertical: 18,
+    borderRadius: 22,
+    paddingVertical: 20,
     alignItems: 'center',
+    ...elevation.card,
+    gap: 8,
   },
   recordButtonActive: {
     backgroundColor: palette.danger,

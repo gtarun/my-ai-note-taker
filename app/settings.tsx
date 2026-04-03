@@ -1,7 +1,9 @@
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import {
   Alert,
   Pressable,
+  PressableProps,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -11,9 +13,12 @@ import {
   View,
 } from 'react-native';
 
+import { FadeInView } from '../src/components/FadeInView';
+import { ScreenBackground } from '../src/components/ScreenBackground';
+import { providerDefinitions, providerMap } from '../src/services/providers';
 import { getAppSettings, saveAppSettings } from '../src/services/settings';
-import { AppSettings } from '../src/types';
-import { palette } from '../src/theme';
+import { AppSettings, ProviderConfig, ProviderId } from '../src/types';
+import { elevation, palette } from '../src/theme';
 
 export default function SettingsScreen() {
   const [form, setForm] = useState<AppSettings | null>(null);
@@ -31,15 +36,39 @@ export default function SettingsScreen() {
     );
   }
 
+  const transcriptionProvider = providerMap[form.selectedTranscriptionProvider];
+  const summaryProvider = providerMap[form.selectedSummaryProvider];
+
   const updateForm = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     setForm((current) => (current ? { ...current, [key]: value } : current));
+  };
+
+  const updateProvider = <K extends keyof ProviderConfig>(
+    providerId: ProviderId,
+    key: K,
+    value: ProviderConfig[K]
+  ) => {
+    setForm((current) =>
+      current
+        ? {
+            ...current,
+            providers: {
+              ...current.providers,
+              [providerId]: {
+                ...current.providers[providerId],
+                [key]: value,
+              },
+            },
+          }
+        : current
+    );
   };
 
   const handleSave = async () => {
     try {
       setIsSaving(true);
       await saveAppSettings(form);
-      Alert.alert('Saved', 'Settings stored locally on this device.');
+      Alert.alert('Saved', 'Provider settings stored locally on this device.');
     } catch (error) {
       Alert.alert('Save failed', error instanceof Error ? error.message : 'Unable to save settings.');
     } finally {
@@ -49,53 +78,45 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <ScreenBackground />
       <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>OpenAI setup</Text>
+        <FadeInView style={styles.hero}>
+          <View style={styles.heroHeader}>
+            <MaterialCommunityIcons name="tune-variant" size={18} color={palette.ink} />
+            <Text style={styles.heroTitle}>Provider setup</Text>
+          </View>
+          <Text style={styles.heroBody}>
+            Keep this simple: pick one provider for transcription, one provider for summary, and only fill in the fields that matter for those choices.
+          </Text>
+        </FadeInView>
 
-          <Label text="API key" />
-          <TextInput
-            style={styles.input}
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder="sk-..."
-            placeholderTextColor={palette.mutedInk}
-            secureTextEntry
-            value={form.openAIApiKey}
-            onChangeText={(value) => updateForm('openAIApiKey', value)}
-          />
+        <ProviderSection
+          delay={40}
+          title="Transcription"
+          subtitle="Used for turning audio into text."
+          icon={<Feather name="mic" size={18} color={palette.ink} />}
+          selectedProviderId={form.selectedTranscriptionProvider}
+          providerIds={providerDefinitions.filter((provider) => provider.supportsTranscription).map((p) => p.id)}
+          providers={form.providers}
+          onSelect={(providerId) => updateForm('selectedTranscriptionProvider', providerId)}
+          onChange={updateProvider}
+          mode="transcription"
+        />
 
-          <Label text="Base URL" />
-          <TextInput
-            style={styles.input}
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder="https://api.openai.com/v1"
-            placeholderTextColor={palette.mutedInk}
-            value={form.openAIBaseUrl}
-            onChangeText={(value) => updateForm('openAIBaseUrl', value)}
-          />
+        <ProviderSection
+          delay={90}
+          title="Summary"
+          subtitle="Used for summary, action items, and decisions."
+          icon={<Feather name="file-text" size={18} color={palette.ink} />}
+          selectedProviderId={form.selectedSummaryProvider}
+          providerIds={providerDefinitions.filter((provider) => provider.supportsSummary).map((p) => p.id)}
+          providers={form.providers}
+          onSelect={(providerId) => updateForm('selectedSummaryProvider', providerId)}
+          onChange={updateProvider}
+          mode="summary"
+        />
 
-          <Label text="Transcription model" />
-          <TextInput
-            style={styles.input}
-            autoCapitalize="none"
-            autoCorrect={false}
-            value={form.transcriptionModel}
-            onChangeText={(value) => updateForm('transcriptionModel', value)}
-          />
-
-          <Label text="Summary model" />
-          <TextInput
-            style={styles.input}
-            autoCapitalize="none"
-            autoCorrect={false}
-            value={form.summaryModel}
-            onChangeText={(value) => updateForm('summaryModel', value)}
-          />
-        </View>
-
-        <View style={styles.card}>
+        <FadeInView style={styles.card} delay={120}>
           <Text style={styles.cardTitle}>Privacy defaults</Text>
           <View style={styles.row}>
             <View style={styles.rowCopy}>
@@ -107,25 +128,171 @@ export default function SettingsScreen() {
               onValueChange={(value) => updateForm('deleteUploadedAudio', value)}
             />
           </View>
-        </View>
+        </FadeInView>
 
-        <View style={styles.notice}>
-          <Text style={styles.noticeTitle}>Blunt reality</Text>
+        <FadeInView style={styles.notice} delay={150}>
+          <View style={styles.noticeHeader}>
+            <Feather name="alert-triangle" size={16} color={palette.ink} />
+            <Text style={styles.noticeTitle}>Provider rules</Text>
+          </View>
           <Text style={styles.noticeBody}>
-            Audio leaves the device when you process a meeting. Use your own keys, get consent, and don’t pretend this is stealth-safe.
+            OpenRouter now works for transcription and summary. Anthropic and Gemini are still summary-only here. If you want one simple setup, use OpenAI for both.
           </Text>
-        </View>
+        </FadeInView>
 
         <Pressable style={styles.saveButton} onPress={handleSave} disabled={isSaving}>
           <Text style={styles.saveButtonText}>{isSaving ? 'Saving…' : 'Save settings'}</Text>
         </Pressable>
+
+        <FadeInView style={styles.footerHint} delay={180}>
+          <Text style={styles.footerHintText}>
+            Active now: transcription via {transcriptionProvider.label}, summary via {summaryProvider.label}.
+          </Text>
+        </FadeInView>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+function ProviderSection({
+  title,
+  subtitle,
+  icon,
+  selectedProviderId,
+  providerIds,
+  providers,
+  onSelect,
+  onChange,
+  mode,
+  delay,
+}: {
+  title: string;
+  subtitle: string;
+  icon: React.ReactNode;
+  selectedProviderId: ProviderId;
+  providerIds: ProviderId[];
+  providers: Record<ProviderId, ProviderConfig>;
+  onSelect: (providerId: ProviderId) => void;
+  onChange: <K extends keyof ProviderConfig>(providerId: ProviderId, key: K, value: ProviderConfig[K]) => void;
+  mode: 'transcription' | 'summary';
+  delay: number;
+}) {
+  const provider = providerMap[selectedProviderId];
+  const config = providers[selectedProviderId];
+  const modelLabel = mode === 'transcription' ? 'Transcription model' : 'Summary model';
+  const modelKey = mode === 'transcription' ? 'transcriptionModel' : 'summaryModel';
+  const modelPlaceholder = mode === 'transcription' ? 'whisper-large-v3-turbo' : 'gpt-4.1-mini';
+
+  return (
+    <FadeInView style={styles.card} delay={delay}>
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionTitleRow}>
+          {icon}
+          <Text style={styles.cardTitle}>{title}</Text>
+        </View>
+        <Text style={styles.rowBody}>{subtitle}</Text>
+      </View>
+
+      <View style={styles.chipRow}>
+        {providerIds.map((providerId) => (
+          <ChipButton
+            key={providerId}
+            label={providerMap[providerId].label}
+            selected={selectedProviderId === providerId}
+            onPress={() => onSelect(providerId)}
+          />
+        ))}
+      </View>
+
+      <View style={styles.selectedProviderCard}>
+        <View style={styles.providerHeader}>
+          <View style={styles.providerTitleRow}>
+            <ProviderIcon providerId={selectedProviderId} />
+            <Text style={styles.selectedProviderTitle}>{provider.label}</Text>
+          </View>
+          <Text style={styles.activeBadge}>Selected</Text>
+        </View>
+        <Text style={styles.rowBody}>{provider.description}</Text>
+
+        <Label text="API key" />
+        <TextInput
+          style={styles.input}
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder={provider.apiKeyPlaceholder}
+          placeholderTextColor={palette.mutedInk}
+          secureTextEntry
+          value={config.apiKey}
+          onChangeText={(value) => onChange(selectedProviderId, 'apiKey', value)}
+        />
+
+        <Label text="Base URL" />
+        <TextInput
+          style={styles.input}
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder={provider.baseUrlPlaceholder}
+          placeholderTextColor={palette.mutedInk}
+          value={config.baseUrl}
+          onChangeText={(value) => onChange(selectedProviderId, 'baseUrl', value)}
+        />
+
+        <Label text={modelLabel} />
+        <TextInput
+          style={styles.input}
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder={modelPlaceholder}
+          placeholderTextColor={palette.mutedInk}
+          value={config[modelKey]}
+          onChangeText={(value) => onChange(selectedProviderId, modelKey, value)}
+        />
+      </View>
+    </FadeInView>
+  );
+}
+
 function Label({ text }: { text: string }) {
   return <Text style={styles.label}>{text}</Text>;
+}
+
+function ChipButton({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected?: boolean;
+  onPress: PressableProps['onPress'];
+}) {
+  return (
+    <Pressable style={[styles.chip, selected && styles.chipSelected]} onPress={onPress}>
+      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function ProviderIcon({ providerId }: { providerId: ProviderId }) {
+  switch (providerId) {
+    case 'openai':
+      return <MaterialCommunityIcons name="star-four-points-circle-outline" size={18} color={palette.ink} />;
+    case 'openrouter':
+      return <Feather name="shuffle" size={17} color={palette.ink} />;
+    case 'groq':
+      return <Feather name="zap" size={17} color={palette.ink} />;
+    case 'anthropic':
+      return <MaterialCommunityIcons name="brain" size={18} color={palette.ink} />;
+    case 'gemini':
+      return <MaterialCommunityIcons name="google-circles-communities" size={18} color={palette.ink} />;
+    case 'together':
+      return <Feather name="layers" size={17} color={palette.ink} />;
+    case 'fireworks':
+      return <Feather name="sun" size={17} color={palette.ink} />;
+    case 'deepseek':
+      return <Feather name="search" size={17} color={palette.ink} />;
+    default:
+      return <Feather name="settings" size={17} color={palette.ink} />;
+  }
 }
 
 const styles = StyleSheet.create({
@@ -145,28 +312,115 @@ const styles = StyleSheet.create({
   container: {
     padding: 20,
     gap: 16,
+    paddingBottom: 32,
+  },
+  hero: {
+    backgroundColor: palette.cardStrong,
+    borderRadius: 28,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: palette.line,
+    gap: 8,
+    ...elevation.card,
+  },
+  heroHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  heroTitle: {
+    color: palette.ink,
+    fontSize: 26,
+    fontWeight: '800',
+  },
+  heroBody: {
+    color: palette.mutedInk,
+    lineHeight: 22,
   },
   card: {
-    backgroundColor: palette.card,
-    borderRadius: 20,
+    backgroundColor: palette.cardStrong,
+    borderRadius: 24,
     padding: 18,
     borderWidth: 1,
     borderColor: palette.line,
-    gap: 10,
+    gap: 12,
+    ...elevation.card,
+  },
+  sectionHeader: {
+    gap: 4,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   cardTitle: {
     color: palette.ink,
     fontSize: 18,
     fontWeight: '800',
-    marginBottom: 4,
   },
   label: {
     color: palette.ink,
     fontSize: 13,
     fontWeight: '700',
   },
-  input: {
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: palette.line,
     backgroundColor: palette.paper,
+  },
+  chipSelected: {
+    backgroundColor: palette.ink,
+    borderColor: palette.ink,
+  },
+  chipText: {
+    color: palette.ink,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  chipTextSelected: {
+    color: palette.paper,
+  },
+  selectedProviderCard: {
+    backgroundColor: palette.paper,
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: palette.line,
+    gap: 10,
+  },
+  providerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  providerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  selectedProviderTitle: {
+    color: palette.ink,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  activeBadge: {
+    color: palette.accent,
+    fontWeight: '800',
+    fontSize: 12,
+    textTransform: 'uppercase',
+  },
+  input: {
+    backgroundColor: palette.card,
     borderWidth: 1,
     borderColor: palette.line,
     borderRadius: 14,
@@ -193,10 +447,17 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   notice: {
-    backgroundColor: palette.accentSoft,
-    borderRadius: 20,
+    backgroundColor: palette.rose,
+    borderRadius: 24,
     padding: 18,
     gap: 6,
+    borderWidth: 1,
+    borderColor: palette.line,
+  },
+  noticeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   noticeTitle: {
     color: palette.ink,
@@ -217,5 +478,13 @@ const styles = StyleSheet.create({
     color: palette.paper,
     fontWeight: '800',
     fontSize: 16,
+  },
+  footerHint: {
+    paddingHorizontal: 4,
+  },
+  footerHintText: {
+    color: palette.mutedInk,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });

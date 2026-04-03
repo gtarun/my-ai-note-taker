@@ -1,42 +1,118 @@
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
-import { getDatabase } from '../db';
-import { AppSettings } from '../types';
+import { AppSettings, ProviderConfig, ProviderId } from '../types';
+import { defaultProviderConfigs, providerDefinitions, providerMap } from './providers';
 
-const OPENAI_KEY_SECRET = 'openai_api_key';
+const SETTINGS_STORAGE_KEY = 'app_settings_v2';
 
-type SettingsRow = {
-  openai_base_url: string;
-  transcription_model: string;
-  summary_model: string;
-  delete_uploaded_audio: number;
+type StoredSettings = Omit<AppSettings, 'providers'> & {
+  providers: Record<ProviderId, Omit<ProviderConfig, 'apiKey'>>;
 };
 
+function getDefaultSettings(): AppSettings {
+  return {
+    selectedTranscriptionProvider: 'openai',
+    selectedSummaryProvider: 'openai',
+    providers: structuredClone(defaultProviderConfigs),
+    deleteUploadedAudio: false,
+  };
+}
+
 export async function getAppSettings(): Promise<AppSettings> {
-  const db = getDatabase();
-  const row = await db.getFirstAsync<SettingsRow>('SELECT * FROM app_settings WHERE id = 1');
-  const openAIApiKey = (await SecureStore.getItemAsync(OPENAI_KEY_SECRET)) ?? '';
+  const defaultSettings = getDefaultSettings();
+  const stored = await readStoredSettings();
+
+  const providers = { ...defaultSettings.providers };
+
+  for (const definition of providerDefinitions) {
+    const storedProvider = stored?.providers?.[definition.id];
+    providers[definition.id] = {
+      ...providers[definition.id],
+      ...(storedProvider ?? {}),
+      apiKey: (await readProviderKey(definition.id)) ?? '',
+    };
+  }
 
   return {
-    openAIApiKey,
-    openAIBaseUrl: row?.openai_base_url ?? 'https://api.openai.com/v1',
-    transcriptionModel: row?.transcription_model ?? 'gpt-4o-mini-transcribe',
-    summaryModel: row?.summary_model ?? 'gpt-4.1-mini',
-    deleteUploadedAudio: Boolean(row?.delete_uploaded_audio),
+    selectedTranscriptionProvider:
+      stored?.selectedTranscriptionProvider && providerMap[stored.selectedTranscriptionProvider]?.supportsTranscription
+        ? stored.selectedTranscriptionProvider
+        : defaultSettings.selectedTranscriptionProvider,
+    selectedSummaryProvider:
+      stored?.selectedSummaryProvider && providerMap[stored.selectedSummaryProvider]?.supportsSummary
+        ? stored.selectedSummaryProvider
+        : defaultSettings.selectedSummaryProvider,
+    providers,
+    deleteUploadedAudio: stored?.deleteUploadedAudio ?? defaultSettings.deleteUploadedAudio,
   };
 }
 
 export async function saveAppSettings(settings: AppSettings) {
-  const db = getDatabase();
-  await db.runAsync(
-    `UPDATE app_settings
-     SET openai_base_url = ?, transcription_model = ?, summary_model = ?, delete_uploaded_audio = ?
-     WHERE id = 1`,
-    settings.openAIBaseUrl.trim() || 'https://api.openai.com/v1',
-    settings.transcriptionModel.trim() || 'gpt-4o-mini-transcribe',
-    settings.summaryModel.trim() || 'gpt-4.1-mini',
-    settings.deleteUploadedAudio ? 1 : 0
-  );
+  const storedSettings: StoredSettings = {
+    selectedTranscriptionProvider: settings.selectedTranscriptionProvider,
+    selectedSummaryProvider: settings.selectedSummaryProvider,
+    deleteUploadedAudio: settings.deleteUploadedAudio,
+    providers: Object.fromEntries(
+      providerDefinitions.map((definition) => [
+        definition.id,
+        {
+          baseUrl: settings.providers[definition.id].baseUrl.trim(),
+          transcriptionModel: settings.providers[definition.id].transcriptionModel.trim(),
+          summaryModel: settings.providers[definition.id].summaryModel.trim(),
+        },
+      ])
+    ) as StoredSettings['providers'],
+  };
 
-  await SecureStore.setItemAsync(OPENAI_KEY_SECRET, settings.openAIApiKey.trim());
+  await writeStorageValue(SETTINGS_STORAGE_KEY, JSON.stringify(storedSettings));
+
+  await Promise.all(
+    providerDefinitions.map((definition) =>
+      writeProviderKey(definition.id, settings.providers[definition.id].apiKey.trim())
+    )
+  );
+}
+
+async function readStoredSettings(): Promise<StoredSettings | null> {
+  const raw = await readStorageValue(SETTINGS_STORAGE_KEY);
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw) as StoredSettings;
+  } catch {
+    return null;
+  }
+}
+
+async function readProviderKey(providerId: ProviderId) {
+  return readStorageValue(getProviderKeyStorageKey(providerId));
+}
+
+async function writeProviderKey(providerId: ProviderId, value: string) {
+  await writeStorageValue(getProviderKeyStorageKey(providerId), value);
+}
+
+function getProviderKeyStorageKey(providerId: ProviderId) {
+  return `provider_api_key_${providerId}`;
+}
+
+async function readStorageValue(key: string) {
+  if (Platform.OS === 'web') {
+    return window.localStorage.getItem(key);
+  }
+
+  return SecureStore.getItemAsync(key);
+}
+
+async function writeStorageValue(key: string, value: string) {
+  if (Platform.OS === 'web') {
+    window.localStorage.setItem(key, value);
+    return;
+  }
+
+  await SecureStore.setItemAsync(key, value);
 }

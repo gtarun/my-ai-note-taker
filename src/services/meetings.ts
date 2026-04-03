@@ -5,7 +5,7 @@ import { getDatabase, mapMeetingRow } from '../db';
 import { SummaryPayload, type MeetingRow } from '../types';
 import { getAudioDirectory } from './bootstrap';
 import { getAppSettings } from './settings';
-import { summarizeTranscript, transcribeAudio } from './openai';
+import { summarizeTranscript, transcribeAudio } from './ai';
 
 type RecordingInput = {
   uri: string;
@@ -57,28 +57,32 @@ export async function processMeeting(id: string) {
   }
 
   const settings = await getAppSettings();
+  const transcriptionProvider = settings.providers[settings.selectedTranscriptionProvider];
+  const summaryProvider = settings.providers[settings.selectedSummaryProvider];
 
-  if (!settings.openAIApiKey) {
-    throw new Error('Add your OpenAI API key in Settings first.');
+  if (!transcriptionProvider.apiKey) {
+    throw new Error('Add an API key for the selected transcription provider in Settings first.');
+  }
+
+  if (!summaryProvider.apiKey) {
+    throw new Error('Add an API key for the selected summary provider in Settings first.');
   }
 
   try {
     await updateMeetingStatus(id, 'transcribing', null);
     const transcriptText = await transcribeAudio({
+      providerId: settings.selectedTranscriptionProvider,
+      provider: transcriptionProvider,
       audioUri: meeting.audioUri,
-      apiKey: settings.openAIApiKey,
-      baseUrl: settings.openAIBaseUrl,
-      model: settings.transcriptionModel,
     });
 
     await updateTranscript(id, transcriptText);
     await updateMeetingStatus(id, 'summarizing', null);
 
     const summary = await summarizeTranscript({
+      providerId: settings.selectedSummaryProvider,
+      provider: summaryProvider,
       transcriptText,
-      apiKey: settings.openAIApiKey,
-      baseUrl: settings.openAIBaseUrl,
-      model: settings.summaryModel,
     });
 
     await saveSummary(id, summary);
@@ -88,6 +92,43 @@ export async function processMeeting(id: string) {
     await updateMeetingStatus(id, 'failed', message);
     throw error;
   }
+}
+
+export async function renameMeeting(id: string, title: string) {
+  const db = getDatabase();
+  const cleanTitle = title.trim();
+
+  if (!cleanTitle) {
+    throw new Error('Title cannot be empty.');
+  }
+
+  await db.runAsync(
+    'UPDATE meetings SET title = ?, updated_at = ? WHERE id = ?',
+    cleanTitle,
+    new Date().toISOString(),
+    id
+  );
+}
+
+export async function deleteMeeting(id: string) {
+  const meeting = await getMeeting(id);
+
+  if (!meeting) {
+    return;
+  }
+
+  const db = getDatabase();
+
+  try {
+    const fileInfo = await FileSystem.getInfoAsync(meeting.audioUri);
+    if (fileInfo.exists) {
+      await FileSystem.deleteAsync(meeting.audioUri, { idempotent: true });
+    }
+  } catch {
+    // If cleanup fails, still remove the meeting row so the user can move on.
+  }
+
+  await db.runAsync('DELETE FROM meetings WHERE id = ?', id);
 }
 
 async function insertMeeting(input: {

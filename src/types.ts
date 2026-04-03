@@ -27,10 +27,27 @@ export type SummaryPayload = {
   followUps: string[];
 };
 
-export type AppSettings = {
-  openAIApiKey: string;
-  openAIBaseUrl: string;
+export type ProviderId =
+  | 'openai'
+  | 'openrouter'
+  | 'groq'
+  | 'anthropic'
+  | 'gemini'
+  | 'together'
+  | 'fireworks'
+  | 'deepseek'
+  | 'custom';
+
+export type ProviderConfig = {
+  apiKey: string;
+  baseUrl: string;
   transcriptionModel: string;
   summaryModel: string;
+};
+
+export type AppSettings = {
+  selectedTranscriptionProvider: ProviderId;
+  selectedSummaryProvider: ProviderId;
+  providers: Record<ProviderId, ProviderConfig>;
   deleteUploadedAudio: boolean;
 };
