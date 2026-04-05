@@ -51,3 +51,28 @@ export type AppSettings = {
   providers: Record<ProviderId, ProviderConfig>;
   deleteUploadedAudio: boolean;
 };
+
+export type DriveConnection = {
+  status: 'not_connected' | 'connected';
+  accountEmail: string | null;
+  connectedAt: string | null;
+};
+
+export type UserAccount = {
+  id: string;
+  email: string;
+  name: string | null;
+  driveConnection: DriveConnection;
+};
+
+export type AuthSession = {
+  accessToken: string;
+  user: UserAccount;
+};
+
+export type CloudBackendConfig = {
+  supabaseUrl: string;
+  supabaseAnonKey: string;
+  projectRef: string;
+  googleDriveConnectFunctionName: string;
+};

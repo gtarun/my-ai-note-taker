@@ -165,6 +165,23 @@ const db = {
       return;
     }
 
+    if (
+      source.includes(
+        'SET transcript_text = NULL, summary_json = NULL, summary_short = NULL, error_message = NULL, updated_at = ?'
+      )
+    ) {
+      const meeting = state.meetings.find((row) => row.id === params[1]);
+      if (meeting) {
+        meeting.transcript_text = null;
+        meeting.summary_json = null;
+        meeting.summary_short = null;
+        meeting.error_message = null;
+        meeting.updated_at = String(params[0]);
+        writeState(state);
+      }
+      return;
+    }
+
     if (source.includes('SET summary_json = ?, summary_short = ?, updated_at = ?')) {
       const meeting = state.meetings.find((row) => row.id === params[3]);
       if (meeting) {

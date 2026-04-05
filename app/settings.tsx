@@ -2,6 +2,7 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import {
   Alert,
+  Modal,
   Pressable,
   PressableProps,
   SafeAreaView,
@@ -181,7 +182,7 @@ function ProviderSection({
   const config = providers[selectedProviderId];
   const modelLabel = mode === 'transcription' ? 'Transcription model' : 'Summary model';
   const modelKey = mode === 'transcription' ? 'transcriptionModel' : 'summaryModel';
-  const modelPlaceholder = mode === 'transcription' ? 'whisper-large-v3-turbo' : 'gpt-4.1-mini';
+  const modelOptions = mode === 'transcription' ? provider.transcriptionModels : provider.summaryModels;
 
   return (
     <FadeInView style={styles.card} delay={delay}>
@@ -238,17 +239,80 @@ function ProviderSection({
         />
 
         <Label text={modelLabel} />
-        <TextInput
-          style={styles.input}
-          autoCapitalize="none"
-          autoCorrect={false}
-          placeholder={modelPlaceholder}
-          placeholderTextColor={palette.mutedInk}
+        <ModelDropdown
+          label={modelLabel}
           value={config[modelKey]}
-          onChangeText={(value) => onChange(selectedProviderId, modelKey, value)}
+          options={modelOptions}
+          onSelect={(value) => onChange(selectedProviderId, modelKey, value)}
+          emptyText={`No ${mode} models configured for ${provider.label} yet.`}
         />
       </View>
     </FadeInView>
+  );
+}
+
+function ModelDropdown({
+  label,
+  value,
+  options,
+  onSelect,
+  emptyText,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onSelect: (value: string) => void;
+  emptyText: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  if (!options.length) {
+    return <Text style={styles.rowBody}>{emptyText}</Text>;
+  }
+
+  return (
+    <>
+      <Pressable style={styles.selectButton} onPress={() => setIsOpen(true)}>
+        <View style={styles.selectCopy}>
+          <Text style={styles.selectValue}>{value || `Choose ${label.toLowerCase()}`}</Text>
+          <Text style={styles.selectHint}>{options.length} models available</Text>
+        </View>
+        <Feather name="chevron-down" size={18} color={palette.ink} />
+      </Pressable>
+
+      <Modal transparent animationType="fade" visible={isOpen} onRequestClose={() => setIsOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setIsOpen(false)}>
+          <Pressable style={styles.modalCard} onPress={() => undefined}>
+            <Text style={styles.modalTitle}>{label}</Text>
+            <Text style={styles.modalBody}>Pick one of the built-in models for this provider.</Text>
+
+            <View style={styles.optionList}>
+              {options.map((option) => {
+                const selected = option === value;
+
+                return (
+                  <Pressable
+                    key={option}
+                    style={[styles.optionButton, selected && styles.optionButtonSelected]}
+                    onPress={() => {
+                      onSelect(option);
+                      setIsOpen(false);
+                    }}
+                  >
+                    <Text style={[styles.optionLabel, selected && styles.optionLabelSelected]}>{option}</Text>
+                    {selected ? <Feather name="check" size={16} color={palette.paper} /> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Pressable style={styles.modalCloseButton} onPress={() => setIsOpen(false)}>
+              <Text style={styles.modalCloseText}>Close</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
 
@@ -428,6 +492,30 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     color: palette.ink,
   },
+  selectButton: {
+    backgroundColor: palette.card,
+    borderWidth: 1,
+    borderColor: palette.line,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  selectCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  selectValue: {
+    color: palette.ink,
+    fontWeight: '700',
+  },
+  selectHint: {
+    color: palette.mutedInk,
+    fontSize: 12,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -486,5 +574,65 @@ const styles = StyleSheet.create({
     color: palette.mutedInk,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(23, 35, 31, 0.24)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    backgroundColor: palette.paper,
+    borderRadius: 24,
+    padding: 18,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: palette.line,
+    ...elevation.card,
+  },
+  modalTitle: {
+    color: palette.ink,
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  modalBody: {
+    color: palette.mutedInk,
+    lineHeight: 21,
+  },
+  optionList: {
+    gap: 8,
+  },
+  optionButton: {
+    backgroundColor: palette.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: palette.line,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  optionButtonSelected: {
+    backgroundColor: palette.ink,
+    borderColor: palette.ink,
+  },
+  optionLabel: {
+    color: palette.ink,
+    fontWeight: '700',
+    flex: 1,
+  },
+  optionLabelSelected: {
+    color: palette.paper,
+  },
+  modalCloseButton: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  modalCloseText: {
+    color: palette.ink,
+    fontWeight: '800',
   },
 });

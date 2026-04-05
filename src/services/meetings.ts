@@ -69,6 +69,7 @@ export async function processMeeting(id: string) {
   }
 
   try {
+    await clearMeetingProcessingArtifacts(id);
     await updateMeetingStatus(id, 'transcribing', null);
     const transcriptText = await transcribeAudio({
       providerId: settings.selectedTranscriptionProvider,
@@ -174,6 +175,15 @@ async function updateTranscript(id: string, transcriptText: string) {
   await db.runAsync(
     'UPDATE meetings SET transcript_text = ?, updated_at = ? WHERE id = ?',
     transcriptText,
+    new Date().toISOString(),
+    id
+  );
+}
+
+async function clearMeetingProcessingArtifacts(id: string) {
+  const db = getDatabase();
+  await db.runAsync(
+    'UPDATE meetings SET transcript_text = NULL, summary_json = NULL, summary_short = NULL, error_message = NULL, updated_at = ? WHERE id = ?',
     new Date().toISOString(),
     id
   );

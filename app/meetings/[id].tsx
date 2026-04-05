@@ -25,6 +25,7 @@ import { elevation, palette } from '../../src/theme';
 export default function MeetingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [meeting, setMeeting] = useState<MeetingRow | null>(null);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [draftTitle, setDraftTitle] = useState('');
   const [isSavingTitle, setIsSavingTitle] = useState(false);
@@ -34,12 +35,14 @@ export default function MeetingDetailScreen() {
 
   const loadMeeting = useCallback(async () => {
     if (!id) {
+      setHasLoaded(true);
       return;
     }
 
     const data = await getMeeting(id);
     setMeeting(data);
     setDraftTitle(data?.title ?? '');
+    setHasLoaded(true);
   }, [id]);
 
   useEffect(() => {
@@ -136,11 +139,28 @@ export default function MeetingDetailScreen() {
     player.play();
   };
 
-  if (!meeting) {
+  if (!hasLoaded) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={palette.ink} />
       </View>
+    );
+  }
+
+  if (!meeting) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <ScreenBackground />
+        <View style={styles.centered}>
+          <Text style={styles.notFoundTitle}>Meeting not found</Text>
+          <Text style={styles.notFoundBody}>
+            This recording may have been deleted or the link is no longer valid.
+          </Text>
+          <Pressable style={styles.primaryButton} onPress={() => router.replace('/')}>
+            <Text style={styles.primaryButtonText}>Back to meetings</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -322,6 +342,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: palette.paper,
+    padding: 24,
+    gap: 12,
+  },
+  notFoundTitle: {
+    color: palette.ink,
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  notFoundBody: {
+    color: palette.mutedInk,
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
   },
   container: {
     padding: 20,

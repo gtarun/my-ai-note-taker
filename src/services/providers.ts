@@ -9,6 +9,8 @@ export type ProviderDefinition = {
   usesOpenAICompatibleApi: boolean;
   apiKeyPlaceholder: string;
   baseUrlPlaceholder: string;
+  transcriptionModels: string[];
+  summaryModels: string[];
 };
 
 export const providerDefinitions: ProviderDefinition[] = [
@@ -21,6 +23,8 @@ export const providerDefinitions: ProviderDefinition[] = [
     usesOpenAICompatibleApi: true,
     apiKeyPlaceholder: 'sk-...',
     baseUrlPlaceholder: 'https://api.openai.com/v1',
+    transcriptionModels: ['gpt-4o-mini-transcribe', 'gpt-4o-transcribe', 'whisper-1'],
+    summaryModels: ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini', 'gpt-4o'],
   },
   {
     id: 'openrouter',
@@ -31,6 +35,8 @@ export const providerDefinitions: ProviderDefinition[] = [
     usesOpenAICompatibleApi: true,
     apiKeyPlaceholder: 'sk-or-...',
     baseUrlPlaceholder: 'https://openrouter.ai/api/v1',
+    transcriptionModels: ['google/gemini-2.5-flash', 'openai/gpt-4o-mini-transcribe'],
+    summaryModels: ['openai/gpt-4.1-mini', 'openai/gpt-4.1', 'anthropic/claude-3.5-haiku'],
   },
   {
     id: 'groq',
@@ -41,6 +47,8 @@ export const providerDefinitions: ProviderDefinition[] = [
     usesOpenAICompatibleApi: true,
     apiKeyPlaceholder: 'gsk_...',
     baseUrlPlaceholder: 'https://api.groq.com/openai/v1',
+    transcriptionModels: ['whisper-large-v3-turbo', 'whisper-large-v3'],
+    summaryModels: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
   },
   {
     id: 'anthropic',
@@ -51,6 +59,8 @@ export const providerDefinitions: ProviderDefinition[] = [
     usesOpenAICompatibleApi: false,
     apiKeyPlaceholder: 'sk-ant-...',
     baseUrlPlaceholder: 'https://api.anthropic.com/v1',
+    transcriptionModels: [],
+    summaryModels: ['claude-3-5-haiku-latest', 'claude-3-7-sonnet-latest'],
   },
   {
     id: 'gemini',
@@ -61,6 +71,8 @@ export const providerDefinitions: ProviderDefinition[] = [
     usesOpenAICompatibleApi: false,
     apiKeyPlaceholder: 'AIza...',
     baseUrlPlaceholder: 'https://generativelanguage.googleapis.com/v1beta',
+    transcriptionModels: [],
+    summaryModels: ['gemini-2.5-flash', 'gemini-2.5-pro'],
   },
   {
     id: 'together',
@@ -71,6 +83,11 @@ export const providerDefinitions: ProviderDefinition[] = [
     usesOpenAICompatibleApi: true,
     apiKeyPlaceholder: '...',
     baseUrlPlaceholder: 'https://api.together.xyz/v1',
+    transcriptionModels: [],
+    summaryModels: [
+      'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+      'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo',
+    ],
   },
   {
     id: 'fireworks',
@@ -81,6 +98,11 @@ export const providerDefinitions: ProviderDefinition[] = [
     usesOpenAICompatibleApi: true,
     apiKeyPlaceholder: 'fw_...',
     baseUrlPlaceholder: 'https://api.fireworks.ai/inference/v1',
+    transcriptionModels: [],
+    summaryModels: [
+      'accounts/fireworks/models/llama-v3p1-70b-instruct',
+      'accounts/fireworks/models/qwen3-235b-a22b-instruct-2507',
+    ],
   },
   {
     id: 'deepseek',
@@ -91,6 +113,8 @@ export const providerDefinitions: ProviderDefinition[] = [
     usesOpenAICompatibleApi: true,
     apiKeyPlaceholder: 'sk-...',
     baseUrlPlaceholder: 'https://api.deepseek.com/v1',
+    transcriptionModels: [],
+    summaryModels: ['deepseek-chat', 'deepseek-reasoner'],
   },
   {
     id: 'custom',
@@ -101,6 +125,8 @@ export const providerDefinitions: ProviderDefinition[] = [
     usesOpenAICompatibleApi: true,
     apiKeyPlaceholder: '...',
     baseUrlPlaceholder: 'https://your-endpoint.example/v1',
+    transcriptionModels: ['gpt-4o-mini-transcribe', 'gpt-4o-transcribe', 'whisper-1'],
+    summaryModels: ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini', 'gpt-4o'],
   },
 ];
 

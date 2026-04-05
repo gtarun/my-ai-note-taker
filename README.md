@@ -12,7 +12,7 @@ It is intentionally not a Fathom clone yet. No bots, no auto-join, no calendar m
 
 - manual meeting recording on device
 - audio file import
-- post-meeting transcription with the user's own OpenAI API key
+- post-meeting transcription with the user's own provider API key
 - AI summary, action items, and decisions
 - local SQLite storage on device
 - native share/export from the meeting detail screen
@@ -25,7 +25,7 @@ It is intentionally not a Fathom clone yet. No bots, no auto-join, no calendar m
 - team sync
 - cloud backup
 - CRM integrations
-- auth
+- customer auth and Google Drive sync backend
 
 ## Stack
 
@@ -35,7 +35,8 @@ It is intentionally not a Fathom clone yet. No bots, no auto-join, no calendar m
 - Expo Audio
 - Expo Document Picker
 - Expo Secure Store
-- OpenAI transcription + summary APIs
+- OpenAI-compatible and direct provider APIs
+- Supabase Auth + REST/Edge Function cloud scaffolding
 
 ## Project Structure
 
@@ -105,7 +106,7 @@ These are deliberate for speed:
 - data is local-first
 - audio is uploaded to the configured AI provider only when the user processes a meeting
 - imported files do not yet calculate duration metadata
-- auth is not built yet
+- customer auth and Google Drive storage need Supabase project credentials and function wiring
 
 ## Privacy Notes
 
@@ -115,13 +116,22 @@ These are deliberate for speed:
 
 ## Documentation
 
-- [Docs Index](/Users/tarun/Documents/projects/mu-fathom/docs/README.md)
-- [Product Notes](/Users/tarun/Documents/projects/mu-fathom/docs/product.md)
-- [Architecture Notes](/Users/tarun/Documents/projects/mu-fathom/docs/architecture.md)
+- [Docs Index](/Users/tarun/Documents/projects/my-ai-note-taker/docs/README.md)
+- [Product Notes](/Users/tarun/Documents/projects/my-ai-note-taker/docs/product.md)
+- [Architecture Notes](/Users/tarun/Documents/projects/my-ai-note-taker/docs/architecture.md)
 
 ## Next Suggested Work
 
-- optional Supabase magic-link auth
-- delete meeting / clear local data flow
+- Supabase project config and Google Drive edge function
 - better processing progress and retry UX
 - optional cloud backup after the core flow is stable
+
+## Supabase Drive Setup
+
+To finish Google Drive connect, deploy the Supabase function and migration in `supabase/` and set these function secrets:
+
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_STATE_SECRET`
+- optional: `GOOGLE_DRIVE_SCOPE`
+- optional: `GOOGLE_DRIVE_REDIRECT_URI`

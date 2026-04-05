@@ -50,6 +50,7 @@ export default function RootLayout() {
         }}
       >
         <Stack.Screen name="index" options={{ title: 'Meetings' }} />
+        <Stack.Screen name="account" options={{ title: 'Account' }} />
         <Stack.Screen name="record" options={{ title: 'New Recording' }} />
         <Stack.Screen name="settings" options={{ title: 'Settings' }} />
         <Stack.Screen name="meetings/[id]" options={{ title: 'Meeting' }} />

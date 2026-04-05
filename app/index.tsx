@@ -12,20 +12,23 @@ import {
   View,
 } from 'react-native';
 
-import { MeetingRow } from '../src/types';
 import { FadeInView } from '../src/components/FadeInView';
 import { ScreenBackground } from '../src/components/ScreenBackground';
+import { getAuthSession } from '../src/services/account';
 import { createMeetingFromImport, listMeetings } from '../src/services/meetings';
+import { AuthSession, MeetingRow } from '../src/types';
 import { formatDuration, formatTimestamp } from '../src/utils/format';
 import { elevation, palette } from '../src/theme';
 
 export default function HomeScreen() {
   const [meetings, setMeetings] = useState<MeetingRow[]>([]);
+  const [session, setSession] = useState<AuthSession | null>(null);
   const [isImporting, setIsImporting] = useState(false);
 
   const loadMeetings = useCallback(async () => {
-    const data = await listMeetings();
+    const [data, storedSession] = await Promise.all([listMeetings(), getAuthSession()]);
     setMeetings(data);
+    setSession(storedSession);
   }, []);
 
   useFocusEffect(
@@ -98,6 +101,24 @@ export default function HomeScreen() {
             onPress={() => router.push('/settings')}
             tertiary
           />
+        </FadeInView>
+
+        <FadeInView style={styles.accountCard} delay={110}>
+          <View style={styles.accountCopy}>
+            <Text style={styles.accountTitle}>
+              {session ? `Signed in as ${session.user.email}` : 'Cloud account not connected'}
+            </Text>
+            <Text style={styles.accountBody}>
+              {session
+                ? session.user.driveConnection.status === 'connected'
+                  ? 'Google Drive is linked for cloud storage.'
+                  : 'Finish connecting Google Drive so each customer gets their own storage.'
+                : 'Add customer auth and Google Drive connection before turning on synced storage.'}
+            </Text>
+          </View>
+          <Pressable style={styles.accountButton} onPress={() => router.push('/account')}>
+            <Text style={styles.accountButtonText}>{session ? 'Manage account' : 'Set up account'}</Text>
+          </Pressable>
         </FadeInView>
 
         <FadeInView style={styles.sectionHeader} delay={130}>
@@ -340,6 +361,40 @@ const styles = StyleSheet.create({
   sectionHeader: {
     marginBottom: 12,
     gap: 2,
+  },
+  accountCard: {
+    marginTop: 2,
+    marginBottom: 18,
+    backgroundColor: palette.paper,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: palette.line,
+    padding: 16,
+    gap: 12,
+  },
+  accountCopy: {
+    gap: 4,
+  },
+  accountTitle: {
+    color: palette.ink,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  accountBody: {
+    color: palette.mutedInk,
+    lineHeight: 20,
+    fontSize: 14,
+  },
+  accountButton: {
+    alignSelf: 'flex-start',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: palette.ink,
+  },
+  accountButtonText: {
+    color: palette.paper,
+    fontWeight: '800',
   },
   sectionTitle: {
     color: palette.ink,
