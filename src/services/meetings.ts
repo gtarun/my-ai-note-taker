@@ -4,6 +4,7 @@ import { DocumentPickerAsset } from 'expo-document-picker';
 import { getDatabase, mapMeetingRow } from '../db';
 import { SummaryPayload, type MeetingRow } from '../types';
 import { getAudioDirectory } from './bootstrap';
+import { isProviderConfigured } from './providers';
 import { getAppSettings } from './settings';
 import { summarizeTranscript, transcribeAudio } from './ai';
 
@@ -61,12 +62,12 @@ export async function processMeeting(id: string) {
   const transcriptionProvider = settings.providers[settings.selectedTranscriptionProvider];
   const summaryProvider = settings.providers[settings.selectedSummaryProvider];
 
-  if (!transcriptionProvider.apiKey) {
-    throw new Error('Add an API key for the selected transcription provider in Settings first.');
+  if (!isProviderConfigured(settings.selectedTranscriptionProvider, transcriptionProvider)) {
+    throw new Error('Configure the selected transcription provider in Settings first.');
   }
 
-  if (!summaryProvider.apiKey) {
-    throw new Error('Add an API key for the selected summary provider in Settings first.');
+  if (!isProviderConfigured(settings.selectedSummaryProvider, summaryProvider)) {
+    throw new Error('Configure the selected summary provider in Settings first.');
   }
 
   try {

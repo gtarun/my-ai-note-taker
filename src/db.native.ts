@@ -30,6 +30,21 @@ export async function initializeDatabase() {
       delete_uploaded_audio INTEGER NOT NULL DEFAULT 0
     );
 
+    CREATE TABLE IF NOT EXISTS app_preferences (
+      id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
+      selected_transcription_provider TEXT NOT NULL,
+      selected_summary_provider TEXT NOT NULL,
+      delete_uploaded_audio INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS provider_settings (
+      provider_id TEXT PRIMARY KEY NOT NULL,
+      api_key TEXT NOT NULL DEFAULT '',
+      base_url TEXT NOT NULL DEFAULT '',
+      transcription_model TEXT NOT NULL DEFAULT '',
+      summary_model TEXT NOT NULL DEFAULT ''
+    );
+
     INSERT OR IGNORE INTO app_settings (
       id,
       openai_base_url,
@@ -41,6 +56,18 @@ export async function initializeDatabase() {
       'https://api.openai.com/v1',
       'gpt-4o-mini-transcribe',
       'gpt-4.1-mini',
+      0
+    );
+
+    INSERT OR IGNORE INTO app_preferences (
+      id,
+      selected_transcription_provider,
+      selected_summary_provider,
+      delete_uploaded_audio
+    ) VALUES (
+      1,
+      'openai',
+      'openai',
       0
     );
   `);

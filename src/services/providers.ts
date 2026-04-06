@@ -190,3 +190,28 @@ export const defaultProviderConfigs: Record<ProviderId, ProviderConfig> = {
     summaryModel: '',
   },
 };
+
+export function normalizeProviderConfig(providerId: ProviderId, config: ProviderConfig): ProviderConfig {
+  const defaults = defaultProviderConfigs[providerId];
+
+  return {
+    apiKey: config.apiKey.trim(),
+    baseUrl: config.baseUrl.trim() || defaults.baseUrl,
+    transcriptionModel: config.transcriptionModel.trim() || defaults.transcriptionModel,
+    summaryModel: config.summaryModel.trim() || defaults.summaryModel,
+  };
+}
+
+export function isProviderConfigured(providerId: ProviderId, config: ProviderConfig) {
+  const normalized = normalizeProviderConfig(providerId, config);
+
+  if (!normalized.apiKey) {
+    return false;
+  }
+
+  if (providerId === 'custom') {
+    return Boolean(normalized.baseUrl);
+  }
+
+  return true;
+}
