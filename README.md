@@ -118,9 +118,9 @@ These are deliberate for speed:
 
 ## Documentation
 
-- [Docs Index](/Users/tarun/Documents/projects/my-ai-note-taker/docs/README.md)
-- [Product Notes](/Users/tarun/Documents/projects/my-ai-note-taker/docs/product.md)
-- [Architecture Notes](/Users/tarun/Documents/projects/my-ai-note-taker/docs/architecture.md)
+- [Docs Index](/Users/tarun/Documents/projects/mu-fathom/docs/README.md)
+- [Product Notes](/Users/tarun/Documents/projects/mu-fathom/docs/product.md)
+- [Architecture Notes](/Users/tarun/Documents/projects/mu-fathom/docs/architecture.md)
 
 ## Next Suggested Work
 

@@ -42,6 +42,12 @@ function readSupabaseConfig(): CloudBackendConfig {
     typeof extra.googleDriveConnectFunctionName === 'string' && extra.googleDriveConnectFunctionName.trim()
       ? extra.googleDriveConnectFunctionName.trim()
       : 'google-drive-connect-url';
+  const googleDriveRedirectUri =
+    typeof extra.googleDriveRedirectUri === 'string' && extra.googleDriveRedirectUri.trim()
+      ? extra.googleDriveRedirectUri.trim()
+      : supabaseUrl
+        ? `${supabaseUrl.replace(/\/$/, '')}/functions/v1/${googleDriveConnectFunctionName}`
+        : '';
 
   let projectRef = '';
 
@@ -56,6 +62,7 @@ function readSupabaseConfig(): CloudBackendConfig {
     supabaseAnonKey,
     projectRef,
     googleDriveConnectFunctionName,
+    googleDriveRedirectUri,
   };
 }
 
@@ -194,8 +201,7 @@ export function getGoogleDriveOAuthRedirectUrl() {
     return '';
   }
 
-  const base = supabaseConfig.supabaseUrl.replace(/\/$/, '');
-  return `${base}/functions/v1/${supabaseConfig.googleDriveConnectFunctionName}`;
+  return supabaseConfig.googleDriveRedirectUri;
 }
 
 export async function completeOAuthSignIn(callbackUrl: string) {

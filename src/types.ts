@@ -78,4 +78,5 @@ export type CloudBackendConfig = {
   supabaseAnonKey: string;
   projectRef: string;
   googleDriveConnectFunctionName: string;
+  googleDriveRedirectUri: string;
 };

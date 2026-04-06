@@ -30,7 +30,7 @@ Use the simplest architecture that works for a solo builder shipping fast.
 
 ### Local Data
 
-- [`src/db.ts`](/Users/tarun/Documents/projects/my-ai-note-taker/src/db.ts) initializes SQLite
+- [`src/db.ts`](/Users/tarun/Documents/projects/mu-fathom/src/db.ts) initializes SQLite
 - metadata is stored in the `meetings` table
 - provider settings are stored in Secure Store on native and localStorage on web
 - account sessions are stored locally through the Supabase auth client
@@ -38,13 +38,13 @@ Use the simplest architecture that works for a solo builder shipping fast.
 
 ### Services
 
-- [`src/services/bootstrap.ts`](/Users/tarun/Documents/projects/my-ai-note-taker/src/services/bootstrap.ts): creates the local audio directory and initializes storage
-- [`src/services/meetings.ts`](/Users/tarun/Documents/projects/my-ai-note-taker/src/services/meetings.ts): meeting CRUD and processing flow
-- [`src/services/ai.ts`](/Users/tarun/Documents/projects/my-ai-note-taker/src/services/ai.ts): transcription and summary API calls
-- [`src/services/settings.ts`](/Users/tarun/Documents/projects/my-ai-note-taker/src/services/settings.ts): local settings persistence
-- [`src/services/account.ts`](/Users/tarun/Documents/projects/my-ai-note-taker/src/services/account.ts): Supabase auth client and Google Drive edge-function contract
-- [`src/services/googleDrive.ts`](/Users/tarun/Documents/projects/my-ai-note-taker/src/services/googleDrive.ts): Drive folder creation and recording upload flow
-- [`src/services/providers.ts`](/Users/tarun/Documents/projects/my-ai-note-taker/src/services/providers.ts): provider catalog and defaults
+- [`src/services/bootstrap.ts`](/Users/tarun/Documents/projects/mu-fathom/src/services/bootstrap.ts): creates the local audio directory and initializes storage
+- [`src/services/meetings.ts`](/Users/tarun/Documents/projects/mu-fathom/src/services/meetings.ts): meeting CRUD and processing flow
+- [`src/services/ai.ts`](/Users/tarun/Documents/projects/mu-fathom/src/services/ai.ts): transcription and summary API calls
+- [`src/services/settings.ts`](/Users/tarun/Documents/projects/mu-fathom/src/services/settings.ts): local settings persistence
+- [`src/services/account.ts`](/Users/tarun/Documents/projects/mu-fathom/src/services/account.ts): Supabase auth client and Google Drive edge-function contract
+- [`src/services/googleDrive.ts`](/Users/tarun/Documents/projects/mu-fathom/src/services/googleDrive.ts): Drive folder creation and recording upload flow
+- [`src/services/providers.ts`](/Users/tarun/Documents/projects/mu-fathom/src/services/providers.ts): provider catalog and defaults
 - `supabase/functions/google-drive-connect-url`: Google OAuth start/callback handler
 - `supabase/functions/google-drive-access-token`: returns a fresh Drive access token for the signed-in user
 - `supabase/functions/google-drive-save-folder`: persists the user-picked Drive folder

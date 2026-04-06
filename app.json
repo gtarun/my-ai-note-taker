@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "mu-fathom",
-    "slug": "mu-fathom",
+    "slug": "ai-note-taker",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -16,7 +16,8 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "mu-fathom records meeting audio only when you explicitly start recording."
+        "NSMicrophoneUsageDescription": "mu-fathom records meeting audio only when you explicitly start recording.",
+        "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "com.gtarun.mu-fathom",
       "appleTeamId": "Z4L8SXT9S6"
@@ -41,12 +42,18 @@
       "expo-router",
       "expo-sqlite",
       "expo-secure-store",
-      "expo-audio"
+      "expo-audio",
+      "expo-web-browser"
     ],
     "extra": {
       "supabaseUrl": "https://ulgbdlhwjwsyflzfdhma.supabase.co",
       "supabaseAnonKey": "sb_publishable__eiWD9e4H3e1oMUYrPQ0lA_ZABVjiEo",
-      "googleDriveConnectFunctionName": "google-drive-connect-url"
-    }
+      "googleDriveConnectFunctionName": "google-drive-connect-url",
+      "router": {},
+      "eas": {
+        "projectId": "ff5da993-fdaa-47ef-8a52-1d582508b263"
+      }
+    },
+    "owner": "gtarun_vp"
   }
 }

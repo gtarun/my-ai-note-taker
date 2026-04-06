@@ -26,9 +26,15 @@ export default function HomeScreen() {
   const [isImporting, setIsImporting] = useState(false);
 
   const loadMeetings = useCallback(async () => {
-    const [data, storedSession] = await Promise.all([listMeetings(), getAuthSession()]);
+    const data = await listMeetings();
     setMeetings(data);
-    setSession(storedSession);
+
+    try {
+      const storedSession = await getAuthSession();
+      setSession(storedSession);
+    } catch {
+      setSession(null);
+    }
   }, []);
 
   useFocusEffect(

@@ -26,6 +26,11 @@ Deno.serve(async (request) => {
     if (request.method === 'GET' && urlCode && urlState) {
       const statePayload = await parseState(urlState, env.stateSecret);
       const adminClient = createAdminClient(env);
+      const { data: existingConnection } = await adminClient
+        .from('google_drive_connections')
+        .select('refresh_token')
+        .eq('user_id', statePayload.userId)
+        .maybeSingle();
 
       const tokens = await exchangeCodeForTokens({
         code: urlCode,
@@ -41,7 +46,7 @@ Deno.serve(async (request) => {
           user_id: statePayload.userId,
           google_account_email: profile.email,
           access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token ?? null,
+          refresh_token: tokens.refresh_token ?? existingConnection?.refresh_token ?? null,
           scope: tokens.scope ?? env.googleDriveScope,
           token_type: tokens.token_type ?? 'Bearer',
           expiry_date: tokens.expires_in
