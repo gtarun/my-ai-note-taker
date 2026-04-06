@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
 import { ProviderConfig, ProviderId, SummaryPayload } from '../types';
+import { summarizeLocalTranscript, transcribeLocalAudio } from './localInference';
 import { providerMap } from './providers';
 
 type TranscribeParams = {
@@ -38,6 +39,13 @@ export async function transcribeAudio(params: TranscribeParams) {
     throw new Error(`Add a transcription model for ${providerDefinition.label} in Settings first.`);
   }
 
+  if (params.providerId === 'local') {
+    return transcribeLocalAudio({
+      audioUri: params.audioUri,
+      modelId: params.provider.transcriptionModel,
+    });
+  }
+
   if (params.providerId === 'openrouter') {
     return transcribeWithOpenRouter(params.provider, params.audioUri);
   }
@@ -50,6 +58,13 @@ export async function transcribeAudio(params: TranscribeParams) {
 }
 
 export async function summarizeTranscript(params: SummarizeParams) {
+  if (params.providerId === 'local') {
+    return summarizeLocalTranscript({
+      transcriptText: params.transcriptText,
+      modelId: params.provider.summaryModel,
+    });
+  }
+
   switch (params.providerId) {
     case 'anthropic':
       return summarizeWithAnthropic(params.provider, params.transcriptText);

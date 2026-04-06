@@ -23,11 +23,30 @@ type MeetingStorageRow = {
   error_message: string | null;
 };
 
+type InstalledModelStorageRow = {
+  id: string;
+  kind: 'transcription' | 'summary';
+  engine: string;
+  display_name: string;
+  version: string;
+  platforms_json: string;
+  file_uri: string | null;
+  size_bytes: number;
+  sha256: string;
+  status: 'installed' | 'downloading' | 'failed';
+  installed_at: string | null;
+  download_url: string;
+  recommended: number;
+  experimental: number;
+  error_message: string | null;
+};
+
 const STORAGE_KEY = 'mu-fathom-web-db';
 
 type DatabaseShape = {
   meetings: MeetingStorageRow[];
   settings: SettingsRow;
+  installedModels: InstalledModelStorageRow[];
 };
 
 const defaultState: DatabaseShape = {
@@ -39,6 +58,7 @@ const defaultState: DatabaseShape = {
     summary_model: 'gpt-4.1-mini',
     delete_uploaded_audio: 0,
   },
+  installedModels: [],
 };
 
 function readState(): DatabaseShape {
@@ -72,8 +92,11 @@ const db = {
     const state = readState();
     if (!state.settings) {
       state.settings = structuredClone(defaultState.settings);
-      writeState(state);
     }
+    if (!state.installedModels) {
+      state.installedModels = [];
+    }
+    writeState(state);
   },
   async getFirstAsync<T>(source: string, ...params: unknown[]): Promise<T | null> {
     const state = readState();
@@ -87,10 +110,21 @@ const db = {
       return (row ?? null) as T | null;
     }
 
+    if (source.includes('FROM installed_models WHERE id = ?')) {
+      const row = state.installedModels.find((model) => model.id === params[0]);
+      return (row ?? null) as T | null;
+    }
+
     return null;
   },
   async getAllAsync<T>(source: string): Promise<T[]> {
     const state = readState();
+
+    if (source.includes('FROM installed_models')) {
+      return [...state.installedModels]
+        .sort((a, b) => a.display_name.localeCompare(b.display_name))
+        .map((row) => row as T);
+    }
 
     if (source.includes('FROM meetings')) {
       return [...state.meetings]
@@ -130,6 +164,36 @@ const db = {
         summary_model: String(params[2]),
         delete_uploaded_audio: Number(params[3]),
       };
+      writeState(state);
+      return;
+    }
+
+    if (source.includes('INSERT OR REPLACE INTO installed_models')) {
+      const row: InstalledModelStorageRow = {
+        id: String(params[0]),
+        kind: params[1] === 'summary' ? 'summary' : 'transcription',
+        engine: String(params[2]),
+        display_name: String(params[3]),
+        version: String(params[4]),
+        platforms_json: String(params[5]),
+        file_uri: params[6] ? String(params[6]) : null,
+        size_bytes: Number(params[7] ?? 0),
+        sha256: String(params[8] ?? ''),
+        status: params[9] === 'downloading' ? 'downloading' : params[9] === 'failed' ? 'failed' : 'installed',
+        installed_at: params[10] ? String(params[10]) : null,
+        download_url: String(params[11] ?? ''),
+        recommended: Number(params[12] ?? 0),
+        experimental: Number(params[13] ?? 0),
+        error_message: params[14] ? String(params[14]) : null,
+      };
+      state.installedModels = state.installedModels.filter((model) => model.id !== row.id);
+      state.installedModels.push(row);
+      writeState(state);
+      return;
+    }
+
+    if (source.includes('DELETE FROM installed_models WHERE id = ?')) {
+      state.installedModels = state.installedModels.filter((row) => row.id !== params[0]);
       writeState(state);
       return;
     }

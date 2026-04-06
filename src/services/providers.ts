@@ -128,6 +128,18 @@ export const providerDefinitions: ProviderDefinition[] = [
     transcriptionModels: ['gpt-4o-mini-transcribe', 'gpt-4o-transcribe', 'whisper-1'],
     summaryModels: ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini', 'gpt-4o'],
   },
+  {
+    id: 'local',
+    label: 'Local',
+    description: 'Use on-device model downloads for offline transcription and summary.',
+    supportsTranscription: true,
+    supportsSummary: true,
+    usesOpenAICompatibleApi: false,
+    apiKeyPlaceholder: '',
+    baseUrlPlaceholder: '',
+    transcriptionModels: [],
+    summaryModels: [],
+  },
 ];
 
 export const providerMap = Object.fromEntries(
@@ -189,4 +201,24 @@ export const defaultProviderConfigs: Record<ProviderId, ProviderConfig> = {
     transcriptionModel: '',
     summaryModel: '',
   },
+  local: {
+    apiKey: '',
+    baseUrl: '',
+    transcriptionModel: '',
+    summaryModel: '',
+  },
 };
+
+export function isProviderConfigured(
+  providerId: ProviderId,
+  provider: ProviderConfig,
+  mode: 'transcription' | 'summary'
+) {
+  if (providerId === 'local') {
+    return mode === 'transcription'
+      ? Boolean(provider.transcriptionModel.trim())
+      : Boolean(provider.summaryModel.trim());
+  }
+
+  return Boolean(provider.apiKey.trim());
+}

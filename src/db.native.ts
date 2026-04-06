@@ -30,6 +30,24 @@ export async function initializeDatabase() {
       delete_uploaded_audio INTEGER NOT NULL DEFAULT 0
     );
 
+    CREATE TABLE IF NOT EXISTS installed_models (
+      id TEXT PRIMARY KEY NOT NULL,
+      kind TEXT NOT NULL,
+      engine TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      version TEXT NOT NULL,
+      platforms_json TEXT NOT NULL,
+      file_uri TEXT,
+      size_bytes INTEGER NOT NULL DEFAULT 0,
+      sha256 TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL,
+      installed_at TEXT,
+      download_url TEXT NOT NULL DEFAULT '',
+      recommended INTEGER NOT NULL DEFAULT 0,
+      experimental INTEGER NOT NULL DEFAULT 0,
+      error_message TEXT
+    );
+
     INSERT OR IGNORE INTO app_settings (
       id,
       openai_base_url,
