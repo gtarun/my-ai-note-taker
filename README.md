@@ -15,6 +15,7 @@ It is intentionally not a Fathom clone yet. No bots, no auto-join, no calendar m
 - post-meeting transcription with the user's own provider API key
 - AI summary, action items, and decisions
 - local SQLite storage on device
+- catalog-driven local model management for future offline processing
 - optional Google Drive backup for recordings after Google sign-in + Drive connect
 - native share/export from the meeting detail screen
 
@@ -23,6 +24,7 @@ It is intentionally not a Fathom clone yet. No bots, no auto-join, no calendar m
 - automatic meeting capture
 - Zoom / Google Meet / Teams internal audio capture
 - real-time transcription
+- actual on-device transcription and summary in Expo Go
 - team sync
 - CRM integrations
 - full multi-device sync
@@ -34,8 +36,10 @@ It is intentionally not a Fathom clone yet. No bots, no auto-join, no calendar m
 - Expo SQLite
 - Expo Audio
 - Expo Document Picker
+- Expo File System
 - Expo Secure Store
 - OpenAI-compatible and direct provider APIs
+- optional native local AI runtime boundary
 - Supabase Auth + REST/Edge Function cloud scaffolding
 
 ## Project Structure
@@ -67,26 +71,42 @@ Then open the app on a device using Expo Go.
 
 ## How To Use The App
 
-### 1. Add your API key
+### 1. Choose your processing path
+
+The app currently has two modes:
+
+- remote provider mode: works today in Expo Go with API keys
+- local model mode: settings/UI/catalog are implemented, but real on-device inference still needs a custom native build with the local runtime linked
+
+### 2. Configure a provider
+
+For remote providers:
 
 - open `Settings`
-- paste your OpenAI API key
-- keep the default base URL unless you know you need a compatible endpoint
+- configure one or more providers
+- select which configured provider should handle transcription and summary
 
-### 2. Create a meeting
+For local models:
+
+- build a custom dev or release app that includes the native local runtime
+- set `Model catalog URL` in `Settings` if you are hosting your own catalog
+- download compatible transcription and summary models
+- switch both provider selectors to `Local`
+
+### 3. Create a meeting
 
 You have two options:
 
 - `New recording`: manually record audio from the phone mic
 - `Import audio`: import an existing meeting recording file
 
-### 3. Process the meeting
+### 4. Process the meeting
 
 - open the saved meeting
 - tap `Run transcript + summary`
 - wait for transcription and summary generation to finish
 
-### 4. Review and share
+### 5. Review and share
 
 The meeting detail screen shows:
 
@@ -105,6 +125,7 @@ These are deliberate for speed:
 - processing is post-meeting only
 - data is local-first
 - audio is uploaded to the configured AI provider only when the user processes a meeting
+- local model catalog and install state exist now, but the native offline runtime is still a custom-build feature
 - Google Drive backup is optional and only uploads the saved recording file
 - imported files do not yet calculate duration metadata
 - Google Drive backup needs Google Cloud + Supabase setup before it works
@@ -121,9 +142,11 @@ These are deliberate for speed:
 - [Docs Index](/Users/tarun/Documents/projects/mu-fathom/docs/README.md)
 - [Product Notes](/Users/tarun/Documents/projects/mu-fathom/docs/product.md)
 - [Architecture Notes](/Users/tarun/Documents/projects/mu-fathom/docs/architecture.md)
+- [Local Models](/Users/tarun/Documents/projects/mu-fathom/docs/local-models.md)
 
 ## Next Suggested Work
 
+- native `MuFathomLocalAI` runtime for real on-device transcription and summary
 - better processing progress and retry UX
 - Drive upload status/history in the meeting detail screen
 - imported-file backup to Google Drive

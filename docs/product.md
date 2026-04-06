@@ -32,6 +32,7 @@ The MVP is not trying to auto-join meetings or invisibly capture everything. It 
 - transcript view
 - local storage
 - native share/export
+- experimental local model setup flow for future offline processing
 
 ## Explicit Non-Goals
 
@@ -54,6 +55,21 @@ It should not be described as:
 - stealth recorder
 - automatic Zoom recorder
 - background call capture tool
+
+## Local Processing Position
+
+Local processing is a second track, not the core MVP claim.
+
+What is true today:
+
+- the app can manage a curated local model catalog
+- users can install/select local models
+- the processing pipeline can route to a local runtime
+
+What is not true yet:
+
+- Expo Go does not run local inference
+- the repo still needs the native `MuFathomLocalAI` implementation before Gemma-family summary and whisper.cpp transcription work on-device
 
 ## Product Principle
 
