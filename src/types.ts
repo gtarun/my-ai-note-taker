@@ -56,6 +56,9 @@ export type DriveConnection = {
   status: 'not_connected' | 'connected';
   accountEmail: string | null;
   connectedAt: string | null;
+  /** Parent folder the user chose in Google Picker; uploads go under mu-fathom/recordings/… inside it. */
+  saveFolderId: string | null;
+  saveFolderName: string | null;
 };
 
 export type UserAccount = {

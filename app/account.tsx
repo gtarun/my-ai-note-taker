@@ -20,9 +20,12 @@ import {
   completeOAuthSignIn,
   getAuthSession,
   getGoogleDriveConnectUrl,
+  getGoogleDriveOAuthRedirectUrl,
   getOAuthRedirectUrl,
   isCloudBackendConfigured,
   refreshCurrentSession,
+  requestGoogleDriveFolderPickerUrl,
+  saveGoogleDriveSaveFolder,
   signInWithGoogle,
 } from '../src/services/account';
 import { AuthSession } from '../src/types';
@@ -30,11 +33,19 @@ import { elevation, palette } from '../src/theme';
 
 WebBrowser.maybeCompleteAuthSession();
 
+function firstQueryParam(value: string | string[] | undefined) {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+  return value;
+}
+
 export default function AccountScreen() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isConnectingDrive, setIsConnectingDrive] = useState(false);
+  const [isPickingDriveFolder, setIsPickingDriveFolder] = useState(false);
   const isConfigured = isCloudBackendConfigured();
 
   const loadState = useCallback(async () => {
@@ -130,11 +141,64 @@ export default function AccountScreen() {
     }
   };
 
+  const handleChooseDriveSaveFolder = async () => {
+    try {
+      setIsPickingDriveFolder(true);
+      const redirectBase = Linking.createURL('drive-folder');
+      const pickerUrl = await requestGoogleDriveFolderPickerUrl(redirectBase);
+      const result = await WebBrowser.openAuthSessionAsync(pickerUrl, redirectBase);
+
+      if (result.type === 'success' && result.url) {
+        const parsed = Linking.parse(result.url);
+        const folderId = firstQueryParam(parsed.queryParams?.folderId);
+        const folderName = firstQueryParam(parsed.queryParams?.folderName);
+        const cancelled = firstQueryParam(parsed.queryParams?.picker) === 'cancelled';
+
+        if (cancelled) {
+          return;
+        }
+
+        if (folderId) {
+          await saveGoogleDriveSaveFolder(folderId, folderName ?? '');
+          const nextSession = await refreshCurrentSession();
+          setSession(nextSession);
+          Alert.alert(
+            'Google Drive',
+            'Save folder updated. New recordings are stored under mu-fathom/recordings/YYYY-MM inside this folder.'
+          );
+        }
+      }
+    } catch (error) {
+      Alert.alert(
+        'Folder picker',
+        error instanceof Error ? error.message : 'Unable to choose a Google Drive folder.'
+      );
+    } finally {
+      setIsPickingDriveFolder(false);
+    }
+  };
+
   const handleConnectDrive = async () => {
     try {
       setIsConnectingDrive(true);
-      const url = await getGoogleDriveConnectUrl();
-      await Linking.openURL(url);
+      const authUrl = await getGoogleDriveConnectUrl();
+      const redirectUrl = getGoogleDriveOAuthRedirectUrl();
+      if (!redirectUrl) {
+        throw new Error('Supabase URL is not configured.');
+      }
+
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
+
+      if (result.type === 'success' && result.url) {
+        const nextSession = await refreshCurrentSession();
+        setSession(nextSession);
+        Alert.alert('Google Drive', 'Connected. Your account has been updated.');
+        return;
+      }
+
+      if (result.type !== 'cancel') {
+        Alert.alert('Google Drive', 'Connection was not completed.');
+      }
     } catch (error) {
       Alert.alert(
         'Drive connect failed',
@@ -181,6 +245,14 @@ export default function AccountScreen() {
             {driveConnection?.accountEmail ? (
               <Text style={styles.rowBody}>Drive account: {driveConnection.accountEmail}</Text>
             ) : null}
+            {driveConnection?.status === 'connected' ? (
+              <Text style={styles.rowBody}>
+                Save folder:{' '}
+                {driveConnection.saveFolderName?.trim()
+                  ? driveConnection.saveFolderName
+                  : 'Not chosen yet — pick a folder for cloud copies of recordings.'}
+              </Text>
+            ) : null}
           </View>
 
           {!session ? (
@@ -194,23 +266,36 @@ export default function AccountScreen() {
               </Text>
             </Pressable>
           ) : (
-            <View style={styles.buttonRow}>
-              <Pressable
-                style={styles.primaryButtonSplit}
-                onPress={handleConnectDrive}
-                disabled={isConnectingDrive || !isConfigured}
-              >
-                <Text style={styles.primaryButtonText}>
-                  {isConnectingDrive ? 'Opening Google…' : 'Connect Google Drive'}
-                </Text>
-              </Pressable>
-              <Pressable style={styles.secondaryButton} onPress={handleRefresh} disabled={isRefreshing}>
-                <Text style={styles.secondaryButtonText}>{isRefreshing ? 'Refreshing…' : 'Refresh'}</Text>
-              </Pressable>
-              <Pressable style={styles.secondaryButton} onPress={handleSignOut}>
-                <Text style={styles.secondaryButtonText}>Sign out</Text>
-              </Pressable>
-            </View>
+            <>
+              <View style={styles.buttonRow}>
+                <Pressable
+                  style={styles.primaryButtonSplit}
+                  onPress={handleConnectDrive}
+                  disabled={isConnectingDrive || !isConfigured}
+                >
+                  <Text style={styles.primaryButtonText}>
+                    {isConnectingDrive ? 'Opening Google…' : 'Connect Google Drive'}
+                  </Text>
+                </Pressable>
+                <Pressable style={styles.secondaryButton} onPress={handleRefresh} disabled={isRefreshing}>
+                  <Text style={styles.secondaryButtonText}>{isRefreshing ? 'Refreshing…' : 'Refresh'}</Text>
+                </Pressable>
+                <Pressable style={styles.secondaryButton} onPress={handleSignOut}>
+                  <Text style={styles.secondaryButtonText}>Sign out</Text>
+                </Pressable>
+              </View>
+              {driveConnection?.status === 'connected' ? (
+                <Pressable
+                  style={styles.folderButton}
+                  onPress={handleChooseDriveSaveFolder}
+                  disabled={isPickingDriveFolder || !isConfigured}
+                >
+                  <Text style={styles.folderButtonText}>
+                    {isPickingDriveFolder ? 'Opening Google picker…' : 'Choose Drive save folder'}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </>
           )}
         </FadeInView>
       </ScrollView>
@@ -323,5 +408,18 @@ const styles = StyleSheet.create({
     color: palette.mutedInk,
     fontSize: 13,
     lineHeight: 20,
+  },
+  folderButton: {
+    borderRadius: 18,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: palette.paper,
+  },
+  folderButtonText: {
+    color: palette.ink,
+    fontWeight: '800',
+    fontSize: 15,
   },
 });

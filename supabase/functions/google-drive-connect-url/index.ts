@@ -5,6 +5,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
+const STATE_MAX_AGE_MS = 10 * 60 * 1000;
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
@@ -14,20 +15,20 @@ Deno.serve(async (request) => {
   try {
     const env = readEnv();
     const requestUrl = new URL(request.url);
-    const code = requestUrl.searchParams.get('code');
-    const state = requestUrl.searchParams.get('state');
-    const error = requestUrl.searchParams.get('error');
+    const urlCode = requestUrl.searchParams.get('code');
+    const urlState = requestUrl.searchParams.get('state');
+    const urlError = requestUrl.searchParams.get('error');
 
-    if (request.method === 'GET' && error) {
-      return htmlResponse(renderErrorPage(`Google OAuth returned an error: ${error}`));
+    if (request.method === 'GET' && urlError) {
+      return htmlResponse(renderErrorPage(`Google OAuth returned an error: ${urlError}`));
     }
 
-    if (request.method === 'GET' && code && state) {
-      const statePayload = await parseState(state, env.stateSecret);
+    if (request.method === 'GET' && urlCode && urlState) {
+      const statePayload = await parseState(urlState, env.stateSecret);
       const adminClient = createAdminClient(env);
 
       const tokens = await exchangeCodeForTokens({
-        code,
+        code: urlCode,
         redirectUri: env.redirectUri,
         clientId: env.googleClientId,
         clientSecret: env.googleClientSecret,
@@ -61,10 +62,14 @@ Deno.serve(async (request) => {
         return htmlResponse(renderErrorPage(targetUserError?.message ?? 'Unable to load the target user.'), 500);
       }
 
+      const prevDrive = targetUser.user.user_metadata?.driveConnection;
+      const prevDriveObj = prevDrive && typeof prevDrive === 'object' ? (prevDrive as Record<string, unknown>) : {};
+
       const updateResult = await adminClient.auth.admin.updateUserById(statePayload.userId, {
         user_metadata: {
           ...(targetUser.user.user_metadata ?? {}),
           driveConnection: {
+            ...prevDriveObj,
             status: 'connected',
             accountEmail: profile.email,
             connectedAt: new Date().toISOString(),
@@ -89,7 +94,7 @@ Deno.serve(async (request) => {
       return jsonResponse({ error: 'Unauthorized' }, 401);
     }
 
-    const state = await createState(
+    const signedState = await createState(
       {
         userId: user.id,
         issuedAt: Date.now(),
@@ -104,7 +109,7 @@ Deno.serve(async (request) => {
     authUrl.searchParams.set('access_type', 'offline');
     authUrl.searchParams.set('prompt', 'consent');
     authUrl.searchParams.set('scope', env.googleDriveScope);
-    authUrl.searchParams.set('state', state);
+    authUrl.searchParams.set('state', signedState);
 
     return jsonResponse({ url: authUrl.toString() });
   } catch (error) {
@@ -122,8 +127,10 @@ function readEnv() {
   const googleClientId = Deno.env.get('GOOGLE_CLIENT_ID') ?? '';
   const googleClientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '';
   const stateSecret = Deno.env.get('GOOGLE_STATE_SECRET') ?? '';
+  // UserInfo requires openid + email (or userinfo.email); drive.file alone yields 401 on userinfo.
   const googleDriveScope =
-    Deno.env.get('GOOGLE_DRIVE_SCOPE') ?? 'https://www.googleapis.com/auth/drive.file';
+    Deno.env.get('GOOGLE_DRIVE_SCOPE') ??
+    'openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file';
   const redirectUri =
     Deno.env.get('GOOGLE_DRIVE_REDIRECT_URI') ??
     `${supabaseUrl.replace(/\/$/, '')}/functions/v1/google-drive-connect-url`;
@@ -155,7 +162,8 @@ function createUserScopedClient(request: Request, env: ReturnType<typeof readEnv
     throw new Error('Missing Authorization header.');
   }
 
-  return createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
+  // Anon key + the caller's JWT is the supported way to resolve the user inside Edge Functions.
+  return createClient(env.supabaseUrl, env.supabaseAnonKey, {
     global: {
       headers: {
         Authorization: authorization,
@@ -196,7 +204,13 @@ async function parseState(state: string, secret: string) {
     throw new Error('Invalid OAuth state.');
   }
 
-  return JSON.parse(fromBase64Url(encodedPayload)) as { userId: string; issuedAt: number };
+  const payload = JSON.parse(fromBase64Url(encodedPayload)) as { userId: string; issuedAt: number };
+
+  if (typeof payload.issuedAt !== 'number' || payload.issuedAt < Date.now() - STATE_MAX_AGE_MS) {
+    throw new Error('OAuth state expired.');
+  }
+
+  return payload;
 }
 
 async function exchangeCodeForTokens(params: {

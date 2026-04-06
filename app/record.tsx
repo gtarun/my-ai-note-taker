@@ -21,6 +21,7 @@ import {
 
 import { FadeInView } from '../src/components/FadeInView';
 import { ScreenBackground } from '../src/components/ScreenBackground';
+import { uploadMeetingRecordingIfConfigured } from '../src/services/googleDrive';
 import { createMeetingFromRecording } from '../src/services/meetings';
 import { formatDuration } from '../src/utils/format';
 import { elevation, palette } from '../src/theme';
@@ -49,11 +50,24 @@ export default function RecordScreen() {
           throw new Error('Recording finished but no file was returned.');
         }
 
-        const meetingId = await createMeetingFromRecording({
+        const meetingTitle = title.trim() || 'Untitled recording';
+        const { id: meetingId, audioUri } = await createMeetingFromRecording({
           uri,
-          title: title.trim() || 'Untitled recording',
+          title: meetingTitle,
           durationMs: recorderState.durationMillis,
         });
+
+        const driveOutcome = await uploadMeetingRecordingIfConfigured({
+          title: meetingTitle,
+          localAudioUri: audioUri,
+        });
+
+        if (driveOutcome === 'failed') {
+          Alert.alert(
+            'Google Drive',
+            'The recording is saved on this device, but uploading to Google Drive failed. Check your connection and folder settings on the Account screen.'
+          );
+        }
 
         router.replace(`/meetings/${meetingId}`);
       } catch (error) {

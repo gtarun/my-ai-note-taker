@@ -27,15 +27,16 @@ export async function getMeeting(id: string): Promise<MeetingRow | null> {
   return row ? mapMeetingRow(row) : null;
 }
 
-export async function createMeetingFromRecording(input: RecordingInput) {
+export async function createMeetingFromRecording(input: RecordingInput): Promise<{ id: string; audioUri: string }> {
   const extension = getExtensionFromPath(input.uri) || '.m4a';
   const audioUri = await copyAudioIntoAppStorage(input.uri, extension);
-  return insertMeeting({
+  const id = await insertMeeting({
     title: input.title,
     audioUri,
     durationMs: input.durationMs,
     sourceType: 'recording',
   });
+  return { id, audioUri };
 }
 
 export async function createMeetingFromImport(asset: DocumentPickerAsset) {

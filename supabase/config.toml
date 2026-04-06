@@ -1,2 +1,6 @@
 [functions.google-drive-connect-url]
 verify_jwt = false
+
+# GET serves the Google Picker HTML without a Supabase JWT; auth is a signed `t` query param. POST validates JWT in code.
+[functions.google-drive-folder-picker]
+verify_jwt = false
