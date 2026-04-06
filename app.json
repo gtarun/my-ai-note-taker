@@ -18,7 +18,8 @@
       "infoPlist": {
         "NSMicrophoneUsageDescription": "mu-fathom records meeting audio only when you explicitly start recording."
       },
-      "bundleIdentifier": "com.gtarun.mu-fathom"
+      "bundleIdentifier": "com.gtarun.mu-fathom",
+      "appleTeamId": "Z4L8SXT9S6"
     },
     "android": {
       "adaptiveIcon": {
