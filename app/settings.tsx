@@ -2,6 +2,7 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Alert,
+  Linking,
   Modal,
   Pressable,
   PressableProps,
@@ -257,6 +258,24 @@ export default function SettingsScreen() {
     ]);
   };
 
+  const handleOpenModelSource = async (item: ModelCatalogItem) => {
+    if (!item.sourceUrl) {
+      return;
+    }
+
+    try {
+      const supported = await Linking.canOpenURL(item.sourceUrl);
+
+      if (!supported) {
+        throw new Error('This source URL cannot be opened on this device.');
+      }
+
+      await Linking.openURL(item.sourceUrl);
+    } catch (error) {
+      Alert.alert('Open source failed', error instanceof Error ? error.message : 'Unable to open this model source.');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScreenBackground />
@@ -296,7 +315,7 @@ export default function SettingsScreen() {
             </Text>
           </View>
 
-          <Label text="Model catalog URL" />
+          <Label text="Optional custom model catalog URL" />
           <TextInput
             style={styles.input}
             autoCapitalize="none"
@@ -321,8 +340,8 @@ export default function SettingsScreen() {
           </View>
 
           <Text style={styles.rowBody}>
-            Built-in starter entries are shown if no hosted catalog is configured yet. Add your own catalog
-            URL to plug in real downloadable artifacts.
+            A curated starter catalog is built in now. Add your own catalog URL only if you want a self-hosted
+            or custom model list later.
           </Text>
 
           <ModelCatalogSection
@@ -333,6 +352,7 @@ export default function SettingsScreen() {
             downloadProgress={downloadProgress}
             onDownload={handleDownloadModel}
             onDelete={handleDeleteModel}
+            onOpenSource={handleOpenModelSource}
             onSelectActive={(modelId) => updateProvider('local', 'transcriptionModel', modelId)}
             allowDownload={deviceSupport ? deviceSupport.platform !== 'web' : false}
           />
@@ -345,6 +365,7 @@ export default function SettingsScreen() {
             downloadProgress={downloadProgress}
             onDownload={handleDownloadModel}
             onDelete={handleDeleteModel}
+            onOpenSource={handleOpenModelSource}
             onSelectActive={(modelId) => updateProvider('local', 'summaryModel', modelId)}
             allowDownload={deviceSupport ? deviceSupport.platform !== 'web' : false}
           />
@@ -651,6 +672,7 @@ function ModelCatalogSection({
   downloadProgress,
   onDownload,
   onDelete,
+  onOpenSource,
   onSelectActive,
   allowDownload,
 }: {
@@ -661,6 +683,7 @@ function ModelCatalogSection({
   downloadProgress: Record<string, number>;
   onDownload: (item: ModelCatalogItem) => void;
   onDelete: (item: InstalledModelRow) => void;
+  onOpenSource: (item: ModelCatalogItem) => void;
   onSelectActive: (modelId: string) => void;
   allowDownload: boolean;
 }) {
@@ -672,6 +695,8 @@ function ModelCatalogSection({
         items.map((item) => {
           const installed = installedModels.find((model) => model.id === item.id);
           const progress = downloadProgress[item.id];
+          const canDirectDownload = Boolean(item.downloadUrl.trim());
+          const canOpenSource = Boolean(item.sourceUrl?.trim());
 
           return (
             <View key={item.id} style={styles.modelCard}>
@@ -715,21 +740,45 @@ function ModelCatalogSection({
                     </Pressable>
                   </>
                 ) : (
-                  <Pressable
-                    style={[styles.secondaryButton, !allowDownload && styles.disabledButton]}
-                    onPress={() => onDownload(item)}
-                    disabled={!allowDownload}
-                  >
-                    <Feather name="download" size={16} color={palette.ink} />
-                    <Text style={styles.secondaryButtonText}>
-                      {typeof progress === 'number' ? `Downloading ${Math.round(progress * 100)}%` : 'Download'}
-                    </Text>
-                  </Pressable>
+                  <>
+                    {canDirectDownload ? (
+                      <Pressable
+                        style={[styles.secondaryButton, !allowDownload && styles.disabledButton]}
+                        onPress={() => onDownload(item)}
+                        disabled={!allowDownload}
+                      >
+                        <Feather name="download" size={16} color={palette.ink} />
+                        <Text style={styles.secondaryButtonText}>
+                          {typeof progress === 'number' ? `Downloading ${Math.round(progress * 100)}%` : 'Download'}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+
+                    {canOpenSource ? (
+                      <Pressable style={styles.secondaryButton} onPress={() => onOpenSource(item)}>
+                        <Feather name="external-link" size={16} color={palette.ink} />
+                        <Text style={styles.secondaryButtonText}>{item.sourceLabel ?? 'View source'}</Text>
+                      </Pressable>
+                    ) : null}
+
+                    {!canDirectDownload && !canOpenSource ? (
+                      <Pressable style={[styles.secondaryButton, styles.disabledButton]} disabled>
+                        <Feather name="slash" size={16} color={palette.ink} />
+                        <Text style={styles.secondaryButtonText}>Unavailable</Text>
+                      </Pressable>
+                    ) : null}
+                  </>
                 )}
               </View>
 
-              {!item.downloadUrl ? (
-                <Text style={styles.modelHint}>Add a hosted model catalog URL to enable this download.</Text>
+              {!canDirectDownload && item.requiresExternalSetup ? (
+                <Text style={styles.modelHint}>
+                  This official model still needs an external download or license-acceptance step. Open the source page for details.
+                </Text>
+              ) : !canDirectDownload && canOpenSource ? (
+                <Text style={styles.modelHint}>
+                  This entry is curated by default, but the file is not fetched directly in-app yet.
+                </Text>
               ) : null}
               {installed?.errorMessage ? <Text style={styles.errorText}>{installed.errorMessage}</Text> : null}
             </View>

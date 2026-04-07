@@ -100,8 +100,8 @@ For remote providers:
 For local models:
 
 - build a custom dev or release app that includes the native local runtime
-- set `Model catalog URL` in `Settings` if you are hosting your own catalog
-- download compatible transcription and summary models
+- use the built-in starter catalog, or set `Model catalog URL` only if you are hosting your own custom catalog
+- download compatible transcription and summary models where direct download is supported
 - switch both provider selectors to `Local`
 
 ### 3. Create a meeting

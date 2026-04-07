@@ -41,16 +41,16 @@ Current starter catalog shape:
   - `whisper-base`
   - `whisper-small`
 - summary:
-  - `gemma-family-ios-default`
-  - `gemma-family-android-default`
-  - `gemma-family-cross-platform-small`
+  - `gemma-3n-e2b-preview`
+  - `gemma-3n-e4b-preview`
+  - `gemma-3-1b-it-q4`
+  - `qwen2.5-1.5b-instruct-q8`
 
-These built-in starter entries are placeholders. Their default `downloadUrl` values are empty.
+The built-in catalog is now meant to be useful on its own:
 
-That means:
-
-- the built-in catalog is useful as a schema and UI fallback
-- real model downloads require a hosted catalog URL with real artifacts
+- some entries support direct download
+- some official entries are source-only for now and need external setup or license acceptance
+- custom `modelCatalogUrl` is optional, not required
 
 ## Where Things Live
 
@@ -62,7 +62,7 @@ That means:
 ## How The Flow Works
 
 1. User opens `Settings`
-2. User optionally sets `Model catalog URL`
+2. User optionally sets `Model catalog URL` if they want to override the built-in curated list
 3. App loads the model catalog
 4. App filters the catalog for the current device platform
 5. User downloads a transcription model and a summary model
@@ -86,6 +86,9 @@ The app expects a JSON document shaped like this:
       "displayName": "Whisper Base",
       "version": "v1",
       "downloadUrl": "https://example.com/models/whisper-base.bin",
+      "sourceUrl": "https://example.com/models/whisper-base",
+      "sourceLabel": "View source",
+      "requiresExternalSetup": false,
       "sha256": "optional-lowercase-sha256",
       "sizeBytes": 159383552,
       "platforms": ["ios", "android"],
@@ -104,6 +107,7 @@ Rules:
 - `engine` must be `whisper.cpp`, `mediapipe-llm`, or `litert-lm`
 - `platforms` must contain `ios` and/or `android`
 - only supported platforms are shown in the UI
+- `downloadUrl` can be empty if the entry is source-only
 
 ## Runtime Assumptions
 

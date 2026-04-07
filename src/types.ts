@@ -71,6 +71,9 @@ export type ModelCatalogItem = {
   displayName: string;
   version: string;
   downloadUrl: string;
+  sourceUrl?: string;
+  sourceLabel?: string;
+  requiresExternalSetup?: boolean;
   sha256: string;
   sizeBytes: number;
   platforms: LocalModelPlatform[];

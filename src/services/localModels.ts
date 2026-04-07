@@ -15,6 +15,7 @@ import { Sha256 } from '../utils/sha256';
 
 const MODEL_DIR = `${FileSystem.documentDirectory}models`;
 const SHA256_CHUNK_BYTES = 256 * 1024;
+const HUGGING_FACE_BASE_URL = 'https://huggingface.co';
 
 const BUILT_IN_MODEL_CATALOG: ModelCatalogItem[] = [
   {
@@ -22,75 +23,112 @@ const BUILT_IN_MODEL_CATALOG: ModelCatalogItem[] = [
     kind: 'transcription',
     engine: 'whisper.cpp',
     displayName: 'Whisper Base',
-    version: 'starter',
-    downloadUrl: '',
+    version: 'ggml',
+    downloadUrl: buildHuggingFaceDownloadUrl('ggerganov/whisper.cpp', 'ggml-base.bin'),
+    sourceUrl: buildHuggingFaceModelUrl('ggerganov/whisper.cpp'),
+    sourceLabel: 'View whisper.cpp files',
     sha256: '',
     sizeBytes: 152 * 1024 * 1024,
     platforms: ['ios', 'android'],
     minFreeSpaceBytes: 1 * 1024 * 1024 * 1024,
     recommended: true,
     experimental: false,
-    description: 'Balanced local speech-to-text model for both platforms.',
+    description: 'Balanced multilingual speech-to-text model from whisper.cpp.',
   },
   {
     id: 'whisper-small',
     kind: 'transcription',
     engine: 'whisper.cpp',
     displayName: 'Whisper Small',
-    version: 'starter',
-    downloadUrl: '',
+    version: 'ggml',
+    downloadUrl: buildHuggingFaceDownloadUrl('ggerganov/whisper.cpp', 'ggml-small.bin'),
+    sourceUrl: buildHuggingFaceModelUrl('ggerganov/whisper.cpp'),
+    sourceLabel: 'View whisper.cpp files',
     sha256: '',
     sizeBytes: 488 * 1024 * 1024,
     platforms: ['ios', 'android'],
     minFreeSpaceBytes: 2 * 1024 * 1024 * 1024,
     recommended: false,
     experimental: false,
-    description: 'Higher accuracy local speech-to-text model with a larger footprint.',
+    description: 'Higher accuracy multilingual speech-to-text model with a larger footprint.',
   },
   {
-    id: 'gemma-family-ios-default',
+    id: 'gemma-3n-e2b-preview',
     kind: 'summary',
     engine: 'mediapipe-llm',
-    displayName: 'Gemma-family iPhone default',
-    version: 'starter',
+    displayName: 'Gemma 3n E2B preview',
+    version: '20250520',
     downloadUrl: '',
+    sourceUrl: buildHuggingFaceModelUrl('google/gemma-3n-E2B-it-litert-preview'),
+    sourceLabel: 'Open model page',
+    requiresExternalSetup: true,
     sha256: '',
-    sizeBytes: 1_700 * 1024 * 1024,
-    platforms: ['ios'],
-    minFreeSpaceBytes: 6 * 1024 * 1024 * 1024,
-    recommended: true,
-    experimental: false,
-    description: 'Starter Gemma-family summary model shape for iPhone-compatible MediaPipe bundles.',
-  },
-  {
-    id: 'gemma-family-android-default',
-    kind: 'summary',
-    engine: 'litert-lm',
-    displayName: 'Gemma-family Android default',
-    version: 'starter',
-    downloadUrl: '',
-    sha256: '',
-    sizeBytes: 1_800 * 1024 * 1024,
+    sizeBytes: 3136226711,
     platforms: ['android'],
     minFreeSpaceBytes: 6 * 1024 * 1024 * 1024,
     recommended: true,
     experimental: false,
-    description: 'Starter Gemma-family summary model shape for Android local LLM runtimes.',
+    description:
+      'Official Gemma 3n preview from the Google AI Edge Gallery ecosystem. Listed here by default, but still needs external license/setup handling before in-app download can be automated.',
   },
   {
-    id: 'gemma-family-cross-platform-small',
+    id: 'gemma-3n-e4b-preview',
+    kind: 'summary',
+    engine: 'litert-lm',
+    displayName: 'Gemma 3n E4B preview',
+    version: '20250520',
+    downloadUrl: '',
+    sourceUrl: buildHuggingFaceModelUrl('google/gemma-3n-E4B-it-litert-preview'),
+    sourceLabel: 'Open model page',
+    requiresExternalSetup: true,
+    sha256: '',
+    sizeBytes: 4405655031,
+    platforms: ['android'],
+    minFreeSpaceBytes: 6 * 1024 * 1024 * 1024,
+    recommended: false,
+    experimental: false,
+    description:
+      'Larger official Gemma 3n preview model from the Google AI Edge Gallery ecosystem. Best treated as a bring-your-own or future authenticated download target.',
+  },
+  {
+    id: 'gemma-3-1b-it-q4',
     kind: 'summary',
     engine: 'mediapipe-llm',
-    displayName: 'Gemma-family cross-platform small',
-    version: 'starter',
-    downloadUrl: '',
+    displayName: 'Gemma 3 1B IT q4',
+    version: '20250514',
+    downloadUrl: buildHuggingFaceDownloadUrl(
+      'litert-community/Gemma3-1B-IT',
+      'Gemma3-1B-IT_multi-prefill-seq_q4_ekv2048.task'
+    ),
+    sourceUrl: buildHuggingFaceModelUrl('litert-community/Gemma3-1B-IT'),
+    sourceLabel: 'Open model page',
     sha256: '',
-    sizeBytes: 1_300 * 1024 * 1024,
+    sizeBytes: 554661246,
     platforms: ['ios', 'android'],
-    minFreeSpaceBytes: 5 * 1024 * 1024 * 1024,
+    minFreeSpaceBytes: 2 * 1024 * 1024 * 1024,
+    recommended: true,
+    experimental: false,
+    description: 'Small Gemma text model packaged for LiteRT/MediaPipe-style on-device inference.',
+  },
+  {
+    id: 'qwen2.5-1.5b-instruct-q8',
+    kind: 'summary',
+    engine: 'mediapipe-llm',
+    displayName: 'Qwen 2.5 1.5B Instruct q8',
+    version: '20250514',
+    downloadUrl: buildHuggingFaceDownloadUrl(
+      'litert-community/Qwen2.5-1.5B-Instruct',
+      'Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv1280.task'
+    ),
+    sourceUrl: buildHuggingFaceModelUrl('litert-community/Qwen2.5-1.5B-Instruct'),
+    sourceLabel: 'Open model page',
+    sha256: '',
+    sizeBytes: 1625493432,
+    platforms: ['ios', 'android'],
+    minFreeSpaceBytes: 3 * 1024 * 1024 * 1024,
     recommended: false,
-    experimental: true,
-    description: 'Experimental small summary model slot for future catalog entries.',
+    experimental: false,
+    description: 'Small instruction-tuned community model that is easier to ship than huge Gemma-family checkpoints.',
   },
 ];
 
@@ -174,7 +212,13 @@ export async function downloadModel(
   options?: { onProgress?: (progress: number) => void }
 ) {
   if (!catalogItem.downloadUrl.trim()) {
-    throw new Error('This catalog entry has no download URL yet. Point the app at a hosted model catalog first.');
+    if (catalogItem.requiresExternalSetup) {
+      throw new Error(
+        'This model still needs an external download or license-acceptance step. Open the model source page instead.'
+      );
+    }
+
+    throw new Error('This model is not directly downloadable in-app yet. Open the source page or add a custom catalog.');
   }
 
   if (!catalogItem.platforms.includes(getCurrentModelPlatform())) {
@@ -397,6 +441,9 @@ function normalizeCatalogItem(input: unknown): ModelCatalogItem | null {
     displayName: String(record.displayName ?? record.id),
     version: String(record.version ?? 'custom'),
     downloadUrl: String(record.downloadUrl ?? ''),
+    sourceUrl: record.sourceUrl ? String(record.sourceUrl) : undefined,
+    sourceLabel: record.sourceLabel ? String(record.sourceLabel) : undefined,
+    requiresExternalSetup: Boolean(record.requiresExternalSetup),
     sha256: String(record.sha256 ?? '').toLowerCase(),
     sizeBytes: Number(record.sizeBytes ?? 0),
     platforms,
@@ -410,6 +457,14 @@ function normalizeCatalogItem(input: unknown): ModelCatalogItem | null {
 function buildModelFileUri(catalogItem: ModelCatalogItem) {
   const extension = inferFileExtension(catalogItem.downloadUrl, catalogItem.engine);
   return `${MODEL_DIR}/${catalogItem.id}${extension}`;
+}
+
+function buildHuggingFaceModelUrl(modelId: string) {
+  return `${HUGGING_FACE_BASE_URL}/${modelId}`;
+}
+
+function buildHuggingFaceDownloadUrl(modelId: string, fileName: string) {
+  return `${buildHuggingFaceModelUrl(modelId)}/resolve/main/${fileName}?download=true`;
 }
 
 function inferFileExtension(downloadUrl: string, engine: ModelCatalogItem['engine']) {
