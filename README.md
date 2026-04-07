@@ -61,13 +61,24 @@ docs/                product and architecture docs
 npm install
 ```
 
-### 2. Start the Expo dev server
+### 2. Pick a local run mode
+
+Use the guide here:
+
+- [Run Locally](/Users/tarun/Documents/projects/mu-fathom/docs/running-locally.md)
+
+Short version:
+
+- use `Expo Go` if you want the fastest remote-provider test loop
+- use `Xcode` or a custom dev build if you need native iOS debugging or future local-model runtime work
+
+### 3. Start the Expo dev server
 
 ```bash
 npx expo start --lan --clear
 ```
 
-Then open the app on a device using Expo Go.
+Then open the app on a device using Expo Go, or connect that Metro server to a dev build/Xcode run.
 
 ## How To Use The App
 
@@ -140,6 +151,7 @@ These are deliberate for speed:
 ## Documentation
 
 - [Docs Index](/Users/tarun/Documents/projects/mu-fathom/docs/README.md)
+- [Run Locally](/Users/tarun/Documents/projects/mu-fathom/docs/running-locally.md)
 - [Product Notes](/Users/tarun/Documents/projects/mu-fathom/docs/product.md)
 - [Architecture Notes](/Users/tarun/Documents/projects/mu-fathom/docs/architecture.md)
 - [Local Models](/Users/tarun/Documents/projects/mu-fathom/docs/local-models.md)

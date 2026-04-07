@@ -8,6 +8,22 @@ type SettingsRow = {
   delete_uploaded_audio: number;
 };
 
+type AppPreferencesRow = {
+  id: number;
+  selected_transcription_provider: string;
+  selected_summary_provider: string;
+  delete_uploaded_audio: number;
+  model_catalog_url: string;
+};
+
+type ProviderSettingsRow = {
+  provider_id: string;
+  api_key: string;
+  base_url: string;
+  transcription_model: string;
+  summary_model: string;
+};
+
 type MeetingStorageRow = {
   id: string;
   title: string;
@@ -46,6 +62,8 @@ const STORAGE_KEY = 'mu-fathom-web-db';
 type DatabaseShape = {
   meetings: MeetingStorageRow[];
   settings: SettingsRow;
+  appPreferences: AppPreferencesRow;
+  providerSettings: ProviderSettingsRow[];
   installedModels: InstalledModelStorageRow[];
 };
 
@@ -58,6 +76,14 @@ const defaultState: DatabaseShape = {
     summary_model: 'gpt-4.1-mini',
     delete_uploaded_audio: 0,
   },
+  appPreferences: {
+    id: 1,
+    selected_transcription_provider: 'openai',
+    selected_summary_provider: 'openai',
+    delete_uploaded_audio: 0,
+    model_catalog_url: '',
+  },
+  providerSettings: [],
   installedModels: [],
 };
 
@@ -90,16 +116,33 @@ function writeState(state: DatabaseShape) {
 const db = {
   async execAsync(_source: string) {
     const state = readState();
+
     if (!state.settings) {
       state.settings = structuredClone(defaultState.settings);
     }
+
+    if (!state.appPreferences) {
+      state.appPreferences = structuredClone(defaultState.appPreferences);
+    } else if (typeof state.appPreferences.model_catalog_url !== 'string') {
+      state.appPreferences.model_catalog_url = '';
+    }
+
+    if (!state.providerSettings) {
+      state.providerSettings = [];
+    }
+
     if (!state.installedModels) {
       state.installedModels = [];
     }
+
     writeState(state);
   },
   async getFirstAsync<T>(source: string, ...params: unknown[]): Promise<T | null> {
     const state = readState();
+
+    if (source.includes('FROM app_preferences')) {
+      return state.appPreferences as T;
+    }
 
     if (source.includes('FROM app_settings')) {
       return state.settings as T;
@@ -119,6 +162,10 @@ const db = {
   },
   async getAllAsync<T>(source: string): Promise<T[]> {
     const state = readState();
+
+    if (source.includes('FROM provider_settings')) {
+      return [...state.providerSettings] as T[];
+    }
 
     if (source.includes('FROM installed_models')) {
       return [...state.installedModels]
@@ -164,6 +211,40 @@ const db = {
         summary_model: String(params[2]),
         delete_uploaded_audio: Number(params[3]),
       };
+      writeState(state);
+      return;
+    }
+
+    if (source.includes('INSERT OR REPLACE INTO app_preferences')) {
+      state.appPreferences = {
+        id: 1,
+        selected_transcription_provider: String(params[0]),
+        selected_summary_provider: String(params[1]),
+        delete_uploaded_audio: Number(params[2]),
+        model_catalog_url: params[3] ? String(params[3]) : '',
+      };
+      writeState(state);
+      return;
+    }
+
+    if (source.includes('INSERT OR REPLACE INTO provider_settings')) {
+      const row: ProviderSettingsRow = {
+        provider_id: String(params[0]),
+        api_key: String(params[1]),
+        base_url: String(params[2]),
+        transcription_model: String(params[3]),
+        summary_model: String(params[4]),
+      };
+      const index = state.providerSettings.findIndex(
+        (provider) => provider.provider_id === row.provider_id
+      );
+
+      if (index >= 0) {
+        state.providerSettings[index] = row;
+      } else {
+        state.providerSettings.push(row);
+      }
+
       writeState(state);
       return;
     }

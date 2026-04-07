@@ -209,16 +209,52 @@ export const defaultProviderConfigs: Record<ProviderId, ProviderConfig> = {
   },
 };
 
-export function isProviderConfigured(
-  providerId: ProviderId,
-  provider: ProviderConfig,
-  mode: 'transcription' | 'summary'
-) {
+export function normalizeProviderConfig(providerId: ProviderId, config: ProviderConfig): ProviderConfig {
+  const defaults = defaultProviderConfigs[providerId];
+
   if (providerId === 'local') {
-    return mode === 'transcription'
-      ? Boolean(provider.transcriptionModel.trim())
-      : Boolean(provider.summaryModel.trim());
+    return {
+      apiKey: '',
+      baseUrl: '',
+      transcriptionModel: config.transcriptionModel.trim(),
+      summaryModel: config.summaryModel.trim(),
+    };
   }
 
-  return Boolean(provider.apiKey.trim());
+  return {
+    apiKey: config.apiKey.trim(),
+    baseUrl: providerId === 'custom' ? config.baseUrl.trim() : config.baseUrl.trim() || defaults.baseUrl,
+    transcriptionModel: config.transcriptionModel.trim() || defaults.transcriptionModel,
+    summaryModel: config.summaryModel.trim() || defaults.summaryModel,
+  };
+}
+
+export function isProviderConfigured(
+  providerId: ProviderId,
+  config: ProviderConfig,
+  mode?: 'transcription' | 'summary'
+) {
+  const normalized = normalizeProviderConfig(providerId, config);
+
+  if (providerId === 'local') {
+    if (mode === 'transcription') {
+      return Boolean(normalized.transcriptionModel);
+    }
+
+    if (mode === 'summary') {
+      return Boolean(normalized.summaryModel);
+    }
+
+    return Boolean(normalized.transcriptionModel || normalized.summaryModel);
+  }
+
+  if (!normalized.apiKey) {
+    return false;
+  }
+
+  if (providerId === 'custom') {
+    return Boolean(normalized.baseUrl);
+  }
+
+  return true;
 }

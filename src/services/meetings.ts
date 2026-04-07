@@ -4,10 +4,10 @@ import { DocumentPickerAsset } from 'expo-document-picker';
 import { getDatabase, mapMeetingRow } from '../db';
 import { SummaryPayload, type MeetingRow } from '../types';
 import { getAudioDirectory } from './bootstrap';
+import { summarizeTranscript, transcribeAudio } from './ai';
 import { getInstalledModel } from './localModels';
 import { isProviderConfigured } from './providers';
 import { getAppSettings } from './settings';
-import { summarizeTranscript, transcribeAudio } from './ai';
 
 type RecordingInput = {
   uri: string;

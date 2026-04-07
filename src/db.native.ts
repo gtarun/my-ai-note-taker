@@ -30,6 +30,21 @@ export async function initializeDatabase() {
       delete_uploaded_audio INTEGER NOT NULL DEFAULT 0
     );
 
+    CREATE TABLE IF NOT EXISTS app_preferences (
+      id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
+      selected_transcription_provider TEXT NOT NULL,
+      selected_summary_provider TEXT NOT NULL,
+      delete_uploaded_audio INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS provider_settings (
+      provider_id TEXT PRIMARY KEY NOT NULL,
+      api_key TEXT NOT NULL DEFAULT '',
+      base_url TEXT NOT NULL DEFAULT '',
+      transcription_model TEXT NOT NULL DEFAULT '',
+      summary_model TEXT NOT NULL DEFAULT ''
+    );
+
     CREATE TABLE IF NOT EXISTS installed_models (
       id TEXT PRIMARY KEY NOT NULL,
       kind TEXT NOT NULL,
@@ -61,7 +76,24 @@ export async function initializeDatabase() {
       'gpt-4.1-mini',
       0
     );
+
+    INSERT OR IGNORE INTO app_preferences (
+      id,
+      selected_transcription_provider,
+      selected_summary_provider,
+      delete_uploaded_audio
+    ) VALUES (
+      1,
+      'openai',
+      'openai',
+      0
+    );
   `);
+
+  const appPreferenceColumns = await db.getAllAsync<{ name?: string }>('PRAGMA table_info(app_preferences)');
+  if (!appPreferenceColumns.some((column) => column.name === 'model_catalog_url')) {
+    await db.execAsync("ALTER TABLE app_preferences ADD COLUMN model_catalog_url TEXT NOT NULL DEFAULT '';");
+  }
 }
 
 export function getDatabase() {
