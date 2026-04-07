@@ -39,3 +39,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# local workspaces and tooling artifacts
+.worktrees/
+.superpowers/
