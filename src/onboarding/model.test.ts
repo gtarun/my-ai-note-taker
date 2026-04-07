@@ -28,8 +28,8 @@ describe('onboarding model', () => {
     expect(getPreviousOnboardingIndex(0)).toBe(0);
     expect(isLastOnboardingSlide(3, 4)).toBe(true);
     expect(isLastOnboardingSlide(2, 4)).toBe(false);
-    expect(getOnboardingProgress(0, 4)).toBe(0.25);
-    expect(getOnboardingProgress(3, 4)).toBe(1);
+    expect(getOnboardingProgress(1, 4)).toEqual([false, true, false, false]);
+    expect(getOnboardingProgress(3, 4)).toEqual([false, false, false, true]);
     expect(getOnboardingCompletionRoute()).toBe('/settings');
   });
 

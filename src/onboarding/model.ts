@@ -63,13 +63,13 @@ export function isLastOnboardingSlide(index: number, slideCount: number) {
   return slideCount > 0 && index >= slideCount - 1;
 }
 
-export function getOnboardingProgress(activeIndex: number, slideCount: number) {
+export function getOnboardingProgress(activeIndex: number, slideCount: number): boolean[] {
   if (slideCount <= 0) {
-    return 0;
+    return [];
   }
 
   const boundedIndex = Math.min(Math.max(activeIndex, 0), slideCount - 1);
-  return (boundedIndex + 1) / slideCount;
+  return Array.from({ length: slideCount }, (_, index) => index === boundedIndex);
 }
 
 export function getOnboardingCompletionRoute() {
