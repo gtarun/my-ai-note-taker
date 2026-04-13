@@ -89,6 +89,8 @@ The app currently has two modes:
 - remote provider mode: works today in Expo Go with API keys
 - local model mode: settings/UI/catalog are implemented, but real on-device inference still needs a custom native build with the local runtime linked
 
+On first launch, the app shows a short onboarding flow and then routes to `Settings` so you can set up your provider before using the main app.
+
 ### 2. Configure a provider
 
 For remote providers:

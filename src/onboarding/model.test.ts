@@ -66,4 +66,16 @@ describe('onboarding model', () => {
       shouldPresentOnboarding({ hasSeenOnboarding: true, pathname: '/onboarding' })
     ).toBe(false);
   });
+
+  test('gates app launch based on onboarding completion and pathname', () => {
+    expect(
+      shouldPresentOnboarding({ hasSeenOnboarding: false, pathname: '/settings' })
+    ).toBe(true);
+    expect(
+      shouldPresentOnboarding({ hasSeenOnboarding: true, pathname: '/settings' })
+    ).toBe(false);
+    expect(
+      shouldPresentOnboarding({ hasSeenOnboarding: false, pathname: '/onboarding' })
+    ).toBe(false);
+  });
 });
