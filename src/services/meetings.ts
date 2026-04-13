@@ -4,9 +4,10 @@ import { DocumentPickerAsset } from 'expo-document-picker';
 import { getDatabase, mapMeetingRow } from '../db';
 import { SummaryPayload, type MeetingRow } from '../types';
 import { getAudioDirectory } from './bootstrap';
+import { summarizeTranscript, transcribeAudio } from './ai';
+import { getInstalledModel } from './localModels';
 import { isProviderConfigured } from './providers';
 import { getAppSettings } from './settings';
-import { summarizeTranscript, transcribeAudio } from './ai';
 
 type RecordingInput = {
   uri: string;
@@ -62,17 +63,35 @@ export async function processMeeting(id: string) {
   const transcriptionProvider = settings.providers[settings.selectedTranscriptionProvider];
   const summaryProvider = settings.providers[settings.selectedSummaryProvider];
 
-  if (!isProviderConfigured(settings.selectedTranscriptionProvider, transcriptionProvider)) {
+  if (!isProviderConfigured(settings.selectedTranscriptionProvider, transcriptionProvider, 'transcription')) {
     throw new Error('Configure the selected transcription provider in Settings first.');
   }
 
-  if (!isProviderConfigured(settings.selectedSummaryProvider, summaryProvider)) {
+  if (!isProviderConfigured(settings.selectedSummaryProvider, summaryProvider, 'summary')) {
     throw new Error('Configure the selected summary provider in Settings first.');
+  }
+
+  if (settings.selectedTranscriptionProvider === 'local') {
+    const installedModel = await getInstalledModel(transcriptionProvider.transcriptionModel);
+    if (!installedModel || installedModel.status !== 'installed') {
+      throw new Error('Download and install the selected local transcription model first.');
+    }
+  }
+
+  if (settings.selectedSummaryProvider === 'local') {
+    const installedModel = await getInstalledModel(summaryProvider.summaryModel);
+    if (!installedModel || installedModel.status !== 'installed') {
+      throw new Error('Download and install the selected local summary model first.');
+    }
   }
 
   try {
     await clearMeetingProcessingArtifacts(id);
-    await updateMeetingStatus(id, 'transcribing', null);
+    await updateMeetingStatus(
+      id,
+      settings.selectedTranscriptionProvider === 'local' ? 'transcribing_local' : 'transcribing',
+      null
+    );
     const transcriptText = await transcribeAudio({
       providerId: settings.selectedTranscriptionProvider,
       provider: transcriptionProvider,
@@ -80,7 +99,11 @@ export async function processMeeting(id: string) {
     });
 
     await updateTranscript(id, transcriptText);
-    await updateMeetingStatus(id, 'summarizing', null);
+    await updateMeetingStatus(
+      id,
+      settings.selectedSummaryProvider === 'local' ? 'summarizing_local' : 'summarizing',
+      null
+    );
 
     const summary = await summarizeTranscript({
       providerId: settings.selectedSummaryProvider,

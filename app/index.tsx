@@ -233,8 +233,12 @@ function statusLabel(status: MeetingRow['status']) {
       return 'error';
     case 'transcribing':
       return 'transcribing';
+    case 'transcribing_local':
+      return 'local transcript';
     case 'summarizing':
       return 'summarizing';
+    case 'summarizing_local':
+      return 'local summary';
     default:
       return 'local only';
   }

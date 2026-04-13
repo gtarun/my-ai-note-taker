@@ -1,7 +1,9 @@
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Alert,
+  Linking,
+  Modal,
   Pressable,
   PressableProps,
   SafeAreaView,
@@ -15,6 +17,15 @@ import {
 
 import { FadeInView } from '../src/components/FadeInView';
 import { ScreenBackground } from '../src/components/ScreenBackground';
+import { getLocalDeviceSupport } from '../src/services/localInference';
+import {
+  deleteInstalledModel,
+  downloadModel,
+  getCatalogItemsForDevice,
+  getInstalledModels,
+  getInstalledModelsForKind,
+  getModelCatalog,
+} from '../src/services/localModels';
 import {
   defaultProviderConfigs,
   isProviderConfigured,
@@ -22,21 +33,42 @@ import {
   providerMap,
 } from '../src/services/providers';
 import { getAppSettings, sanitizeAppSettings, saveAppSettings } from '../src/services/settings';
-import { AppSettings, ProviderConfig, ProviderId } from '../src/types';
+import {
+  AppSettings,
+  InstalledModelRow,
+  LocalDeviceSupport,
+  ModelCatalogItem,
+  ProviderConfig,
+  ProviderId,
+} from '../src/types';
 import { elevation, palette } from '../src/theme';
 
 export default function SettingsScreen() {
   const [form, setForm] = useState<AppSettings | null>(null);
+  const [catalog, setCatalog] = useState<ModelCatalogItem[]>([]);
+  const [installedModels, setInstalledModels] = useState<InstalledModelRow[]>([]);
+  const [deviceSupport, setDeviceSupport] = useState<LocalDeviceSupport | null>(null);
   const [editingProviderId, setEditingProviderId] = useState<ProviderId>('openai');
   const [isSaving, setIsSaving] = useState(false);
+  const [isRefreshingCatalog, setIsRefreshingCatalog] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    getAppSettings().then((settings) => {
-      const next = sanitizeAppSettings(settings);
-      setForm(next);
-      setEditingProviderId(pickInitialProvider(next));
-    });
+    void hydrateScreen();
   }, []);
+
+  const installedTranscriptionModels = useMemo(
+    () => getInstalledModelsForKind(installedModels, 'transcription'),
+    [installedModels]
+  );
+  const installedSummaryModels = useMemo(
+    () => getInstalledModelsForKind(installedModels, 'summary'),
+    [installedModels]
+  );
+  const visibleCatalog = useMemo(
+    () => getCatalogItemsForDevice(catalog, deviceSupport),
+    [catalog, deviceSupport]
+  );
 
   if (!form) {
     return (
@@ -54,6 +86,14 @@ export default function SettingsScreen() {
   const editingConfig = form.providers[editingProviderId];
   const transcriptionProvider = providerMap[sanitizedForm.selectedTranscriptionProvider];
   const summaryProvider = providerMap[sanitizedForm.selectedSummaryProvider];
+  const localTranscriptionOptions = installedTranscriptionModels.map((model) => ({
+    label: model.displayName,
+    value: model.id,
+  }));
+  const localSummaryOptions = installedSummaryModels.map((model) => ({
+    label: model.displayName,
+    value: model.id,
+  }));
 
   const updateForm = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     setForm((current) => (current ? { ...current, [key]: value } : current));
@@ -97,17 +137,142 @@ export default function SettingsScreen() {
     );
   };
 
+  const refreshCatalog = async (catalogUrl: string, showFailureAlert = false) => {
+    setIsRefreshingCatalog(true);
+
+    try {
+      const nextCatalog = await getModelCatalog(catalogUrl);
+      setCatalog(nextCatalog);
+    } catch (error) {
+      const fallbackCatalog = await getModelCatalog('');
+      setCatalog(fallbackCatalog);
+
+      if (showFailureAlert) {
+        Alert.alert(
+          'Catalog refresh failed',
+          error instanceof Error ? error.message : 'Unable to load the remote model catalog.'
+        );
+      }
+    } finally {
+      setIsRefreshingCatalog(false);
+    }
+  };
+
   const handleSave = async () => {
     try {
       setIsSaving(true);
       const next = sanitizeAppSettings(form);
       setForm(next);
       await saveAppSettings(next);
-      Alert.alert('Saved', 'Providers are configured once and stored locally on this device.');
+      Alert.alert('Saved', 'Provider settings and local model preferences were stored on this device.');
     } catch (error) {
       Alert.alert('Save failed', error instanceof Error ? error.message : 'Unable to save settings.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleDownloadModel = async (item: ModelCatalogItem) => {
+    try {
+      await downloadModel(item, {
+        onProgress: (progress) =>
+          setDownloadProgress((current) => ({
+            ...current,
+            [item.id]: progress,
+          })),
+      });
+
+      const nextInstalledModels = await getInstalledModels();
+      setInstalledModels(nextInstalledModels);
+      setDownloadProgress((current) => {
+        const next = { ...current };
+        delete next[item.id];
+        return next;
+      });
+
+      setForm((current) => {
+        if (!current) {
+          return current;
+        }
+
+        const next = { ...current, providers: { ...current.providers, local: { ...current.providers.local } } };
+
+        if (item.kind === 'transcription' && !next.providers.local.transcriptionModel) {
+          next.providers.local.transcriptionModel = item.id;
+        }
+
+        if (item.kind === 'summary' && !next.providers.local.summaryModel) {
+          next.providers.local.summaryModel = item.id;
+        }
+
+        return next;
+      });
+
+      Alert.alert('Model ready', `${item.displayName} was downloaded and registered locally.`);
+    } catch (error) {
+      setDownloadProgress((current) => {
+        const next = { ...current };
+        delete next[item.id];
+        return next;
+      });
+      Alert.alert('Download failed', error instanceof Error ? error.message : 'Unable to download this model.');
+    }
+  };
+
+  const handleDeleteModel = async (model: InstalledModelRow) => {
+    Alert.alert('Delete local model?', `Remove ${model.displayName} from this device?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteInstalledModel(model.id);
+            const nextInstalledModels = await getInstalledModels();
+            setInstalledModels(nextInstalledModels);
+            setForm((current) => {
+              if (!current) {
+                return current;
+              }
+
+              const next = { ...current, providers: { ...current.providers, local: { ...current.providers.local } } };
+              const nextTranscriptionFallback =
+                getInstalledModelsForKind(nextInstalledModels, 'transcription')[0]?.id ?? '';
+              const nextSummaryFallback = getInstalledModelsForKind(nextInstalledModels, 'summary')[0]?.id ?? '';
+
+              if (next.providers.local.transcriptionModel === model.id) {
+                next.providers.local.transcriptionModel = nextTranscriptionFallback;
+              }
+
+              if (next.providers.local.summaryModel === model.id) {
+                next.providers.local.summaryModel = nextSummaryFallback;
+              }
+
+              return next;
+            });
+          } catch (error) {
+            Alert.alert('Delete failed', error instanceof Error ? error.message : 'Unable to remove this model.');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleOpenModelSource = async (item: ModelCatalogItem) => {
+    if (!item.sourceUrl) {
+      return;
+    }
+
+    try {
+      const supported = await Linking.canOpenURL(item.sourceUrl);
+
+      if (!supported) {
+        throw new Error('This source URL cannot be opened on this device.');
+      }
+
+      await Linking.openURL(item.sourceUrl);
+    } catch (error) {
+      Alert.alert('Open source failed', error instanceof Error ? error.message : 'Unable to open this model source.');
     }
   };
 
@@ -118,20 +283,102 @@ export default function SettingsScreen() {
         <FadeInView style={styles.hero}>
           <View style={styles.heroHeader}>
             <MaterialCommunityIcons name="tune-variant" size={18} color={palette.ink} />
-            <Text style={styles.heroTitle}>Provider setup</Text>
+            <Text style={styles.heroTitle}>Providers + local models</Text>
           </View>
           <Text style={styles.heroBody}>
-            Configure each provider once. Then choose which configured provider handles transcript and summary. Keys are stored locally in the app database on this device.
+            Configure cloud providers once, manage on-device model downloads, and choose which configured
+            provider handles transcript and summary for each meeting.
           </Text>
         </FadeInView>
 
-        <FadeInView style={styles.card} delay={40}>
+        <FadeInView style={styles.card} delay={30}>
+          <View style={styles.sectionTitleRow}>
+            <MaterialCommunityIcons name="chip" size={18} color={palette.ink} />
+            <Text style={styles.cardTitle}>Local Models</Text>
+          </View>
+
+          <View style={styles.runtimeCard}>
+            <View style={styles.providerHeader}>
+              <Text style={styles.runtimeTitle}>Runtime status</Text>
+              <Text
+                style={[
+                  styles.statusBadge,
+                  deviceSupport?.localProcessingAvailable ? styles.statusBadgeConfigured : styles.statusBadgeIdle,
+                ]}
+              >
+                {deviceSupport?.localProcessingAvailable ? 'Ready' : 'Not ready'}
+              </Text>
+            </View>
+            <Text style={styles.rowBody}>
+              {deviceSupport?.reason ??
+                'Checking device support for the native local AI runtime and model execution path.'}
+            </Text>
+          </View>
+
+          <Label text="Optional custom model catalog URL" />
+          <TextInput
+            style={styles.input}
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="https://your-hosted-catalog.example/catalog.json"
+            placeholderTextColor={palette.mutedInk}
+            value={form.modelCatalogUrl}
+            onChangeText={(value) => updateForm('modelCatalogUrl', value)}
+          />
+
+          <View style={styles.actionsRow}>
+            <Pressable
+              style={styles.secondaryButton}
+              onPress={() => refreshCatalog(form.modelCatalogUrl, true)}
+              disabled={isRefreshingCatalog}
+            >
+              <Feather name="refresh-cw" size={16} color={palette.ink} />
+              <Text style={styles.secondaryButtonText}>
+                {isRefreshingCatalog ? 'Refreshing…' : 'Refresh catalog'}
+              </Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.rowBody}>
+            A curated starter catalog is built in now. Add your own catalog URL only if you want a self-hosted
+            or custom model list later.
+          </Text>
+
+          <ModelCatalogSection
+            title="Transcription models"
+            items={visibleCatalog.filter((item) => item.kind === 'transcription')}
+            installedModels={installedTranscriptionModels}
+            activeModelId={form.providers.local.transcriptionModel}
+            downloadProgress={downloadProgress}
+            onDownload={handleDownloadModel}
+            onDelete={handleDeleteModel}
+            onOpenSource={handleOpenModelSource}
+            onSelectActive={(modelId) => updateProvider('local', 'transcriptionModel', modelId)}
+            allowDownload={deviceSupport ? deviceSupport.platform !== 'web' : false}
+          />
+
+          <ModelCatalogSection
+            title="Summary models"
+            items={visibleCatalog.filter((item) => item.kind === 'summary')}
+            installedModels={installedSummaryModels}
+            activeModelId={form.providers.local.summaryModel}
+            downloadProgress={downloadProgress}
+            onDownload={handleDownloadModel}
+            onDelete={handleDeleteModel}
+            onOpenSource={handleOpenModelSource}
+            onSelectActive={(modelId) => updateProvider('local', 'summaryModel', modelId)}
+            allowDownload={deviceSupport ? deviceSupport.platform !== 'web' : false}
+          />
+        </FadeInView>
+
+        <FadeInView style={styles.card} delay={60}>
           <View style={styles.sectionTitleRow}>
             <Feather name="server" size={18} color={palette.ink} />
             <Text style={styles.cardTitle}>Configure providers</Text>
           </View>
           <Text style={styles.rowBody}>
-            Add the key once for each provider you care about. After that, transcript and summary only pick from your configured providers.
+            Each provider stores its own API key and default models. Local uses the downloaded models shown
+            above instead of a remote key.
           </Text>
 
           <View style={styles.statsRow}>
@@ -171,55 +418,90 @@ export default function SettingsScreen() {
             </View>
             <Text style={styles.rowBody}>{editingProvider.description}</Text>
 
-            <Label text="API key" />
-            <TextInput
-              style={styles.input}
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder={editingProvider.apiKeyPlaceholder}
-              placeholderTextColor={palette.mutedInk}
-              secureTextEntry
-              value={editingConfig.apiKey}
-              onChangeText={(value) => updateProvider(editingProviderId, 'apiKey', value)}
-            />
+            {editingProviderId === 'local' ? (
+              <>
+                <View style={styles.localProviderHint}>
+                  <Text style={styles.rowTitle}>On-device runtime</Text>
+                  <Text style={styles.rowBody}>
+                    {deviceSupport?.localProcessingAvailable
+                      ? 'Ready for local execution in this build.'
+                      : deviceSupport?.reason ?? 'Checking local runtime availability.'}
+                  </Text>
+                </View>
 
-            <Label text={editingProviderId === 'custom' ? 'Base URL' : 'Base URL override'} />
-            <TextInput
-              style={styles.input}
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder={editingProvider.baseUrlPlaceholder}
-              placeholderTextColor={palette.mutedInk}
-              value={editingConfig.baseUrl}
-              onChangeText={(value) => updateProvider(editingProviderId, 'baseUrl', value)}
-            />
+                <ModelDropdown
+                  label="Active transcription model"
+                  value={editingConfig.transcriptionModel}
+                  options={localTranscriptionOptions}
+                  onSelect={(value) => updateProvider('local', 'transcriptionModel', value)}
+                  emptyText="Download a local transcription model above before selecting Local here."
+                />
 
-            {editingProvider.supportsTranscription ? (
-              <ModelField
-                label="Default transcription model"
-                value={editingConfig.transcriptionModel}
-                options={editingProvider.transcriptionModels}
-                onChange={(value) => updateProvider(editingProviderId, 'transcriptionModel', value)}
-              />
-            ) : null}
+                <ModelDropdown
+                  label="Active summary model"
+                  value={editingConfig.summaryModel}
+                  options={localSummaryOptions}
+                  onSelect={(value) => updateProvider('local', 'summaryModel', value)}
+                  emptyText="Download a local summary model above before selecting Local here."
+                />
 
-            {editingProvider.supportsSummary ? (
-              <ModelField
-                label="Default summary model"
-                value={editingConfig.summaryModel}
-                options={editingProvider.summaryModels}
-                onChange={(value) => updateProvider(editingProviderId, 'summaryModel', value)}
-              />
-            ) : null}
+                <Pressable style={styles.secondaryButton} onPress={() => resetProvider('local')}>
+                  <Text style={styles.secondaryButtonText}>Clear local model selection</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Label text="API key" />
+                <TextInput
+                  style={styles.input}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  placeholder={editingProvider.apiKeyPlaceholder}
+                  placeholderTextColor={palette.mutedInk}
+                  secureTextEntry
+                  value={editingConfig.apiKey}
+                  onChangeText={(value) => updateProvider(editingProviderId, 'apiKey', value)}
+                />
 
-            <Pressable style={styles.secondaryButton} onPress={() => resetProvider(editingProviderId)}>
-              <Text style={styles.secondaryButtonText}>Clear saved provider</Text>
-            </Pressable>
+                <Label text={editingProviderId === 'custom' ? 'Base URL' : 'Base URL override'} />
+                <TextInput
+                  style={styles.input}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  placeholder={editingProvider.baseUrlPlaceholder}
+                  placeholderTextColor={palette.mutedInk}
+                  value={editingConfig.baseUrl}
+                  onChangeText={(value) => updateProvider(editingProviderId, 'baseUrl', value)}
+                />
+
+                {editingProvider.supportsTranscription ? (
+                  <ModelField
+                    label="Default transcription model"
+                    value={editingConfig.transcriptionModel}
+                    options={editingProvider.transcriptionModels}
+                    onChange={(value) => updateProvider(editingProviderId, 'transcriptionModel', value)}
+                  />
+                ) : null}
+
+                {editingProvider.supportsSummary ? (
+                  <ModelField
+                    label="Default summary model"
+                    value={editingConfig.summaryModel}
+                    options={editingProvider.summaryModels}
+                    onChange={(value) => updateProvider(editingProviderId, 'summaryModel', value)}
+                  />
+                ) : null}
+
+                <Pressable style={styles.secondaryButton} onPress={() => resetProvider(editingProviderId)}>
+                  <Text style={styles.secondaryButtonText}>Clear saved provider</Text>
+                </Pressable>
+              </>
+            )}
           </View>
         </FadeInView>
 
         <AssignmentSection
-          delay={80}
+          delay={100}
           title="Transcription provider"
           subtitle="Pick which configured provider turns audio into text."
           icon={<Feather name="mic" size={18} color={palette.ink} />}
@@ -228,10 +510,11 @@ export default function SettingsScreen() {
           providerIds={transcriptionProviderIds}
           providers={sanitizedForm.providers}
           onSelect={(providerId) => updateForm('selectedTranscriptionProvider', providerId)}
+          localModelOptions={localTranscriptionOptions}
         />
 
         <AssignmentSection
-          delay={120}
+          delay={140}
           title="Summary provider"
           subtitle="Pick which configured provider writes summary, action items, and decisions."
           icon={<Feather name="file-text" size={18} color={palette.ink} />}
@@ -240,14 +523,17 @@ export default function SettingsScreen() {
           providerIds={summaryProviderIds}
           providers={sanitizedForm.providers}
           onSelect={(providerId) => updateForm('selectedSummaryProvider', providerId)}
+          localModelOptions={localSummaryOptions}
         />
 
-        <FadeInView style={styles.card} delay={150}>
+        <FadeInView style={styles.card} delay={160}>
           <Text style={styles.cardTitle}>Privacy defaults</Text>
           <View style={styles.row}>
             <View style={styles.rowCopy}>
               <Text style={styles.rowTitle}>Delete remote audio after processing</Text>
-              <Text style={styles.rowBody}>Only applies if your provider supports it.</Text>
+              <Text style={styles.rowBody}>
+                Only applies if your selected remote provider supports deleting uploaded audio.
+              </Text>
             </View>
             <Switch
               value={form.deleteUploadedAudio}
@@ -262,8 +548,20 @@ export default function SettingsScreen() {
             <Text style={styles.noticeTitle}>Current setup</Text>
           </View>
           <Text style={styles.noticeBody}>
-            Transcript uses {formatProviderSelection(transcriptionProvider.label, transcriptionProviderIds.length)}
-            . Summary uses {formatProviderSelection(summaryProvider.label, summaryProviderIds.length)}.
+            Transcript uses {transcriptionProvider.label}. Summary uses {summaryProvider.label}.
+            {sanitizedForm.selectedTranscriptionProvider === 'local' &&
+            sanitizedForm.providers.local.transcriptionModel
+              ? ` Local transcription model: ${displayModelLabel(
+                  installedTranscriptionModels,
+                  sanitizedForm.providers.local.transcriptionModel
+                )}.`
+              : ''}
+            {sanitizedForm.selectedSummaryProvider === 'local' && sanitizedForm.providers.local.summaryModel
+              ? ` Local summary model: ${displayModelLabel(
+                  installedSummaryModels,
+                  sanitizedForm.providers.local.summaryModel
+                )}.`
+              : ''}
           </Text>
         </FadeInView>
 
@@ -273,6 +571,18 @@ export default function SettingsScreen() {
       </ScrollView>
     </SafeAreaView>
   );
+
+  async function hydrateScreen() {
+    const settings = await getAppSettings();
+    const next = sanitizeAppSettings(settings);
+    setForm(next);
+    setEditingProviderId(pickInitialProvider(next));
+
+    const [support, models] = await Promise.all([getLocalDeviceSupport(), getInstalledModels()]);
+    setDeviceSupport(support);
+    setInstalledModels(models);
+    await refreshCatalog(next.modelCatalogUrl);
+  }
 }
 
 function AssignmentSection({
@@ -285,6 +595,7 @@ function AssignmentSection({
   providers,
   onSelect,
   delay,
+  localModelOptions,
 }: {
   title: string;
   subtitle: string;
@@ -295,12 +606,18 @@ function AssignmentSection({
   providers: Record<ProviderId, ProviderConfig>;
   onSelect: (providerId: ProviderId) => void;
   delay: number;
+  localModelOptions: Array<{ label: string; value: string }>;
 }) {
   const selectedProvider = providerMap[selectedProviderId];
-  const model =
+  const modelId =
     mode === 'transcription'
       ? providers[selectedProviderId].transcriptionModel
       : providers[selectedProviderId].summaryModel;
+  const modelLabel =
+    selectedProviderId === 'local'
+      ? ((localModelOptions.find((option) => option.value === modelId)?.label ?? modelId) ||
+        'No model selected yet')
+      : modelId || 'No model selected yet';
 
   return (
     <FadeInView style={styles.card} delay={delay}>
@@ -331,18 +648,216 @@ function AssignmentSection({
             <Text style={styles.assignmentMeta}>
               {mode === 'transcription' ? 'Transcription model' : 'Summary model'}
             </Text>
-            <Text style={styles.assignmentValue}>{model || 'No model selected yet'}</Text>
+            <Text style={styles.assignmentValue}>{modelLabel}</Text>
           </View>
         </>
       ) : (
         <View style={styles.emptyState}>
           <Text style={styles.emptyStateTitle}>No configured provider yet</Text>
           <Text style={styles.rowBody}>
-            Configure a provider above and add its API key once. Then it will show up here.
+            Configure a provider above and add its API key once. Local will appear here after you choose an
+            installed model.
           </Text>
         </View>
       )}
     </FadeInView>
+  );
+}
+
+function ModelCatalogSection({
+  title,
+  items,
+  installedModels,
+  activeModelId,
+  downloadProgress,
+  onDownload,
+  onDelete,
+  onOpenSource,
+  onSelectActive,
+  allowDownload,
+}: {
+  title: string;
+  items: ModelCatalogItem[];
+  installedModels: InstalledModelRow[];
+  activeModelId: string;
+  downloadProgress: Record<string, number>;
+  onDownload: (item: ModelCatalogItem) => void;
+  onDelete: (item: InstalledModelRow) => void;
+  onOpenSource: (item: ModelCatalogItem) => void;
+  onSelectActive: (modelId: string) => void;
+  allowDownload: boolean;
+}) {
+  return (
+    <View style={styles.catalogSection}>
+      <Text style={styles.catalogSectionTitle}>{title}</Text>
+
+      {items.length ? (
+        items.map((item) => {
+          const installed = installedModels.find((model) => model.id === item.id);
+          const progress = downloadProgress[item.id];
+          const canDirectDownload = Boolean(item.downloadUrl.trim());
+          const canOpenSource = Boolean(item.sourceUrl?.trim());
+
+          return (
+            <View key={item.id} style={styles.modelCard}>
+              <View style={styles.modelHeader}>
+                <View style={styles.modelTitleWrap}>
+                  <Text style={styles.modelTitle}>{item.displayName}</Text>
+                  <Text style={styles.modelMeta}>
+                    {item.engine} • {formatBytes(item.sizeBytes)}
+                  </Text>
+                </View>
+                {installed ? (
+                  <Text
+                    style={[
+                      styles.modelBadge,
+                      installed.status === 'installed' ? styles.statusBadgeConfigured : styles.statusBadgeIdle,
+                    ]}
+                  >
+                    {installed.status}
+                  </Text>
+                ) : item.recommended ? (
+                  <Text style={[styles.modelBadge, styles.statusBadgeConfigured]}>Recommended</Text>
+                ) : item.experimental ? (
+                  <Text style={[styles.modelBadge, styles.statusBadgeIdle]}>Experimental</Text>
+                ) : null}
+              </View>
+
+              <Text style={styles.rowBody}>{item.description}</Text>
+
+              <View style={styles.modelActionRow}>
+                {installed?.status === 'installed' ? (
+                  <>
+                    <Pressable style={styles.secondaryButton} onPress={() => onSelectActive(item.id)}>
+                      <Feather name="check-circle" size={16} color={palette.ink} />
+                      <Text style={styles.secondaryButtonText}>
+                        {activeModelId === item.id ? 'Active' : 'Set active'}
+                      </Text>
+                    </Pressable>
+                    <Pressable style={styles.secondaryButton} onPress={() => onDelete(installed)}>
+                      <Feather name="trash-2" size={16} color={palette.ink} />
+                      <Text style={styles.secondaryButtonText}>Delete</Text>
+                    </Pressable>
+                  </>
+                ) : (
+                  <>
+                    {canDirectDownload ? (
+                      <Pressable
+                        style={[styles.secondaryButton, !allowDownload && styles.disabledButton]}
+                        onPress={() => onDownload(item)}
+                        disabled={!allowDownload}
+                      >
+                        <Feather name="download" size={16} color={palette.ink} />
+                        <Text style={styles.secondaryButtonText}>
+                          {typeof progress === 'number' ? `Downloading ${Math.round(progress * 100)}%` : 'Download'}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+
+                    {canOpenSource ? (
+                      <Pressable style={styles.secondaryButton} onPress={() => onOpenSource(item)}>
+                        <Feather name="external-link" size={16} color={palette.ink} />
+                        <Text style={styles.secondaryButtonText}>{item.sourceLabel ?? 'View source'}</Text>
+                      </Pressable>
+                    ) : null}
+
+                    {!canDirectDownload && !canOpenSource ? (
+                      <Pressable style={[styles.secondaryButton, styles.disabledButton]} disabled>
+                        <Feather name="slash" size={16} color={palette.ink} />
+                        <Text style={styles.secondaryButtonText}>Unavailable</Text>
+                      </Pressable>
+                    ) : null}
+                  </>
+                )}
+              </View>
+
+              {!canDirectDownload && item.requiresExternalSetup ? (
+                <Text style={styles.modelHint}>
+                  This official model still needs an external download or license-acceptance step. Open the source page for details.
+                </Text>
+              ) : !canDirectDownload && canOpenSource ? (
+                <Text style={styles.modelHint}>
+                  This entry is curated by default, but the file is not fetched directly in-app yet.
+                </Text>
+              ) : null}
+              {installed?.errorMessage ? <Text style={styles.errorText}>{installed.errorMessage}</Text> : null}
+            </View>
+          );
+        })
+      ) : (
+        <Text style={styles.rowBody}>No compatible catalog items are visible for this device yet.</Text>
+      )}
+    </View>
+  );
+}
+
+function ModelDropdown({
+  label,
+  value,
+  options,
+  onSelect,
+  emptyText,
+}: {
+  label: string;
+  value: string;
+  options: Array<{ label: string; value: string }>;
+  onSelect: (value: string) => void;
+  emptyText: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  if (!options.length) {
+    return <Text style={styles.rowBody}>{emptyText}</Text>;
+  }
+
+  const selectedLabel = options.find((option) => option.value === value)?.label;
+
+  return (
+    <View style={styles.fieldGroup}>
+      <Label text={label} />
+      <Pressable style={styles.selectButton} onPress={() => setIsOpen(true)}>
+        <View style={styles.selectCopy}>
+          <Text style={styles.selectValue}>{selectedLabel || `Choose ${label.toLowerCase()}`}</Text>
+          <Text style={styles.selectHint}>{options.length} options available</Text>
+        </View>
+        <Feather name="chevron-down" size={18} color={palette.ink} />
+      </Pressable>
+
+      <Modal transparent animationType="fade" visible={isOpen} onRequestClose={() => setIsOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setIsOpen(false)}>
+          <Pressable style={styles.modalCard} onPress={() => undefined}>
+            <Text style={styles.modalTitle}>{label}</Text>
+            <Text style={styles.modalBody}>Pick one option for this processing step.</Text>
+
+            <View style={styles.optionList}>
+              {options.map((option) => {
+                const selected = option.value === value;
+
+                return (
+                  <Pressable
+                    key={option.value}
+                    style={[styles.optionButton, selected && styles.optionButtonSelected]}
+                    onPress={() => {
+                      onSelect(option.value);
+                      setIsOpen(false);
+                    }}
+                  >
+                    <Text style={[styles.optionLabel, selected && styles.optionLabelSelected]}>
+                      {option.label}
+                    </Text>
+                    {selected ? <Feather name="check" size={16} color={palette.paper} /> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Pressable style={styles.modalCloseButton} onPress={() => setIsOpen(false)}>
+              <Text style={styles.modalCloseText}>Close</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
   );
 }
 
@@ -450,6 +965,8 @@ function ProviderIcon({ providerId }: { providerId: ProviderId }) {
       return <Feather name="sun" size={17} color={palette.ink} />;
     case 'deepseek':
       return <Feather name="search" size={17} color={palette.ink} />;
+    case 'local':
+      return <MaterialCommunityIcons name="chip" size={18} color={palette.ink} />;
     default:
       return <Feather name="settings" size={17} color={palette.ink} />;
   }
@@ -469,7 +986,7 @@ function getConfiguredProviderIds(
         return false;
       }
 
-      return isProviderConfigured(definition.id, providers[definition.id]);
+      return isProviderConfigured(definition.id, providers[definition.id], mode);
     })
     .map((definition) => definition.id);
 }
@@ -479,12 +996,25 @@ function pickInitialProvider(settings: AppSettings) {
   return configured[0] ?? settings.selectedSummaryProvider ?? settings.selectedTranscriptionProvider ?? 'openai';
 }
 
-function formatProviderSelection(label: string, count: number) {
-  if (!count) {
-    return 'no configured provider yet';
+function displayModelLabel(models: InstalledModelRow[], modelId: string) {
+  return models.find((model) => model.id === modelId)?.displayName ?? modelId;
+}
+
+function formatBytes(value: number) {
+  if (!value) {
+    return 'size unknown';
   }
 
-  return label;
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let size = value;
+  let unitIndex = 0;
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${size >= 10 || unitIndex === 0 ? Math.round(size) : size.toFixed(1)} ${units[unitIndex]}`;
 }
 
 const styles = StyleSheet.create({
@@ -546,6 +1076,18 @@ const styles = StyleSheet.create({
   cardTitle: {
     color: palette.ink,
     fontSize: 18,
+    fontWeight: '800',
+  },
+  runtimeCard: {
+    backgroundColor: palette.paper,
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: palette.line,
+    gap: 6,
+  },
+  runtimeTitle: {
+    color: palette.ink,
     fontWeight: '800',
   },
   statsRow: {
@@ -639,6 +1181,54 @@ const styles = StyleSheet.create({
   statusBadgeIdle: {
     color: palette.mutedInk,
   },
+  catalogSection: {
+    gap: 10,
+  },
+  catalogSectionTitle: {
+    color: palette.ink,
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  modelCard: {
+    backgroundColor: palette.paper,
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: palette.line,
+    gap: 8,
+  },
+  modelHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  modelTitleWrap: {
+    flex: 1,
+    gap: 3,
+  },
+  modelTitle: {
+    color: palette.ink,
+    fontWeight: '800',
+  },
+  modelMeta: {
+    color: palette.mutedInk,
+    fontSize: 12,
+  },
+  modelBadge: {
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  modelActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  modelHint: {
+    color: palette.mutedInk,
+    fontSize: 12,
+  },
   label: {
     color: palette.ink,
     fontSize: 13,
@@ -719,6 +1309,33 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
   },
+  localProviderHint: {
+    gap: 4,
+  },
+  selectButton: {
+    backgroundColor: palette.card,
+    borderWidth: 1,
+    borderColor: palette.line,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  selectCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  selectValue: {
+    color: palette.ink,
+    fontWeight: '700',
+  },
+  selectHint: {
+    color: palette.mutedInk,
+    fontSize: 12,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -736,6 +1353,30 @@ const styles = StyleSheet.create({
   rowBody: {
     color: palette.mutedInk,
     lineHeight: 20,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  secondaryButton: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: palette.line,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: palette.paper,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  secondaryButtonText: {
+    color: palette.ink,
+    fontWeight: '700',
+  },
+  disabledButton: {
+    opacity: 0.5,
   },
   notice: {
     backgroundColor: palette.card,
@@ -758,19 +1399,6 @@ const styles = StyleSheet.create({
     color: palette.mutedInk,
     lineHeight: 20,
   },
-  secondaryButton: {
-    alignSelf: 'flex-start',
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: palette.line,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: palette.cardStrong,
-  },
-  secondaryButtonText: {
-    color: palette.ink,
-    fontWeight: '700',
-  },
   saveButton: {
     backgroundColor: palette.ink,
     borderRadius: 18,
@@ -783,5 +1411,71 @@ const styles = StyleSheet.create({
     color: palette.paper,
     fontSize: 16,
     fontWeight: '800',
+  },
+  errorText: {
+    color: palette.danger,
+    lineHeight: 20,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(23, 35, 31, 0.32)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: palette.paper,
+    borderRadius: 24,
+    padding: 20,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: palette.line,
+  },
+  modalTitle: {
+    color: palette.ink,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  modalBody: {
+    color: palette.mutedInk,
+    lineHeight: 20,
+  },
+  optionList: {
+    gap: 8,
+  },
+  optionButton: {
+    backgroundColor: palette.card,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: palette.line,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  optionButtonSelected: {
+    backgroundColor: palette.ink,
+    borderColor: palette.ink,
+  },
+  optionLabel: {
+    color: palette.ink,
+    fontWeight: '700',
+    flex: 1,
+  },
+  optionLabelSelected: {
+    color: palette.paper,
+  },
+  modalCloseButton: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  modalCloseText: {
+    color: palette.ink,
+    fontWeight: '700',
   },
 });

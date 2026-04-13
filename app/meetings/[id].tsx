@@ -17,6 +17,7 @@ import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 
 import { FadeInView } from '../../src/components/FadeInView';
 import { ScreenBackground } from '../../src/components/ScreenBackground';
+import { getAppSettings } from '../../src/services/settings';
 import { MeetingRow, SummaryPayload } from '../../src/types';
 import { deleteMeeting, getMeeting, processMeeting, renameMeeting } from '../../src/services/meetings';
 import { formatDuration, formatTimestamp } from '../../src/utils/format';
@@ -27,6 +28,7 @@ export default function MeetingDetailScreen() {
   const [meeting, setMeeting] = useState<MeetingRow | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
+  const [runsOffline, setRunsOffline] = useState(false);
   const [draftTitle, setDraftTitle] = useState('');
   const [isSavingTitle, setIsSavingTitle] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -39,9 +41,13 @@ export default function MeetingDetailScreen() {
       return;
     }
 
-    const data = await getMeeting(id);
+    const [data, settings] = await Promise.all([getMeeting(id), getAppSettings()]);
     setMeeting(data);
     setDraftTitle(data?.title ?? '');
+    setRunsOffline(
+      settings.selectedTranscriptionProvider === 'local' &&
+        settings.selectedSummaryProvider === 'local'
+    );
     setHasLoaded(true);
   }, [id]);
 
@@ -200,6 +206,15 @@ export default function MeetingDetailScreen() {
           </Pressable>
         </FadeInView>
 
+        {runsOffline ? (
+          <FadeInView style={styles.offlineNotice} delay={85}>
+            <Feather name="smartphone" size={16} color={palette.ink} />
+            <Text style={styles.offlineNoticeText}>
+              Runs fully offline with local models on this device.
+            </Text>
+          </FadeInView>
+        ) : null}
+
         <FadeInView style={styles.actions} delay={100}>
           <Pressable style={styles.secondaryButton} onPress={handlePlaybackToggle}>
             <Feather
@@ -278,7 +293,9 @@ function StatusIcon({ status }: { status: MeetingRow['status'] }) {
     case 'failed':
       return <Feather name="alert-circle" size={16} color={palette.danger} />;
     case 'transcribing':
+    case 'transcribing_local':
     case 'summarizing':
+    case 'summarizing_local':
       return <Feather name="loader" size={16} color={palette.accent} />;
     default:
       return <Feather name="clock" size={16} color={palette.accent} />;
@@ -404,6 +421,24 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     gap: 10,
+  },
+  offlineNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: palette.accentMist,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: palette.line,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  offlineNoticeText: {
+    flex: 1,
+    color: palette.ink,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
   },
   primaryButton: {
     flex: 1,

@@ -128,6 +128,18 @@ export const providerDefinitions: ProviderDefinition[] = [
     transcriptionModels: ['gpt-4o-mini-transcribe', 'gpt-4o-transcribe', 'whisper-1'],
     summaryModels: ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini', 'gpt-4o'],
   },
+  {
+    id: 'local',
+    label: 'Local',
+    description: 'Use on-device model downloads for offline transcription and summary.',
+    supportsTranscription: true,
+    supportsSummary: true,
+    usesOpenAICompatibleApi: false,
+    apiKeyPlaceholder: '',
+    baseUrlPlaceholder: '',
+    transcriptionModels: [],
+    summaryModels: [],
+  },
 ];
 
 export const providerMap = Object.fromEntries(
@@ -189,21 +201,52 @@ export const defaultProviderConfigs: Record<ProviderId, ProviderConfig> = {
     transcriptionModel: '',
     summaryModel: '',
   },
+  local: {
+    apiKey: '',
+    baseUrl: '',
+    transcriptionModel: '',
+    summaryModel: '',
+  },
 };
 
 export function normalizeProviderConfig(providerId: ProviderId, config: ProviderConfig): ProviderConfig {
   const defaults = defaultProviderConfigs[providerId];
 
+  if (providerId === 'local') {
+    return {
+      apiKey: '',
+      baseUrl: '',
+      transcriptionModel: config.transcriptionModel.trim(),
+      summaryModel: config.summaryModel.trim(),
+    };
+  }
+
   return {
     apiKey: config.apiKey.trim(),
-    baseUrl: config.baseUrl.trim() || defaults.baseUrl,
+    baseUrl: providerId === 'custom' ? config.baseUrl.trim() : config.baseUrl.trim() || defaults.baseUrl,
     transcriptionModel: config.transcriptionModel.trim() || defaults.transcriptionModel,
     summaryModel: config.summaryModel.trim() || defaults.summaryModel,
   };
 }
 
-export function isProviderConfigured(providerId: ProviderId, config: ProviderConfig) {
+export function isProviderConfigured(
+  providerId: ProviderId,
+  config: ProviderConfig,
+  mode?: 'transcription' | 'summary'
+) {
   const normalized = normalizeProviderConfig(providerId, config);
+
+  if (providerId === 'local') {
+    if (mode === 'transcription') {
+      return Boolean(normalized.transcriptionModel);
+    }
+
+    if (mode === 'summary') {
+      return Boolean(normalized.summaryModel);
+    }
+
+    return Boolean(normalized.transcriptionModel || normalized.summaryModel);
+  }
 
   if (!normalized.apiKey) {
     return false;

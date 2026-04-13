@@ -11,12 +11,14 @@ import {
   providerMap,
 } from './providers';
 
-const LEGACY_SETTINGS_STORAGE_KEY = 'app_settings_v2';
+const LEGACY_SETTINGS_V3_STORAGE_KEY = 'app_settings_v3';
+const LEGACY_SETTINGS_V2_STORAGE_KEY = 'app_settings_v2';
 
 type AppPreferencesRow = {
   selected_transcription_provider: ProviderId;
   selected_summary_provider: ProviderId;
   delete_uploaded_audio: number;
+  model_catalog_url?: string | null;
 };
 
 type ProviderSettingsRow = {
@@ -31,12 +33,17 @@ type LegacyStoredSettings = Omit<AppSettings, 'providers'> & {
   providers: Record<ProviderId, Omit<ProviderConfig, 'apiKey'>>;
 };
 
+type LegacyStoredSettingsV2 = Omit<AppSettings, 'providers' | 'modelCatalogUrl'> & {
+  providers: Record<ProviderId, Omit<ProviderConfig, 'apiKey'>>;
+};
+
 function getDefaultSettings(): AppSettings {
   return {
     selectedTranscriptionProvider: 'openai',
     selectedSummaryProvider: 'openai',
     providers: structuredClone(defaultProviderConfigs),
     deleteUploadedAudio: false,
+    modelCatalogUrl: '',
   };
 }
 
@@ -69,6 +76,7 @@ export async function getAppSettings(): Promise<AppSettings> {
       storedPreferences?.delete_uploaded_audio != null
         ? Boolean(storedPreferences.delete_uploaded_audio)
         : defaultSettings.deleteUploadedAudio,
+    modelCatalogUrl: storedPreferences?.model_catalog_url?.trim?.() ?? defaultSettings.modelCatalogUrl,
   });
 }
 
@@ -77,15 +85,16 @@ export async function saveAppSettings(settings: AppSettings) {
   const db = getDatabase();
 
   await db.runAsync(
-    `INSERT OR REPLACE INTO app_preferences (
-      id,
-      selected_transcription_provider,
-      selected_summary_provider,
-      delete_uploaded_audio
-    ) VALUES (1, ?, ?, ?)`,
+    `UPDATE app_preferences SET
+      selected_transcription_provider = ?,
+      selected_summary_provider = ?,
+      delete_uploaded_audio = ?,
+      model_catalog_url = ?
+    WHERE id = 1`,
     sanitized.selectedTranscriptionProvider,
     sanitized.selectedSummaryProvider,
-    sanitized.deleteUploadedAudio ? 1 : 0
+    sanitized.deleteUploadedAudio ? 1 : 0,
+    sanitized.modelCatalogUrl
   );
 
   for (const definition of providerDefinitions) {
@@ -118,12 +127,16 @@ export function sanitizeAppSettings(settings: AppSettings): AppSettings {
   const availableTranscriptionProviders = providerDefinitions
     .filter(
       (definition) =>
-        definition.supportsTranscription && isProviderConfigured(definition.id, providers[definition.id])
+        definition.supportsTranscription &&
+        isProviderConfigured(definition.id, providers[definition.id], 'transcription')
     )
     .map((definition) => definition.id);
 
   const availableSummaryProviders = providerDefinitions
-    .filter((definition) => definition.supportsSummary && isProviderConfigured(definition.id, providers[definition.id]))
+    .filter(
+      (definition) =>
+        definition.supportsSummary && isProviderConfigured(definition.id, providers[definition.id], 'summary')
+    )
     .map((definition) => definition.id);
 
   return {
@@ -139,6 +152,7 @@ export function sanitizeAppSettings(settings: AppSettings): AppSettings {
     ),
     providers,
     deleteUploadedAudio: settings.deleteUploadedAudio,
+    modelCatalogUrl: settings.modelCatalogUrl.trim(),
   };
 }
 
@@ -182,8 +196,6 @@ function resolveSelectedProvider(
     return fallback;
   }
 
-  const defaultProviderId = mode === 'transcription' ? 'openai' : 'openai';
-
   if (
     (mode === 'transcription' && providerMap[providerId]?.supportsTranscription) ||
     (mode === 'summary' && providerMap[providerId]?.supportsSummary)
@@ -191,16 +203,16 @@ function resolveSelectedProvider(
     return providerId;
   }
 
-  return defaultProviderId;
+  return 'openai';
 }
 
 async function readLegacySettings(defaultSettings: AppSettings) {
-  const legacySettings = await readLegacyStoredSettings();
+  const legacySettings = (await readLegacyStoredSettingsV3()) ?? (await readLegacyStoredSettingsV2());
   const legacyProviders = { ...defaultSettings.providers };
   let hasLegacyValue = Boolean(legacySettings);
 
   for (const definition of providerDefinitions) {
-    const apiKey = (await readLegacyProviderKey(definition.id)) ?? '';
+    const apiKey = definition.id === 'local' ? '' : ((await readLegacyProviderKey(definition.id)) ?? '');
     const storedProvider = legacySettings?.providers?.[definition.id];
 
     if (apiKey || storedProvider) {
@@ -224,11 +236,12 @@ async function readLegacySettings(defaultSettings: AppSettings) {
     selectedSummaryProvider: legacySettings?.selectedSummaryProvider ?? defaultSettings.selectedSummaryProvider,
     providers: legacyProviders,
     deleteUploadedAudio: legacySettings?.deleteUploadedAudio ?? defaultSettings.deleteUploadedAudio,
+    modelCatalogUrl: legacySettings?.modelCatalogUrl?.trim?.() ?? defaultSettings.modelCatalogUrl,
   };
 }
 
-async function readLegacyStoredSettings(): Promise<LegacyStoredSettings | null> {
-  const raw = await readLegacyStorageValue(LEGACY_SETTINGS_STORAGE_KEY);
+async function readLegacyStoredSettingsV3(): Promise<LegacyStoredSettings | null> {
+  const raw = await readLegacyStorageValue(LEGACY_SETTINGS_V3_STORAGE_KEY);
 
   if (!raw) {
     return null;
@@ -236,6 +249,24 @@ async function readLegacyStoredSettings(): Promise<LegacyStoredSettings | null> 
 
   try {
     return JSON.parse(raw) as LegacyStoredSettings;
+  } catch {
+    return null;
+  }
+}
+
+async function readLegacyStoredSettingsV2(): Promise<LegacyStoredSettings | null> {
+  const raw = await readLegacyStorageValue(LEGACY_SETTINGS_V2_STORAGE_KEY);
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const legacy = JSON.parse(raw) as LegacyStoredSettingsV2;
+    return {
+      ...legacy,
+      modelCatalogUrl: '',
+    };
   } catch {
     return null;
   }

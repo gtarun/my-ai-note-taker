@@ -1,7 +1,9 @@
 export type MeetingStatus =
   | 'local_only'
   | 'transcribing'
+  | 'transcribing_local'
   | 'summarizing'
+  | 'summarizing_local'
   | 'ready'
   | 'failed';
 
@@ -36,7 +38,8 @@ export type ProviderId =
   | 'together'
   | 'fireworks'
   | 'deepseek'
-  | 'custom';
+  | 'custom'
+  | 'local';
 
 export type ProviderConfig = {
   apiKey: string;
@@ -50,6 +53,61 @@ export type AppSettings = {
   selectedSummaryProvider: ProviderId;
   providers: Record<ProviderId, ProviderConfig>;
   deleteUploadedAudio: boolean;
+  modelCatalogUrl: string;
+};
+
+export type LocalModelKind = 'transcription' | 'summary';
+
+export type LocalModelEngine = 'whisper.cpp' | 'mediapipe-llm' | 'litert-lm';
+
+export type LocalModelPlatform = 'ios' | 'android';
+
+export type LocalModelStatus = 'installed' | 'downloading' | 'failed';
+
+export type ModelCatalogItem = {
+  id: string;
+  kind: LocalModelKind;
+  engine: LocalModelEngine;
+  displayName: string;
+  version: string;
+  downloadUrl: string;
+  sourceUrl?: string;
+  sourceLabel?: string;
+  requiresExternalSetup?: boolean;
+  sha256: string;
+  sizeBytes: number;
+  platforms: LocalModelPlatform[];
+  minFreeSpaceBytes: number;
+  recommended: boolean;
+  experimental: boolean;
+  description: string;
+};
+
+export type InstalledModelRow = {
+  id: string;
+  kind: LocalModelKind;
+  engine: LocalModelEngine;
+  displayName: string;
+  version: string;
+  platforms: LocalModelPlatform[];
+  fileUri: string | null;
+  sizeBytes: number;
+  sha256: string;
+  status: LocalModelStatus;
+  installedAt: string | null;
+  downloadUrl: string;
+  recommended: boolean;
+  experimental: boolean;
+  errorMessage: string | null;
+};
+
+export type LocalDeviceSupport = {
+  platform: 'ios' | 'android' | 'web';
+  localProcessingAvailable: boolean;
+  supportsSummary: boolean;
+  supportsTranscription: boolean;
+  requiresCustomBuild: boolean;
+  reason: string | null;
 };
 
 export type DriveConnection = {

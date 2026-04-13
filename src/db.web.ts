@@ -13,6 +13,8 @@ type AppPreferencesRow = {
   selected_transcription_provider: string;
   selected_summary_provider: string;
   delete_uploaded_audio: number;
+  model_catalog_url: string;
+  has_seen_onboarding: number;
 };
 
 type ProviderSettingsRow = {
@@ -38,6 +40,24 @@ type MeetingStorageRow = {
   error_message: string | null;
 };
 
+type InstalledModelStorageRow = {
+  id: string;
+  kind: 'transcription' | 'summary';
+  engine: string;
+  display_name: string;
+  version: string;
+  platforms_json: string;
+  file_uri: string | null;
+  size_bytes: number;
+  sha256: string;
+  status: 'installed' | 'downloading' | 'failed';
+  installed_at: string | null;
+  download_url: string;
+  recommended: number;
+  experimental: number;
+  error_message: string | null;
+};
+
 const STORAGE_KEY = 'mu-fathom-web-db';
 
 type DatabaseShape = {
@@ -45,6 +65,7 @@ type DatabaseShape = {
   settings: SettingsRow;
   appPreferences: AppPreferencesRow;
   providerSettings: ProviderSettingsRow[];
+  installedModels: InstalledModelStorageRow[];
 };
 
 const defaultState: DatabaseShape = {
@@ -61,8 +82,11 @@ const defaultState: DatabaseShape = {
     selected_transcription_provider: 'openai',
     selected_summary_provider: 'openai',
     delete_uploaded_audio: 0,
+    model_catalog_url: '',
+    has_seen_onboarding: 0,
   },
   providerSettings: [],
+  installedModels: [],
 };
 
 function readState(): DatabaseShape {
@@ -77,7 +101,25 @@ function readState(): DatabaseShape {
   }
 
   try {
-    return JSON.parse(raw) as DatabaseShape;
+    const state = JSON.parse(raw) as Partial<DatabaseShape>;
+
+    return {
+      ...structuredClone(defaultState),
+      ...state,
+      appPreferences: {
+        ...structuredClone(defaultState.appPreferences),
+        ...state.appPreferences,
+        model_catalog_url: state.appPreferences?.model_catalog_url ?? defaultState.appPreferences.model_catalog_url,
+        has_seen_onboarding: state.appPreferences?.has_seen_onboarding ?? defaultState.appPreferences.has_seen_onboarding,
+      },
+      settings: {
+        ...structuredClone(defaultState.settings),
+        ...state.settings,
+      },
+      providerSettings: state.providerSettings ?? [],
+      installedModels: state.installedModels ?? [],
+      meetings: state.meetings ?? [],
+    };
   } catch {
     return structuredClone(defaultState);
   }
@@ -94,15 +136,31 @@ function writeState(state: DatabaseShape) {
 const db = {
   async execAsync(_source: string) {
     const state = readState();
+
     if (!state.settings) {
       state.settings = structuredClone(defaultState.settings);
     }
+
     if (!state.appPreferences) {
       state.appPreferences = structuredClone(defaultState.appPreferences);
     }
+
+    if (typeof state.appPreferences.model_catalog_url !== 'string') {
+      state.appPreferences.model_catalog_url = '';
+    }
+
+    if (typeof state.appPreferences.has_seen_onboarding !== 'number') {
+      state.appPreferences.has_seen_onboarding = 0;
+    }
+
     if (!state.providerSettings) {
       state.providerSettings = [];
     }
+
+    if (!state.installedModels) {
+      state.installedModels = [];
+    }
+
     writeState(state);
   },
   async getFirstAsync<T>(source: string, ...params: unknown[]): Promise<T | null> {
@@ -121,6 +179,11 @@ const db = {
       return (row ?? null) as T | null;
     }
 
+    if (source.includes('FROM installed_models WHERE id = ?')) {
+      const row = state.installedModels.find((model) => model.id === params[0]);
+      return (row ?? null) as T | null;
+    }
+
     return null;
   },
   async getAllAsync<T>(source: string): Promise<T[]> {
@@ -128,6 +191,12 @@ const db = {
 
     if (source.includes('FROM provider_settings')) {
       return [...state.providerSettings] as T[];
+    }
+
+    if (source.includes('FROM installed_models')) {
+      return [...state.installedModels]
+        .sort((a, b) => a.display_name.localeCompare(b.display_name))
+        .map((row) => row as T);
     }
 
     if (source.includes('FROM meetings')) {
@@ -178,6 +247,32 @@ const db = {
         selected_transcription_provider: String(params[0]),
         selected_summary_provider: String(params[1]),
         delete_uploaded_audio: Number(params[2]),
+        model_catalog_url: params[3] ? String(params[3]) : '',
+        has_seen_onboarding: 0,
+      };
+      writeState(state);
+      return;
+    }
+
+    if (
+      source.includes('UPDATE app_preferences SET') &&
+      source.includes('selected_transcription_provider = ?')
+    ) {
+      state.appPreferences = {
+        ...state.appPreferences,
+        selected_transcription_provider: String(params[0]),
+        selected_summary_provider: String(params[1]),
+        delete_uploaded_audio: Number(params[2]),
+        model_catalog_url: params[3] ? String(params[3]) : '',
+      };
+      writeState(state);
+      return;
+    }
+
+    if (source.includes('UPDATE app_preferences SET has_seen_onboarding = ? WHERE id = 1')) {
+      state.appPreferences = {
+        ...state.appPreferences,
+        has_seen_onboarding: Number(params[0]),
       };
       writeState(state);
       return;
@@ -201,6 +296,36 @@ const db = {
         state.providerSettings.push(row);
       }
 
+      writeState(state);
+      return;
+    }
+
+    if (source.includes('INSERT OR REPLACE INTO installed_models')) {
+      const row: InstalledModelStorageRow = {
+        id: String(params[0]),
+        kind: params[1] === 'summary' ? 'summary' : 'transcription',
+        engine: String(params[2]),
+        display_name: String(params[3]),
+        version: String(params[4]),
+        platforms_json: String(params[5]),
+        file_uri: params[6] ? String(params[6]) : null,
+        size_bytes: Number(params[7] ?? 0),
+        sha256: String(params[8] ?? ''),
+        status: params[9] === 'downloading' ? 'downloading' : params[9] === 'failed' ? 'failed' : 'installed',
+        installed_at: params[10] ? String(params[10]) : null,
+        download_url: String(params[11] ?? ''),
+        recommended: Number(params[12] ?? 0),
+        experimental: Number(params[13] ?? 0),
+        error_message: params[14] ? String(params[14]) : null,
+      };
+      state.installedModels = state.installedModels.filter((model) => model.id !== row.id);
+      state.installedModels.push(row);
+      writeState(state);
+      return;
+    }
+
+    if (source.includes('DELETE FROM installed_models WHERE id = ?')) {
+      state.installedModels = state.installedModels.filter((row) => row.id !== params[0]);
       writeState(state);
       return;
     }

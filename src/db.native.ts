@@ -34,7 +34,9 @@ export async function initializeDatabase() {
       id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
       selected_transcription_provider TEXT NOT NULL,
       selected_summary_provider TEXT NOT NULL,
-      delete_uploaded_audio INTEGER NOT NULL DEFAULT 0
+      delete_uploaded_audio INTEGER NOT NULL DEFAULT 0,
+      model_catalog_url TEXT NOT NULL DEFAULT '',
+      has_seen_onboarding INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS provider_settings (
@@ -43,6 +45,24 @@ export async function initializeDatabase() {
       base_url TEXT NOT NULL DEFAULT '',
       transcription_model TEXT NOT NULL DEFAULT '',
       summary_model TEXT NOT NULL DEFAULT ''
+    );
+
+    CREATE TABLE IF NOT EXISTS installed_models (
+      id TEXT PRIMARY KEY NOT NULL,
+      kind TEXT NOT NULL,
+      engine TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      version TEXT NOT NULL,
+      platforms_json TEXT NOT NULL,
+      file_uri TEXT,
+      size_bytes INTEGER NOT NULL DEFAULT 0,
+      sha256 TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL,
+      installed_at TEXT,
+      download_url TEXT NOT NULL DEFAULT '',
+      recommended INTEGER NOT NULL DEFAULT 0,
+      experimental INTEGER NOT NULL DEFAULT 0,
+      error_message TEXT
     );
 
     INSERT OR IGNORE INTO app_settings (
@@ -71,6 +91,14 @@ export async function initializeDatabase() {
       0
     );
   `);
+
+  const appPreferenceColumns = await db.getAllAsync<{ name?: string }>('PRAGMA table_info(app_preferences)');
+  if (!appPreferenceColumns.some((column) => column.name === 'model_catalog_url')) {
+    await db.execAsync("ALTER TABLE app_preferences ADD COLUMN model_catalog_url TEXT NOT NULL DEFAULT '';");
+  }
+  if (!appPreferenceColumns.some((column) => column.name === 'has_seen_onboarding')) {
+    await db.execAsync('ALTER TABLE app_preferences ADD COLUMN has_seen_onboarding INTEGER NOT NULL DEFAULT 0;');
+  }
 }
 
 export function getDatabase() {

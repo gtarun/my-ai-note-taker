@@ -1,22 +1,93 @@
-import { Stack } from 'expo-router';
+import { router, Stack, usePathname } from 'expo-router';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 
 import { bootstrapApp } from '../src/services/bootstrap';
+import { getHasSeenOnboarding } from '../src/services/onboarding';
 import { palette } from '../src/theme';
+import { shouldPresentOnboarding } from '../src/onboarding/model';
 
 export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasSeenOnboarding, setHasSeenOnboarding] = useState(true);
+  const pathname = usePathname();
 
   useEffect(() => {
-    bootstrapApp()
-      .then(() => setIsReady(true))
-      .catch((bootstrapError: Error) => {
-        setError(bootstrapError.message);
-      });
+    let cancelled = false;
+
+    async function prepareApp() {
+      try {
+        await bootstrapApp();
+
+        let didSeeOnboarding = true;
+
+        try {
+          didSeeOnboarding = await getHasSeenOnboarding();
+        } catch {
+          didSeeOnboarding = true;
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        setHasSeenOnboarding(didSeeOnboarding);
+        setIsReady(true);
+      } catch (bootstrapError) {
+        if (cancelled) {
+          return;
+        }
+
+        setError(bootstrapError instanceof Error ? bootstrapError.message : 'Bootstrap failed');
+      }
+    }
+
+    void prepareApp();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  useEffect(() => {
+    if (!isReady || error || !pathname) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function ensureLatestOnboardingState() {
+      if (!shouldPresentOnboarding({ hasSeenOnboarding, pathname })) {
+        return;
+      }
+
+      let latestHasSeenOnboarding = true;
+
+      try {
+        latestHasSeenOnboarding = await getHasSeenOnboarding();
+      } catch {
+        latestHasSeenOnboarding = true;
+      }
+
+      if (cancelled) {
+        return;
+      }
+
+      setHasSeenOnboarding(latestHasSeenOnboarding);
+
+      if (shouldPresentOnboarding({ hasSeenOnboarding: latestHasSeenOnboarding, pathname })) {
+        router.replace('/onboarding');
+      }
+    }
+
+    void ensureLatestOnboardingState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [error, hasSeenOnboarding, isReady, pathname]);
 
   if (error) {
     return (
@@ -49,6 +120,7 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: palette.paper },
         }}
       >
+        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="index" options={{ title: 'Meetings' }} />
         <Stack.Screen name="account" options={{ title: 'Account' }} />
         <Stack.Screen name="record" options={{ title: 'New Recording' }} />

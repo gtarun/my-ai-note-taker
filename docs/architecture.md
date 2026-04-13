@@ -13,9 +13,12 @@ Use the simplest architecture that works for a solo builder shipping fast.
 - Expo SQLite
 - Expo Audio
 - Expo Document Picker
+- Expo File System
+- Expo Crypto
 - Expo Secure Store
 - Supabase Auth
 - Supabase Edge Functions
+- optional native local AI runtime boundary
 
 ## App Structure
 
@@ -25,13 +28,15 @@ Use the simplest architecture that works for a solo builder shipping fast.
 - `app/account.tsx`: account signup/sign-in and Google Drive connect entry point
 - `app/record.tsx`: manual recording flow
 - `app/meetings/[id].tsx`: meeting detail and processing
-- `app/settings.tsx`: API key and model settings
+- `app/settings.tsx`: provider setup, local model downloads, and model selection
 - `app/_layout.tsx`: app shell and bootstrap
 
 ### Local Data
 
 - [`src/db.ts`](/Users/tarun/Documents/projects/mu-fathom/src/db.ts) initializes SQLite
 - metadata is stored in the `meetings` table
+- local model install metadata is stored in the `installed_models` table
+- model files are stored under `documentDirectory/models`
 - provider settings are stored in Secure Store on native and localStorage on web
 - account sessions are stored locally through the Supabase auth client
 - the `app_settings` table is legacy scaffold and is not part of the active settings flow
@@ -45,6 +50,8 @@ Use the simplest architecture that works for a solo builder shipping fast.
 - [`src/services/account.ts`](/Users/tarun/Documents/projects/mu-fathom/src/services/account.ts): Supabase auth client and Google Drive edge-function contract
 - [`src/services/googleDrive.ts`](/Users/tarun/Documents/projects/mu-fathom/src/services/googleDrive.ts): Drive folder creation and recording upload flow
 - [`src/services/providers.ts`](/Users/tarun/Documents/projects/mu-fathom/src/services/providers.ts): provider catalog and defaults
+- [`src/services/localModels.ts`](/Users/tarun/Documents/projects/mu-fathom/src/services/localModels.ts): model catalog loading, download, checksum verification, and install/delete
+- [`src/services/localInference.ts`](/Users/tarun/Documents/projects/mu-fathom/src/services/localInference.ts): local transcription/summary bridge and transcript chunking
 - `supabase/functions/google-drive-connect-url`: Google OAuth start/callback handler
 - `supabase/functions/google-drive-access-token`: returns a fresh Drive access token for the signed-in user
 - `supabase/functions/google-drive-save-folder`: persists the user-picked Drive folder
@@ -74,6 +81,24 @@ Use the simplest architecture that works for a solo builder shipping fast.
 8. Summary JSON is saved locally
 9. Meeting status becomes `ready`
 
+## Current Local Model Flow
+
+1. Settings loads a model catalog from `modelCatalogUrl` or falls back to the built-in starter catalog
+2. The app filters catalog entries by the current device platform
+3. When the user downloads a model, the file is stored in `documentDirectory/models`
+4. The app verifies file size and optional SHA-256 before marking the model installed
+5. Installed model metadata is saved into `installed_models`
+6. If the user selects `Local` for transcription and/or summary, `src/services/meetings.ts` routes processing into `src/services/localInference.ts`
+7. `localInference` expects an Expo native module named `MuFathomLocalAI`
+8. If that module is not present, the app shows a clear local-runtime-unavailable state instead of pretending offline inference works
+
+## Local Runtime Plan
+
+- transcription engine shape: `whisper.cpp`
+- summary engine shape: Gemma-family small model through `mediapipe-llm` or `litert-lm`
+- transcript chunking is already scaffolded in JS
+- the remaining work is native runtime implementation and a custom build path
+
 ## Current Limitations
 
 - no background job system
@@ -82,6 +107,9 @@ Use the simplest architecture that works for a solo builder shipping fast.
 - Drive upload failures are surfaced as alerts but not persisted as retryable job state
 - no provider capability verification beyond local config
 - imported file duration is not yet resolved
+- Expo Go and web builds do not include the native local AI runtime
+- the built-in local model catalog is only a starter shape; real downloads require hosted model files and a real catalog URL
+- arbitrary local model import is intentionally not supported in v1
 
 ## Design Principle
 
