@@ -16,11 +16,26 @@ describe('onboarding presentation', () => {
       body: 'Audio stays local first and only leaves the device when you choose to process it.',
       tone: 'tertiary',
     });
+    expect(getOnboardingFeatureCard('workflow')).toEqual({
+      icon: 'layers',
+      title: 'One clean flow',
+      body: 'Capture audio, transcribe after the meeting, then review summary and action items.',
+      tone: 'secondary',
+    });
+    expect(getOnboardingFeatureCard('setup')).toEqual({
+      icon: 'settings',
+      title: 'Configure providers',
+      body: 'Add your API key or local model choices before you process your first meeting.',
+      tone: 'secondary',
+    });
   });
 
   test('builds a stable progress percentage', () => {
     expect(getOnboardingProgressPercent(0, 4)).toBe(25);
     expect(getOnboardingProgressPercent(1, 4)).toBe(50);
     expect(getOnboardingProgressPercent(3, 4)).toBe(100);
+    expect(getOnboardingProgressPercent(-4, 4)).toBe(25);
+    expect(getOnboardingProgressPercent(99, 4)).toBe(100);
+    expect(getOnboardingProgressPercent(0, 0)).toBe(0);
   });
 });

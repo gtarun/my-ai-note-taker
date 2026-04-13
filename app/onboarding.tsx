@@ -80,7 +80,7 @@ export default function OnboardingScreen() {
               </View>
 
               {slide.showSkip ? (
-                <Pressable onPress={finish} style={styles.skipButton}>
+                <Pressable onPress={finish} style={styles.skipButton} hitSlop={8}>
                   <Text style={styles.skipText}>Skip</Text>
                 </Pressable>
               ) : null}
@@ -194,8 +194,8 @@ const styles = StyleSheet.create({
   },
   skipButton: {
     borderRadius: radii.pill,
-    paddingHorizontal: 4,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   skipText: {
     color: palette.mutedInk,
