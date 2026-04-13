@@ -16,7 +16,7 @@ import { useEffect, useState } from 'react';
 import { bootstrapApp } from '../src/services/bootstrap';
 import { getHasSeenOnboarding } from '../src/services/onboarding';
 import { getStartupPresentation } from '../src/startup';
-import { palette, typography } from '../src/theme';
+import { palette, resolveTypography } from '../src/theme';
 import { shouldPresentOnboarding } from '../src/onboarding/model';
 
 export default function RootLayout() {
@@ -113,18 +113,7 @@ export default function RootLayout() {
     fontsLoaded,
     fontsError,
   });
-
-  const headerTitleStyle = startupPresentation.useCustomFonts
-    ? {
-        color: palette.ink,
-        fontFamily: typography.heading.fontFamily,
-        fontSize: 18,
-      }
-    : {
-        color: palette.ink,
-        fontSize: 18,
-        fontWeight: '700' as const,
-      };
+  const resolvedTypography = resolveTypography(startupPresentation.useCustomFonts);
 
   if (startupPresentation.screen === 'error') {
     return (
@@ -153,7 +142,11 @@ export default function RootLayout() {
         screenOptions={{
           headerStyle: { backgroundColor: palette.paper },
           headerTintColor: palette.ink,
-          headerTitleStyle,
+          headerTitleStyle: {
+            color: palette.ink,
+            fontSize: 18,
+            ...resolvedTypography.heading,
+          },
           contentStyle: { backgroundColor: palette.paper },
         }}
       >

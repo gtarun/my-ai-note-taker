@@ -1,3 +1,5 @@
+import type { TextStyle } from 'react-native';
+
 const semanticPalette = {
   paper: '#f7fafc',
   card: '#ffffff',
@@ -46,6 +48,23 @@ export const typography = {
   bodyStrong: { fontFamily: 'Inter_500Medium' as const },
   label: { fontFamily: 'Inter_600SemiBold' as const },
 };
+
+const fallbackTypography = {
+  display: { fontWeight: '800' as const },
+  heading: { fontWeight: '700' as const },
+  body: { fontWeight: '400' as const },
+  bodyStrong: { fontWeight: '500' as const },
+  label: { fontWeight: '600' as const },
+};
+
+type ResolvedTypography = Record<
+  keyof typeof typography,
+  Pick<TextStyle, 'fontFamily' | 'fontWeight'>
+>;
+
+export function resolveTypography(useCustomFonts: boolean): ResolvedTypography {
+  return useCustomFonts ? typography : fallbackTypography;
+}
 
 export const elevation = {
   card: {

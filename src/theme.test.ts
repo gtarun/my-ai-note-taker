@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { ambient, palette, radii, typography } from './theme';
+import { ambient, palette, radii, resolveTypography, typography } from './theme';
 
 describe('editorial theme contract', () => {
   test('exposes the approved cool-tone palette', () => {
@@ -25,6 +25,28 @@ describe('editorial theme contract', () => {
     expect(typography.heading.fontFamily).toBe('Manrope_700Bold');
     expect(typography.body.fontFamily).toBe('Inter_400Regular');
     expect(typography.label.fontFamily).toBe('Inter_600SemiBold');
+  });
+
+  test('resolves typography with custom fonts when they are available', () => {
+    const resolvedTypography = resolveTypography(true);
+
+    expect(resolvedTypography.display.fontFamily).toBe(typography.display.fontFamily);
+    expect(resolvedTypography.heading.fontFamily).toBe(typography.heading.fontFamily);
+    expect(resolvedTypography.body.fontFamily).toBe(typography.body.fontFamily);
+    expect(resolvedTypography.label.fontFamily).toBe(typography.label.fontFamily);
+  });
+
+  test('resolves safe system typography fallbacks when custom fonts are unavailable', () => {
+    const resolvedTypography = resolveTypography(false);
+
+    expect(resolvedTypography.display.fontFamily).toBeUndefined();
+    expect(resolvedTypography.display.fontWeight).toBe('800');
+    expect(resolvedTypography.heading.fontFamily).toBeUndefined();
+    expect(resolvedTypography.heading.fontWeight).toBe('700');
+    expect(resolvedTypography.body.fontFamily).toBeUndefined();
+    expect(resolvedTypography.body.fontWeight).toBe('400');
+    expect(resolvedTypography.label.fontFamily).toBeUndefined();
+    expect(resolvedTypography.label.fontWeight).toBe('600');
   });
 
   test('keeps transitional palette aliases stable for legacy screens', () => {
