@@ -14,6 +14,7 @@ type AppPreferencesRow = {
   selected_summary_provider: string;
   delete_uploaded_audio: number;
   model_catalog_url: string;
+  has_seen_onboarding: number;
 };
 
 type ProviderSettingsRow = {
@@ -82,6 +83,7 @@ const defaultState: DatabaseShape = {
     selected_summary_provider: 'openai',
     delete_uploaded_audio: 0,
     model_catalog_url: '',
+    has_seen_onboarding: 0,
   },
   providerSettings: [],
   installedModels: [],
@@ -99,7 +101,25 @@ function readState(): DatabaseShape {
   }
 
   try {
-    return JSON.parse(raw) as DatabaseShape;
+    const state = JSON.parse(raw) as Partial<DatabaseShape>;
+
+    return {
+      ...structuredClone(defaultState),
+      ...state,
+      appPreferences: {
+        ...structuredClone(defaultState.appPreferences),
+        ...state.appPreferences,
+        model_catalog_url: state.appPreferences?.model_catalog_url ?? defaultState.appPreferences.model_catalog_url,
+        has_seen_onboarding: state.appPreferences?.has_seen_onboarding ?? defaultState.appPreferences.has_seen_onboarding,
+      },
+      settings: {
+        ...structuredClone(defaultState.settings),
+        ...state.settings,
+      },
+      providerSettings: state.providerSettings ?? [],
+      installedModels: state.installedModels ?? [],
+      meetings: state.meetings ?? [],
+    };
   } catch {
     return structuredClone(defaultState);
   }
@@ -123,8 +143,14 @@ const db = {
 
     if (!state.appPreferences) {
       state.appPreferences = structuredClone(defaultState.appPreferences);
-    } else if (typeof state.appPreferences.model_catalog_url !== 'string') {
+    }
+
+    if (typeof state.appPreferences.model_catalog_url !== 'string') {
       state.appPreferences.model_catalog_url = '';
+    }
+
+    if (typeof state.appPreferences.has_seen_onboarding !== 'number') {
+      state.appPreferences.has_seen_onboarding = 0;
     }
 
     if (!state.providerSettings) {
@@ -222,6 +248,31 @@ const db = {
         selected_summary_provider: String(params[1]),
         delete_uploaded_audio: Number(params[2]),
         model_catalog_url: params[3] ? String(params[3]) : '',
+        has_seen_onboarding: 0,
+      };
+      writeState(state);
+      return;
+    }
+
+    if (
+      source.includes('UPDATE app_preferences SET') &&
+      source.includes('selected_transcription_provider = ?')
+    ) {
+      state.appPreferences = {
+        ...state.appPreferences,
+        selected_transcription_provider: String(params[0]),
+        selected_summary_provider: String(params[1]),
+        delete_uploaded_audio: Number(params[2]),
+        model_catalog_url: params[3] ? String(params[3]) : '',
+      };
+      writeState(state);
+      return;
+    }
+
+    if (source.includes('UPDATE app_preferences SET has_seen_onboarding = ? WHERE id = 1')) {
+      state.appPreferences = {
+        ...state.appPreferences,
+        has_seen_onboarding: Number(params[0]),
       };
       writeState(state);
       return;

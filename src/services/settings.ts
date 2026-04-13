@@ -85,13 +85,12 @@ export async function saveAppSettings(settings: AppSettings) {
   const db = getDatabase();
 
   await db.runAsync(
-    `INSERT OR REPLACE INTO app_preferences (
-      id,
-      selected_transcription_provider,
-      selected_summary_provider,
-      delete_uploaded_audio,
-      model_catalog_url
-    ) VALUES (1, ?, ?, ?, ?)`,
+    `UPDATE app_preferences SET
+      selected_transcription_provider = ?,
+      selected_summary_provider = ?,
+      delete_uploaded_audio = ?,
+      model_catalog_url = ?
+    WHERE id = 1`,
     sanitized.selectedTranscriptionProvider,
     sanitized.selectedSummaryProvider,
     sanitized.deleteUploadedAudio ? 1 : 0,
