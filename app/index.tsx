@@ -2,7 +2,15 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, FlatList, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  FlatList,
+  Pressable,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { FadeInView } from '../src/components/FadeInView';
 import { ScreenBackground } from '../src/components/ScreenBackground';
@@ -71,6 +79,8 @@ export default function HomeScreen() {
     }
   };
 
+  const importButtonLabel = isImporting ? 'Importing…' : 'Import audio';
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScreenBackground />
@@ -104,7 +114,7 @@ export default function HomeScreen() {
                   onPress={() => router.push('/record')}
                 />
                 <PillButton
-                  label={isImporting ? 'Importing…' : 'Import audio'}
+                  label={importButtonLabel}
                   icon={<Feather name="upload" size={18} color={palette.ink} />}
                   onPress={handleImport}
                   variant="secondary"
@@ -150,28 +160,30 @@ export default function HomeScreen() {
             const statusMeta = getMeetingStatusMeta(item.status);
 
             return (
-              <SurfaceCard style={styles.meetingCard}>
-                <View style={styles.meetingHeader}>
-                  <Text style={styles.meetingTitle}>{item.title}</Text>
-                  <StatusChip label={statusMeta.label} tone={statusMeta.tone} />
-                </View>
-                <Text style={styles.meetingMeta}>
-                  {formatTimestamp(item.createdAt)}
-                  {item.durationMs ? ` • ${formatDuration(item.durationMs)}` : ''}
-                </Text>
-                <Text style={styles.meetingSnippet} numberOfLines={2}>
-                  {item.summaryShort ||
-                    item.transcriptText?.slice(0, 120) ||
-                    'Open this meeting to process it.'}
-                </Text>
-                <View style={styles.meetingAction}>
-                  <PillButton
-                    label="Open meeting"
-                    onPress={() => router.push(`/meetings/${item.id}`)}
-                    variant="ghost"
-                  />
-                </View>
-              </SurfaceCard>
+              <Pressable onPress={() => router.push(`/meetings/${item.id}`)}>
+                <SurfaceCard style={styles.meetingCard}>
+                  <View style={styles.meetingHeader}>
+                    <Text style={styles.meetingTitle}>{item.title}</Text>
+                    <StatusChip label={statusMeta.label} tone={statusMeta.tone} />
+                  </View>
+                  <Text style={styles.meetingMeta}>
+                    {formatTimestamp(item.createdAt)}
+                    {item.durationMs ? ` • ${formatDuration(item.durationMs)}` : ''}
+                  </Text>
+                  <Text style={styles.meetingSnippet} numberOfLines={2}>
+                    {item.summaryShort ||
+                      item.transcriptText?.slice(0, 120) ||
+                      'Open this meeting to process it.'}
+                  </Text>
+                  <View style={styles.meetingAction}>
+                    <PillButton
+                      label="Open meeting"
+                      onPress={() => router.push(`/meetings/${item.id}`)}
+                      variant="ghost"
+                    />
+                  </View>
+                </SurfaceCard>
+              </Pressable>
             );
           }}
           ListEmptyComponent={
@@ -180,7 +192,12 @@ export default function HomeScreen() {
               <Text style={styles.emptyBody}>{emptyCopy.body}</Text>
               <View style={styles.emptyActions}>
                 <PillButton label="New recording" onPress={() => router.push('/record')} />
-                <PillButton label="Import audio" onPress={handleImport} variant="secondary" />
+                <PillButton
+                  label={importButtonLabel}
+                  onPress={handleImport}
+                  variant="secondary"
+                  disabled={isImporting}
+                />
               </View>
             </SurfaceCard>
           }

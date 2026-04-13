@@ -1,10 +1,9 @@
+import type { StatusChipTone } from '../../components/ui';
 import type { MeetingRow } from '../../types';
-
-type ChipTone = 'secondary' | 'tertiary' | 'danger';
 
 export function getMeetingStatusMeta(status: MeetingRow['status']): {
   label: string;
-  tone: ChipTone;
+  tone: StatusChipTone;
 } {
   switch (status) {
     case 'ready':

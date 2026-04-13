@@ -18,6 +18,14 @@ describe('dashboard presentation', () => {
       label: 'Local summary',
       tone: 'tertiary',
     });
+    expect(getMeetingStatusMeta('summarizing')).toEqual({
+      label: 'Summarizing',
+      tone: 'secondary',
+    });
+    expect(getMeetingStatusMeta('local_only')).toEqual({
+      label: 'Local only',
+      tone: 'tertiary',
+    });
   });
 
   test('returns concise empty-state copy', () => {
