@@ -52,7 +52,7 @@ export function getNextOnboardingIndex(currentIndex: number, slideCount: number)
     return 0;
   }
 
-  return Math.min(currentIndex + 1, slideCount - 1);
+  return Math.min(Math.max(currentIndex + 1, 0), slideCount - 1);
 }
 
 export function getPreviousOnboardingIndex(currentIndex: number) {
@@ -83,7 +83,7 @@ export function shouldPresentOnboarding({
   hasSeenOnboarding: boolean;
   pathname: string;
 }) {
-  if (pathname === '/onboarding') {
+  if (pathname === '/onboarding' || pathname.startsWith('/onboarding/')) {
     return false;
   }
 
