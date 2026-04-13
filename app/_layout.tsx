@@ -23,7 +23,7 @@ export default function RootLayout() {
   const [error, setError] = useState<string | null>(null);
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(true);
   const pathname = usePathname();
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontsError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
@@ -67,6 +67,16 @@ export default function RootLayout() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!fontsError) {
+      return;
+    }
+
+    setError(
+      fontsError instanceof Error ? fontsError.message : 'Failed to load app fonts',
+    );
+  }, [fontsError]);
 
   useEffect(() => {
     if (!isReady || error || !pathname) {

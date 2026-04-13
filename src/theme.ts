@@ -3,6 +3,7 @@ export const palette = {
   card: '#ffffff',
   cardMuted: '#eff4f7',
   cardUtility: '#e8eff2',
+  // Transitional compatibility shims for legacy screens that still reference the old token names.
   cardStrong: '#eff4f7',
   ink: '#2b3437',
   mutedInk: '#576064',

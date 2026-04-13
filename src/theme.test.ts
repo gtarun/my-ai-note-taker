@@ -26,4 +26,10 @@ describe('editorial theme contract', () => {
     expect(typography.body.fontFamily).toBe('Inter_400Regular');
     expect(typography.label.fontFamily).toBe('Inter_600SemiBold');
   });
+
+  test('keeps transitional palette aliases stable for legacy screens', () => {
+    expect(palette.cardStrong).toBe('#eff4f7');
+    expect(palette.accentMist).toBe('#d8e3fa');
+    expect(palette.lineStrong).toBe('#aab3b7');
+  });
 });
