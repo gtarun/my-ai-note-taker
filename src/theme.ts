@@ -1,24 +1,28 @@
-export const palette = {
+const semanticPalette = {
   paper: '#f7fafc',
   card: '#ffffff',
   cardMuted: '#eff4f7',
   cardUtility: '#e8eff2',
-  // Transitional compatibility shims for legacy screens that still reference the old token names.
-  cardStrong: '#eff4f7',
   ink: '#2b3437',
   mutedInk: '#576064',
   accent: '#0f57d0',
   accentStrong: '#4e83fe',
   accentSoft: '#d8e3fa',
-  accentMist: '#d8e3fa',
   tertiary: '#685781',
   tertiarySoft: '#e4ceff',
   line: '#aab3b7',
-  lineStrong: '#aab3b7',
   lineSoft: 'rgba(170, 179, 183, 0.15)',
   danger: '#a83836',
   dangerSoft: '#fde7e6',
   shadow: 'rgba(43, 52, 55, 0.08)',
+};
+
+export const palette = {
+  ...semanticPalette,
+  // Transitional compatibility shims for legacy screens that still reference the old token names.
+  cardStrong: semanticPalette.cardMuted,
+  accentMist: semanticPalette.accentSoft,
+  lineStrong: semanticPalette.line,
 };
 
 export const radii = {

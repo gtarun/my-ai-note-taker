@@ -15,6 +15,7 @@ import { useEffect, useState } from 'react';
 
 import { bootstrapApp } from '../src/services/bootstrap';
 import { getHasSeenOnboarding } from '../src/services/onboarding';
+import { getStartupPresentation } from '../src/startup';
 import { palette, typography } from '../src/theme';
 import { shouldPresentOnboarding } from '../src/onboarding/model';
 
@@ -69,16 +70,6 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (!fontsError) {
-      return;
-    }
-
-    setError(
-      fontsError instanceof Error ? fontsError.message : 'Failed to load app fonts',
-    );
-  }, [fontsError]);
-
-  useEffect(() => {
     if (!isReady || error || !pathname) {
       return;
     }
@@ -116,32 +107,41 @@ export default function RootLayout() {
     };
   }, [error, hasSeenOnboarding, isReady, pathname]);
 
-  if (error) {
+  const startupPresentation = getStartupPresentation({
+    isReady,
+    error,
+    fontsLoaded,
+    fontsError,
+  });
+
+  const headerTitleStyle = startupPresentation.useCustomFonts
+    ? {
+        color: palette.ink,
+        fontFamily: typography.heading.fontFamily,
+        fontSize: 18,
+      }
+    : {
+        color: palette.ink,
+        fontSize: 18,
+        fontWeight: '700' as const,
+      };
+
+  if (startupPresentation.screen === 'error') {
     return (
       <View style={styles.centered}>
         <StatusBar style="dark" />
-        <Text style={styles.title}>App bootstrap failed</Text>
-        <Text style={styles.body}>{error}</Text>
+        <Text style={styles.statusTitle}>App bootstrap failed</Text>
+        <Text style={styles.statusBody}>{error}</Text>
       </View>
     );
   }
 
-  if (!isReady) {
+  if (startupPresentation.screen === 'loading') {
     return (
       <View style={styles.centered}>
         <StatusBar style="dark" />
         <ActivityIndicator size="large" color={palette.accent} />
-        <Text style={styles.body}>Preparing local storage…</Text>
-      </View>
-    );
-  }
-
-  if (!fontsLoaded) {
-    return (
-      <View style={styles.centered}>
-        <StatusBar style="dark" />
-        <ActivityIndicator size="large" color={palette.accent} />
-        <Text style={styles.body}>Preparing local storage…</Text>
+        <Text style={styles.statusBody}>Preparing local storage…</Text>
       </View>
     );
   }
@@ -153,11 +153,7 @@ export default function RootLayout() {
         screenOptions={{
           headerStyle: { backgroundColor: palette.paper },
           headerTintColor: palette.ink,
-          headerTitleStyle: {
-            color: palette.ink,
-            fontFamily: typography.heading.fontFamily,
-            fontSize: 18,
-          },
+          headerTitleStyle,
           contentStyle: { backgroundColor: palette.paper },
         }}
       >
@@ -181,14 +177,13 @@ const styles = StyleSheet.create({
     padding: 24,
     gap: 12,
   },
-  title: {
+  statusTitle: {
     fontSize: 20,
-    fontFamily: typography.heading.fontFamily,
+    fontWeight: '700',
     color: palette.ink,
   },
-  body: {
+  statusBody: {
     fontSize: 15,
-    fontFamily: typography.body.fontFamily,
     color: palette.mutedInk,
     textAlign: 'center',
   },

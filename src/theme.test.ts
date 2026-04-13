@@ -28,8 +28,8 @@ describe('editorial theme contract', () => {
   });
 
   test('keeps transitional palette aliases stable for legacy screens', () => {
-    expect(palette.cardStrong).toBe('#eff4f7');
-    expect(palette.accentMist).toBe('#d8e3fa');
-    expect(palette.lineStrong).toBe('#aab3b7');
+    expect(palette.cardStrong).toBe(palette.cardMuted);
+    expect(palette.accentMist).toBe(palette.accentSoft);
+    expect(palette.lineStrong).toBe(palette.line);
   });
 });
