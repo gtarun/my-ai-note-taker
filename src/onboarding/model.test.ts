@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  canGoBackOnOnboarding,
   getNextOnboardingIndex,
   getOnboardingCompletionRoute,
   getOnboardingProgress,
@@ -31,8 +32,11 @@ describe('onboarding model', () => {
     expect(getPreviousOnboardingIndex(0)).toBe(0);
     expect(isLastOnboardingSlide(3, 4)).toBe(true);
     expect(isLastOnboardingSlide(2, 4)).toBe(false);
+    expect(getOnboardingProgress(0, ONBOARDING_SLIDES.length)).toEqual([true, false, false, false]);
     expect(getOnboardingProgress(1, 4)).toEqual([false, true, false, false]);
     expect(getOnboardingProgress(3, 4)).toEqual([false, false, false, true]);
+    expect(canGoBackOnOnboarding(0)).toBe(false);
+    expect(canGoBackOnOnboarding(2)).toBe(true);
     expect(getOnboardingCompletionRoute()).toBe('/settings');
   });
 

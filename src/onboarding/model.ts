@@ -59,6 +59,10 @@ export function getPreviousOnboardingIndex(currentIndex: number) {
   return Math.max(currentIndex - 1, 0);
 }
 
+export function canGoBackOnOnboarding(index: number) {
+  return index > 0;
+}
+
 export function isLastOnboardingSlide(index: number, slideCount: number) {
   return slideCount > 0 && index >= slideCount - 1;
 }
