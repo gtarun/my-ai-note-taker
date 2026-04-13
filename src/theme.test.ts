@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { palette, radii, typography } from './theme';
+import { ambient, palette, radii, typography } from './theme';
 
 describe('editorial theme contract', () => {
   test('exposes the approved cool-tone palette', () => {
@@ -31,5 +31,11 @@ describe('editorial theme contract', () => {
     expect(palette.cardStrong).toBe(palette.cardMuted);
     expect(palette.accentMist).toBe(palette.accentSoft);
     expect(palette.lineStrong).toBe(palette.line);
+  });
+
+  test('exposes ambient background tokens for editorial chrome', () => {
+    expect(ambient.topBlob).toBe('rgba(78, 131, 254, 0.10)');
+    expect(ambient.sideBlob).toBe('rgba(104, 87, 129, 0.08)');
+    expect(ambient.bottomBlob).toBe('rgba(15, 87, 208, 0.05)');
   });
 });

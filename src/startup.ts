@@ -14,7 +14,7 @@ export function getStartupPresentation({
   isReady,
   error,
   fontsLoaded,
-  fontsError,
+  fontsError: _fontsError,
 }: StartupPresentationInput): StartupPresentation {
   if (error) {
     return {
@@ -37,15 +37,10 @@ export function getStartupPresentation({
     };
   }
 
-  if (fontsError) {
-    return {
-      screen: 'ready',
-      useCustomFonts: false,
-    };
-  }
-
+  // Font assets are an enhancement only. Once app bootstrap succeeds, continue with
+  // system fonts instead of blocking the shell on custom font availability.
   return {
-    screen: 'loading',
+    screen: 'ready',
     useCustomFonts: false,
   };
 }

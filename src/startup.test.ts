@@ -45,6 +45,20 @@ describe('getStartupPresentation', () => {
     });
   });
 
+  test('falls back to system fonts once bootstrap is ready even if fonts are still unavailable', () => {
+    expect(
+      getStartupPresentation({
+        isReady: true,
+        error: null,
+        fontsLoaded: false,
+        fontsError: null,
+      }),
+    ).toEqual({
+      screen: 'ready',
+      useCustomFonts: false,
+    });
+  });
+
   test('falls back to system fonts when font assets fail to load', () => {
     expect(
       getStartupPresentation({

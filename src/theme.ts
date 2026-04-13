@@ -25,6 +25,12 @@ export const palette = {
   lineStrong: semanticPalette.line,
 };
 
+export const ambient = {
+  topBlob: 'rgba(78, 131, 254, 0.10)',
+  sideBlob: 'rgba(104, 87, 129, 0.08)',
+  bottomBlob: 'rgba(15, 87, 208, 0.05)',
+};
+
 export const radii = {
   md: 12,
   lg: 18,

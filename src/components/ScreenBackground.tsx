@@ -1,5 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 
+import { ambient } from '../theme';
+
 export function ScreenBackground() {
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -18,7 +20,7 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
     borderRadius: 999,
-    backgroundColor: 'rgba(78, 131, 254, 0.10)',
+    backgroundColor: ambient.topBlob,
   },
   sideBlob: {
     position: 'absolute',
@@ -27,7 +29,7 @@ const styles = StyleSheet.create({
     width: 140,
     height: 140,
     borderRadius: 999,
-    backgroundColor: 'rgba(104, 87, 129, 0.08)',
+    backgroundColor: ambient.sideBlob,
   },
   bottomBlob: {
     position: 'absolute',
@@ -36,6 +38,6 @@ const styles = StyleSheet.create({
     width: 180,
     height: 180,
     borderRadius: 999,
-    backgroundColor: 'rgba(15, 87, 208, 0.05)',
+    backgroundColor: ambient.bottomBlob,
   },
 });
