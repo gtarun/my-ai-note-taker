@@ -1,3 +1,13 @@
+import {
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+} from '@expo-google-fonts/inter';
+import {
+  Manrope_700Bold,
+  Manrope_800ExtraBold,
+} from '@expo-google-fonts/manrope';
+import { useFonts } from 'expo-font';
 import { router, Stack, usePathname } from 'expo-router';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -5,7 +15,7 @@ import { useEffect, useState } from 'react';
 
 import { bootstrapApp } from '../src/services/bootstrap';
 import { getHasSeenOnboarding } from '../src/services/onboarding';
-import { palette } from '../src/theme';
+import { palette, typography } from '../src/theme';
 import { shouldPresentOnboarding } from '../src/onboarding/model';
 
 export default function RootLayout() {
@@ -13,6 +23,13 @@ export default function RootLayout() {
   const [error, setError] = useState<string | null>(null);
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(true);
   const pathname = usePathname();
+  const [fontsLoaded] = useFonts({
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Manrope_700Bold,
+    Manrope_800ExtraBold,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -103,7 +120,17 @@ export default function RootLayout() {
     return (
       <View style={styles.centered}>
         <StatusBar style="dark" />
-        <ActivityIndicator size="large" color={palette.ink} />
+        <ActivityIndicator size="large" color={palette.accent} />
+        <Text style={styles.body}>Preparing local storage…</Text>
+      </View>
+    );
+  }
+
+  if (!fontsLoaded) {
+    return (
+      <View style={styles.centered}>
+        <StatusBar style="dark" />
+        <ActivityIndicator size="large" color={palette.accent} />
         <Text style={styles.body}>Preparing local storage…</Text>
       </View>
     );
@@ -116,7 +143,11 @@ export default function RootLayout() {
         screenOptions={{
           headerStyle: { backgroundColor: palette.paper },
           headerTintColor: palette.ink,
-          headerTitleStyle: { fontWeight: '700' },
+          headerTitleStyle: {
+            color: palette.ink,
+            fontFamily: typography.heading.fontFamily,
+            fontSize: 18,
+          },
           contentStyle: { backgroundColor: palette.paper },
         }}
       >
@@ -142,11 +173,12 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 20,
-    fontWeight: '700',
+    fontFamily: typography.heading.fontFamily,
     color: palette.ink,
   },
   body: {
     fontSize: 15,
+    fontFamily: typography.body.fontFamily,
     color: palette.mutedInk,
     textAlign: 'center',
   },

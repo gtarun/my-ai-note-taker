@@ -1,7 +1,5 @@
 import { StyleSheet, View } from 'react-native';
 
-import { palette } from '../theme';
-
 export function ScreenBackground() {
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -15,31 +13,29 @@ export function ScreenBackground() {
 const styles = StyleSheet.create({
   topBlob: {
     position: 'absolute',
-    top: -70,
-    right: -30,
-    width: 180,
-    height: 180,
+    top: -90,
+    right: -40,
+    width: 220,
+    height: 220,
     borderRadius: 999,
-    backgroundColor: palette.accentMist,
+    backgroundColor: 'rgba(78, 131, 254, 0.10)',
   },
   sideBlob: {
     position: 'absolute',
-    top: 180,
-    left: -50,
-    width: 120,
-    height: 120,
+    top: 200,
+    left: -60,
+    width: 140,
+    height: 140,
     borderRadius: 999,
-    backgroundColor: palette.rose,
-    opacity: 0.45,
+    backgroundColor: 'rgba(104, 87, 129, 0.08)',
   },
   bottomBlob: {
     position: 'absolute',
     bottom: -40,
-    right: 24,
-    width: 140,
-    height: 140,
+    right: 20,
+    width: 180,
+    height: 180,
     borderRadius: 999,
-    backgroundColor: palette.sun,
-    opacity: 0.18,
+    backgroundColor: 'rgba(15, 87, 208, 0.05)',
   },
 });
