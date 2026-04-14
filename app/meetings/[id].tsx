@@ -17,7 +17,11 @@ import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 
 import { FadeInView } from '../../src/components/FadeInView';
 import { ScreenBackground } from '../../src/components/ScreenBackground';
-import { getMeetingDetailBackAction } from '../../src/features/meetings/navigation';
+import {
+  getMeetingDetailPrimaryActionLabel,
+  getMeetingDetailTitleDraftState,
+  getPlaybackActionLabel,
+} from '../../src/features/meetings/detailPresentation';
 import { APP_TABS_ROUTE } from '../../src/navigation/routes';
 import { getAppSettings } from '../../src/services/settings';
 import { MeetingRow, SummaryPayload } from '../../src/types';
@@ -36,7 +40,6 @@ export default function MeetingDetailScreen() {
   const [isDeleting, setIsDeleting] = useState(false);
   const player = useAudioPlayer(meeting?.audioUri ?? null);
   const playerStatus = useAudioPlayerStatus(player);
-  const backAction = getMeetingDetailBackAction(router.canGoBack());
 
   const loadMeeting = useCallback(async () => {
     if (!id) {
@@ -148,15 +151,6 @@ export default function MeetingDetailScreen() {
     player.play();
   };
 
-  const handleBackPress = () => {
-    if (backAction.kind === 'history') {
-      router.back();
-      return;
-    }
-
-    router.replace(backAction.href);
-  };
-
   if (!hasLoaded) {
     return (
       <View style={styles.centered}>
@@ -183,97 +177,82 @@ export default function MeetingDetailScreen() {
   }
 
   const summary = parseSummary(meeting.summaryJson);
+  const titleDraftState = getMeetingDetailTitleDraftState(draftTitle, meeting.title);
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScreenBackground />
       <ScrollView contentContainerStyle={styles.container}>
-        <FadeInView style={styles.backRow}>
-          <Pressable style={styles.backButton} onPress={handleBackPress}>
-            <Feather name="arrow-left" size={16} color={palette.ink} />
-            <Text style={styles.backButtonText}>{backAction.label}</Text>
-          </Pressable>
-        </FadeInView>
-
         <FadeInView style={styles.headerCard}>
-          <TextInput
-            style={styles.titleInput}
-            value={draftTitle}
-            onChangeText={setDraftTitle}
-            placeholder="Meeting title"
-            placeholderTextColor={palette.mutedInk}
-          />
+          <View style={styles.titleRow}>
+            <TextInput
+              style={styles.titleInput}
+              value={draftTitle}
+              onChangeText={setDraftTitle}
+              placeholder="Meeting title"
+              placeholderTextColor={palette.mutedInk}
+            />
+            {titleDraftState.showSave ? (
+              <Pressable
+                style={[
+                  styles.inlineSaveButton,
+                  (isSavingTitle || titleDraftState.isDisabled) && styles.inlineSaveButtonDisabled,
+                ]}
+                onPress={handleRename}
+                disabled={isSavingTitle || titleDraftState.isDisabled}
+              >
+                <Feather name={isSavingTitle ? 'loader' : 'check'} size={16} color={palette.card} />
+                <Text style={styles.inlineSaveButtonText}>{isSavingTitle ? 'Saving…' : 'Save'}</Text>
+              </Pressable>
+            ) : null}
+          </View>
           <Text style={styles.meta}>
             {formatTimestamp(meeting.createdAt)}
             {meeting.durationMs ? ` • ${formatDuration(meeting.durationMs)}` : ''}
           </Text>
-          <View style={styles.statusRow}>
-            <StatusIcon status={meeting.status} />
-            <Text style={styles.status}>Status: {meeting.status.replace('_', ' ')}</Text>
+          <View style={styles.statusWrap}>
+            <View style={styles.statusRow}>
+              <StatusIcon status={meeting.status} />
+              <Text style={styles.status}>Status: {meeting.status.replace('_', ' ')}</Text>
+            </View>
+            {runsOffline ? (
+              <View style={styles.inlineOfflineBadge}>
+                <Feather name="smartphone" size={14} color={palette.ink} />
+                <Text style={styles.inlineOfflineBadgeText}>Runs fully offline</Text>
+              </View>
+            ) : null}
           </View>
           {meeting.errorMessage ? <Text style={styles.errorText}>{meeting.errorMessage}</Text> : null}
         </FadeInView>
 
-        <FadeInView style={styles.actions} delay={60}>
+        <FadeInView style={styles.primaryActionWrap} delay={60}>
           <Pressable style={styles.primaryButton} onPress={handleProcess} disabled={isBusy}>
             <MaterialCommunityIcons name="text-box-search-outline" size={18} color={palette.paper} />
-            <Text style={styles.primaryButtonText}>{isBusy ? 'Processing…' : 'Run transcript + summary'}</Text>
-          </Pressable>
-          <Pressable style={styles.secondaryButton} onPress={handleShare}>
-            <Feather name="share-2" size={17} color={palette.ink} />
-            <Text style={styles.secondaryButtonText}>Share</Text>
+            <Text style={styles.primaryButtonText}>{getMeetingDetailPrimaryActionLabel(isBusy)}</Text>
           </Pressable>
         </FadeInView>
 
-        {runsOffline ? (
-          <FadeInView style={styles.offlineNotice} delay={85}>
-            <Feather name="smartphone" size={16} color={palette.ink} />
-            <Text style={styles.offlineNoticeText}>
-              Runs fully offline with local models on this device.
-            </Text>
-          </FadeInView>
-        ) : null}
-
-        <FadeInView style={styles.actions} delay={100}>
+        <FadeInView style={styles.secondaryActions} delay={90}>
           <Pressable style={styles.secondaryButton} onPress={handlePlaybackToggle}>
             <Feather
               name={playerStatus.playing ? 'pause-circle' : 'play-circle'}
               size={17}
               color={palette.ink}
             />
-            <Text style={styles.secondaryButtonText}>
-              {playerStatus.playing ? 'Pause recording' : 'Play recording'}
-            </Text>
+            <Text style={styles.secondaryButtonText}>{getPlaybackActionLabel(playerStatus.playing)}</Text>
           </Pressable>
-          <Pressable
-            style={styles.secondaryButton}
-            onPress={handleRename}
-            disabled={isSavingTitle || draftTitle.trim() === meeting.title}
-          >
-            <Feather name="edit-3" size={16} color={palette.ink} />
-            <Text style={styles.secondaryButtonText}>{isSavingTitle ? 'Saving…' : 'Rename'}</Text>
-          </Pressable>
-          <Pressable style={styles.dangerButton} onPress={handleDelete} disabled={isDeleting}>
-            <Feather name="trash-2" size={16} color={palette.danger} />
-            <Text style={styles.dangerButtonText}>{isDeleting ? 'Deleting…' : 'Delete'}</Text>
+
+          <Pressable style={styles.secondaryButton} onPress={handleShare}>
+            <Feather name="share-2" size={17} color={palette.ink} />
+            <Text style={styles.secondaryButtonText}>Share</Text>
           </Pressable>
         </FadeInView>
 
-        <Section title="Recording" delay={130}>
-          <Text style={styles.bodyText}>
-            {playerStatus.playing ? 'Playing now.' : 'Ready to play.'}
-            {playerStatus.duration ? ` Total length: ${formatDuration(playerStatus.duration * 1000)}` : ''}
-          </Text>
-          <Text style={styles.bodyText}>
-            Current position: {formatDuration(playerStatus.currentTime * 1000)}
-          </Text>
-        </Section>
-
-        <Section title="Summary" delay={160}>
+        <Section title="Summary" delay={120}>
           <Text style={styles.bodyText}>{summary?.summary || 'No summary yet.'}</Text>
         </Section>
 
-        <Section title="Action items" delay={190}>
+        <Section title="Action items" delay={150}>
           {summary?.actionItems?.length ? (
             summary.actionItems.map((item) => (
               <Text key={item} style={styles.listText}>
@@ -285,7 +264,7 @@ export default function MeetingDetailScreen() {
           )}
         </Section>
 
-        <Section title="Decisions" delay={220}>
+        <Section title="Decisions" delay={180}>
           {summary?.decisions?.length ? (
             summary.decisions.map((item) => (
               <Text key={item} style={styles.listText}>
@@ -297,9 +276,30 @@ export default function MeetingDetailScreen() {
           )}
         </Section>
 
-        <Section title="Transcript" delay={250}>
+        <Section title="Transcript" delay={210}>
           <Text style={styles.transcriptText}>{meeting.transcriptText || 'No transcript yet.'}</Text>
         </Section>
+
+        <Section title="Recording" delay={240}>
+          <Text style={styles.bodyText}>
+            {playerStatus.playing ? 'Playing now.' : 'Ready to play.'}
+            {playerStatus.duration ? ` Total length: ${formatDuration(playerStatus.duration * 1000)}` : ''}
+          </Text>
+          <Text style={styles.bodyText}>
+            Current position: {formatDuration(playerStatus.currentTime * 1000)}
+          </Text>
+        </Section>
+
+        <FadeInView style={styles.dangerZone} delay={270}>
+          <Text style={styles.dangerZoneTitle}>Delete meeting</Text>
+          <Text style={styles.dangerZoneBody}>
+            This permanently removes the audio file, transcript, and summary from this device.
+          </Text>
+          <Pressable style={styles.dangerButton} onPress={handleDelete} disabled={isDeleting}>
+            <Feather name="trash-2" size={16} color={palette.danger} />
+            <Text style={styles.dangerButtonText}>{isDeleting ? 'Deleting…' : 'Delete meeting'}</Text>
+          </Pressable>
+        </FadeInView>
       </ScrollView>
     </SafeAreaView>
   );
@@ -396,50 +396,57 @@ const styles = StyleSheet.create({
     padding: 20,
     gap: 16,
   },
-  backRow: {
-    alignItems: 'flex-start',
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: palette.line,
-    backgroundColor: palette.card,
-  },
-  backButtonText: {
-    color: palette.ink,
-    fontSize: 14,
-    fontWeight: '700',
-  },
   headerCard: {
     backgroundColor: palette.cardStrong,
     borderRadius: 28,
-    padding: 18,
+    padding: 20,
     borderWidth: 1,
     borderColor: palette.line,
-    gap: 6,
+    gap: 10,
     ...elevation.card,
   },
-  title: {
-    color: palette.ink,
-    fontSize: 28,
-    fontWeight: '800',
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   titleInput: {
+    flex: 1,
     color: palette.ink,
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: '800',
     borderBottomWidth: 1,
     borderBottomColor: palette.line,
     paddingBottom: 8,
   },
+  inlineSaveButton: {
+    minHeight: 40,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: palette.ink,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  inlineSaveButtonDisabled: {
+    opacity: 0.55,
+  },
+  inlineSaveButtonText: {
+    color: palette.card,
+    fontWeight: '700',
+    fontSize: 14,
+  },
   meta: {
     color: palette.mutedInk,
     fontSize: 14,
+  },
+  statusWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    flexWrap: 'wrap',
   },
   status: {
     color: palette.accent,
@@ -451,36 +458,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  inlineOfflineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: palette.accentMist,
+    borderWidth: 1,
+    borderColor: palette.line,
+  },
+  inlineOfflineBadgeText: {
+    color: palette.ink,
+    fontSize: 13,
+    fontWeight: '700',
+  },
   errorText: {
     color: palette.danger,
     fontSize: 14,
     lineHeight: 20,
   },
-  actions: {
+  primaryActionWrap: {
+    width: '100%',
+  },
+  secondaryActions: {
     flexDirection: 'row',
     gap: 10,
-  },
-  offlineNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: palette.accentMist,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: palette.line,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  offlineNoticeText: {
-    flex: 1,
-    color: palette.ink,
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '600',
   },
   primaryButton: {
-    flex: 1,
+    width: '100%',
+    minHeight: 54,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
     backgroundColor: palette.ink,
     borderRadius: 18,
     paddingVertical: 15,
@@ -496,6 +507,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    minHeight: 48,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: palette.line,
@@ -506,11 +519,30 @@ const styles = StyleSheet.create({
     color: palette.ink,
     fontWeight: '700',
   },
+  dangerZone: {
+    backgroundColor: '#fff4f2',
+    borderRadius: 24,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#efc2bc',
+    gap: 12,
+  },
+  dangerZoneTitle: {
+    color: palette.danger,
+    fontWeight: '800',
+    fontSize: 17,
+  },
+  dangerZoneBody: {
+    color: palette.ink,
+    fontSize: 14,
+    lineHeight: 20,
+  },
   dangerButton: {
-    flex: 1,
+    minHeight: 48,
     paddingHorizontal: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
     borderRadius: 18,
     borderWidth: 1,
     borderColor: '#e7b0aa',
