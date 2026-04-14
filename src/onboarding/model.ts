@@ -1,3 +1,5 @@
+import { APP_TABS_ROUTE } from '../navigation/routes';
+
 export type OnboardingSlideId = 'welcome' | 'workflow' | 'privacy' | 'setup';
 
 export type OnboardingSlide = {
@@ -40,9 +42,11 @@ export const ONBOARDING_SLIDES: OnboardingSlide[] = [
   },
   {
     id: 'setup',
-    title: 'Set up your provider first.',
-    body: 'Add your API key and choose transcript and summary providers before you start using the app.',
-    ctaLabel: 'Go to Settings',
+    title: "You're ready to start.",
+    body:
+      'Meetings is your home base. You can configure transcript and summary providers any time from the Settings tab.',
+    highlights: ['Meetings home', 'Record anytime', 'Settings tab'],
+    ctaLabel: 'Open app',
     showSkip: true,
   },
 ];
@@ -77,7 +81,7 @@ export function getOnboardingProgress(activeIndex: number, slideCount: number): 
 }
 
 export function getOnboardingCompletionRoute() {
-  return '/settings';
+  return APP_TABS_ROUTE;
 }
 
 export function shouldPresentOnboarding({

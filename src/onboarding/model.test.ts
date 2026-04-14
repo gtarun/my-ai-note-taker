@@ -20,7 +20,9 @@ describe('onboarding model', () => {
       'setup',
     ]);
     expect(ONBOARDING_SLIDES[0].title).toBe('Record it. Upload it. Process it later.');
-    expect(ONBOARDING_SLIDES[3].ctaLabel).toBe('Go to Settings');
+    expect(ONBOARDING_SLIDES[3].title).toBe("You're ready to start.");
+    expect(ONBOARDING_SLIDES[3].ctaLabel).toBe('Open app');
+    expect(ONBOARDING_SLIDES[3].body).toContain('Settings tab');
     expect(ONBOARDING_SLIDES.every((slide) => slide.showSkip)).toBe(true);
   });
 
@@ -37,7 +39,7 @@ describe('onboarding model', () => {
     expect(getOnboardingProgress(3, 4)).toEqual([false, false, false, true]);
     expect(canGoBackOnOnboarding(0)).toBe(false);
     expect(canGoBackOnOnboarding(2)).toBe(true);
-    expect(getOnboardingCompletionRoute()).toBe('/settings');
+    expect(getOnboardingCompletionRoute()).toBe('/(tabs)');
   });
 
   test('does not present onboarding on onboarding routes', () => {
