@@ -21,6 +21,7 @@ import {
 
 import { FadeInView } from '../components/FadeInView';
 import { ScreenBackground } from '../components/ScreenBackground';
+import { getMeetingDetailEntryMethod } from '../features/meetings/navigation';
 import { getMeetingDetailRoute } from '../navigation/routes';
 import { uploadMeetingRecordingIfConfigured } from '../services/googleDrive';
 import { createMeetingFromRecording } from '../services/meetings';
@@ -70,7 +71,13 @@ export default function RecordScreen() {
           );
         }
 
-        router.replace(getMeetingDetailRoute(meetingId));
+        const detailRoute = getMeetingDetailRoute(meetingId);
+
+        if (getMeetingDetailEntryMethod() === 'push') {
+          router.push(detailRoute);
+        } else {
+          router.replace(detailRoute);
+        }
       } catch (error) {
         Alert.alert('Save failed', error instanceof Error ? error.message : 'Unable to save recording.');
       } finally {

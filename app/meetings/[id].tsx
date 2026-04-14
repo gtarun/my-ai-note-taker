@@ -17,6 +17,7 @@ import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 
 import { FadeInView } from '../../src/components/FadeInView';
 import { ScreenBackground } from '../../src/components/ScreenBackground';
+import { getMeetingDetailBackAction } from '../../src/features/meetings/navigation';
 import { APP_TABS_ROUTE } from '../../src/navigation/routes';
 import { getAppSettings } from '../../src/services/settings';
 import { MeetingRow, SummaryPayload } from '../../src/types';
@@ -35,6 +36,7 @@ export default function MeetingDetailScreen() {
   const [isDeleting, setIsDeleting] = useState(false);
   const player = useAudioPlayer(meeting?.audioUri ?? null);
   const playerStatus = useAudioPlayerStatus(player);
+  const backAction = getMeetingDetailBackAction(router.canGoBack());
 
   const loadMeeting = useCallback(async () => {
     if (!id) {
@@ -146,6 +148,15 @@ export default function MeetingDetailScreen() {
     player.play();
   };
 
+  const handleBackPress = () => {
+    if (backAction.kind === 'history') {
+      router.back();
+      return;
+    }
+
+    router.replace(backAction.href);
+  };
+
   if (!hasLoaded) {
     return (
       <View style={styles.centered}>
@@ -177,6 +188,13 @@ export default function MeetingDetailScreen() {
     <SafeAreaView style={styles.safeArea}>
       <ScreenBackground />
       <ScrollView contentContainerStyle={styles.container}>
+        <FadeInView style={styles.backRow}>
+          <Pressable style={styles.backButton} onPress={handleBackPress}>
+            <Feather name="arrow-left" size={16} color={palette.ink} />
+            <Text style={styles.backButtonText}>{backAction.label}</Text>
+          </Pressable>
+        </FadeInView>
+
         <FadeInView style={styles.headerCard}>
           <TextInput
             style={styles.titleInput}
@@ -377,6 +395,25 @@ const styles = StyleSheet.create({
   container: {
     padding: 20,
     gap: 16,
+  },
+  backRow: {
+    alignItems: 'flex-start',
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: palette.card,
+  },
+  backButtonText: {
+    color: palette.ink,
+    fontSize: 14,
+    fontWeight: '700',
   },
   headerCard: {
     backgroundColor: palette.cardStrong,
