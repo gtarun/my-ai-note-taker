@@ -1,5 +1,5 @@
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useLocalSearchParams, useFocusEffect, router } from 'expo-router';
+import { Stack, useLocalSearchParams, useFocusEffect, router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -18,10 +18,12 @@ import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { FadeInView } from '../../src/components/FadeInView';
 import { ScreenBackground } from '../../src/components/ScreenBackground';
 import {
+  MEETING_DETAIL_TITLE_ACTION_SLOT_MIN_WIDTH,
   getMeetingDetailPrimaryActionLabel,
   getMeetingDetailTitleDraftState,
   getPlaybackActionLabel,
 } from '../../src/features/meetings/detailPresentation';
+import { getMeetingDetailHeaderFallback } from '../../src/features/meetings/navigation';
 import { APP_TABS_ROUTE } from '../../src/navigation/routes';
 import { getAppSettings } from '../../src/services/settings';
 import { MeetingRow, SummaryPayload } from '../../src/types';
@@ -40,6 +42,7 @@ export default function MeetingDetailScreen() {
   const [isDeleting, setIsDeleting] = useState(false);
   const player = useAudioPlayer(meeting?.audioUri ?? null);
   const playerStatus = useAudioPlayerStatus(player);
+  const headerFallback = getMeetingDetailHeaderFallback(router.canGoBack());
 
   const loadMeeting = useCallback(async () => {
     if (!id) {
@@ -154,6 +157,22 @@ export default function MeetingDetailScreen() {
   if (!hasLoaded) {
     return (
       <View style={styles.centered}>
+        <Stack.Screen
+          options={{
+            headerBackVisible: !headerFallback,
+            headerLeft: headerFallback
+              ? () => (
+                  <Pressable
+                    style={styles.headerFallbackButton}
+                    onPress={() => router.replace(headerFallback.href)}
+                  >
+                    <Feather name="arrow-left" size={16} color={palette.ink} />
+                    <Text style={styles.headerFallbackButtonText}>{headerFallback.label}</Text>
+                  </Pressable>
+                )
+              : undefined,
+          }}
+        />
         <ActivityIndicator size="large" color={palette.ink} />
       </View>
     );
@@ -162,6 +181,22 @@ export default function MeetingDetailScreen() {
   if (!meeting) {
     return (
       <SafeAreaView style={styles.safeArea}>
+        <Stack.Screen
+          options={{
+            headerBackVisible: !headerFallback,
+            headerLeft: headerFallback
+              ? () => (
+                  <Pressable
+                    style={styles.headerFallbackButton}
+                    onPress={() => router.replace(headerFallback.href)}
+                  >
+                    <Feather name="arrow-left" size={16} color={palette.ink} />
+                    <Text style={styles.headerFallbackButtonText}>{headerFallback.label}</Text>
+                  </Pressable>
+                )
+              : undefined,
+          }}
+        />
         <ScreenBackground />
         <View style={styles.centered}>
           <Text style={styles.notFoundTitle}>Meeting not found</Text>
@@ -181,6 +216,22 @@ export default function MeetingDetailScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <Stack.Screen
+        options={{
+          headerBackVisible: !headerFallback,
+          headerLeft: headerFallback
+            ? () => (
+                <Pressable
+                  style={styles.headerFallbackButton}
+                  onPress={() => router.replace(headerFallback.href)}
+                >
+                  <Feather name="arrow-left" size={16} color={palette.ink} />
+                  <Text style={styles.headerFallbackButtonText}>{headerFallback.label}</Text>
+                </Pressable>
+              )
+            : undefined,
+        }}
+      />
       <ScreenBackground />
       <ScrollView contentContainerStyle={styles.container}>
         <FadeInView style={styles.headerCard}>
@@ -192,19 +243,21 @@ export default function MeetingDetailScreen() {
               placeholder="Meeting title"
               placeholderTextColor={palette.mutedInk}
             />
-            {titleDraftState.showSave ? (
-              <Pressable
-                style={[
-                  styles.inlineSaveButton,
-                  (isSavingTitle || titleDraftState.isDisabled) && styles.inlineSaveButtonDisabled,
-                ]}
-                onPress={handleRename}
-                disabled={isSavingTitle || titleDraftState.isDisabled}
-              >
-                <Feather name={isSavingTitle ? 'loader' : 'check'} size={16} color={palette.card} />
-                <Text style={styles.inlineSaveButtonText}>{isSavingTitle ? 'Saving…' : 'Save'}</Text>
-              </Pressable>
-            ) : null}
+            <View style={styles.inlineSaveSlot}>
+              {titleDraftState.showSave ? (
+                <Pressable
+                  style={[
+                    styles.inlineSaveButton,
+                    (isSavingTitle || titleDraftState.isDisabled) && styles.inlineSaveButtonDisabled,
+                  ]}
+                  onPress={handleRename}
+                  disabled={isSavingTitle || titleDraftState.isDisabled}
+                >
+                  <Feather name={isSavingTitle ? 'loader' : 'check'} size={16} color={palette.card} />
+                  <Text style={styles.inlineSaveButtonText}>{isSavingTitle ? 'Saving…' : 'Save'}</Text>
+                </Pressable>
+              ) : null}
+            </View>
           </View>
           <Text style={styles.meta}>
             {formatTimestamp(meeting.createdAt)}
@@ -381,6 +434,18 @@ const styles = StyleSheet.create({
     padding: 24,
     gap: 12,
   },
+  headerFallbackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  headerFallbackButtonText: {
+    color: palette.ink,
+    fontSize: 16,
+    fontWeight: '700',
+  },
   notFoundTitle: {
     color: palette.ink,
     fontSize: 24,
@@ -407,7 +472,7 @@ const styles = StyleSheet.create({
   },
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     gap: 12,
   },
   titleInput: {
@@ -418,6 +483,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: palette.line,
     paddingBottom: 8,
+  },
+  inlineSaveSlot: {
+    width: MEETING_DETAIL_TITLE_ACTION_SLOT_MIN_WIDTH,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
   },
   inlineSaveButton: {
     minHeight: 40,

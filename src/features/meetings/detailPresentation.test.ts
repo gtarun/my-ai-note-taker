@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  MEETING_DETAIL_TITLE_ACTION_SLOT_MIN_WIDTH,
   MEETING_DETAIL_SECTION_ORDER,
   getMeetingDetailPrimaryActionLabel,
   getMeetingDetailTitleDraftState,
@@ -23,6 +24,10 @@ describe('meeting detail presentation', () => {
       showSave: true,
       isDisabled: true,
     });
+  });
+
+  test('keeps a stable title action slot width even when save is hidden', () => {
+    expect(MEETING_DETAIL_TITLE_ACTION_SLOT_MIN_WIDTH).toBe(88);
   });
 
   test('keeps the meeting output sections in summary-first order', () => {

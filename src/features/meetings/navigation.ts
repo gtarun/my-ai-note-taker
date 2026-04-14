@@ -4,6 +4,17 @@ export function getMeetingDetailEntryMethod() {
   return 'push' as const;
 }
 
+export function getMeetingDetailHeaderFallback(canReturnToPreviousScreen: boolean) {
+  if (canReturnToPreviousScreen) {
+    return null;
+  }
+
+  return {
+    label: 'Meetings',
+    href: APP_TABS_ROUTE,
+  };
+}
+
 export function getMeetingDetailBackAction(canReturnToPreviousScreen: boolean) {
   if (canReturnToPreviousScreen) {
     return {

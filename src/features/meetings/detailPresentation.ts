@@ -1,3 +1,5 @@
+export const MEETING_DETAIL_TITLE_ACTION_SLOT_MIN_WIDTH = 88;
+
 export const MEETING_DETAIL_SECTION_ORDER = [
   'summary',
   'actionItems',

@@ -4,6 +4,7 @@ import { APP_TABS_ROUTE } from '../../navigation/routes';
 import {
   getMeetingDetailBackAction,
   getMeetingDetailEntryMethod,
+  getMeetingDetailHeaderFallback,
 } from './navigation';
 
 describe('meeting detail navigation', () => {
@@ -20,6 +21,15 @@ describe('meeting detail navigation', () => {
     expect(getMeetingDetailBackAction(false)).toEqual({
       kind: 'route',
       label: 'Back to meetings',
+      href: APP_TABS_ROUTE,
+    });
+  });
+
+  test('provides a single header fallback when there is no stack history', () => {
+    expect(getMeetingDetailHeaderFallback(true)).toBeNull();
+
+    expect(getMeetingDetailHeaderFallback(false)).toEqual({
+      label: 'Meetings',
       href: APP_TABS_ROUTE,
     });
   });
