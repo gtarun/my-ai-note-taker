@@ -4,6 +4,7 @@ import { defaultProviderConfigs } from '../../services/providers';
 import type { InstalledModelRow, ProviderConfig, ProviderId } from '../../types';
 import {
   buildActiveProviderSummary,
+  buildSettingsOverviewItems,
   displayModelLabel,
   formatBytes,
   getConfiguredProviderIds,
@@ -75,5 +76,20 @@ describe('settings presentation', () => {
         modelCatalogUrl: '',
       })
     ).toBe('openrouter');
+  });
+
+  test('builds compact overview rows for the settings header', () => {
+    expect(
+      buildSettingsOverviewItems({
+        transcriptionProviderLabel: 'OpenAI',
+        summaryProviderLabel: 'OpenRouter',
+        installedTranscriptionCount: 1,
+        installedSummaryCount: 2,
+      })
+    ).toEqual([
+      { label: 'Transcription', value: 'OpenAI' },
+      { label: 'Summary', value: 'OpenRouter' },
+      { label: 'Local models', value: '3 installed' },
+    ]);
   });
 });

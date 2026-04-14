@@ -18,7 +18,6 @@ import {
 import { FadeInView } from '../components/FadeInView';
 import { ScreenBackground } from '../components/ScreenBackground';
 import {
-  EditorialHero,
   PillButton,
   SectionHeading,
   StatusChip,
@@ -26,6 +25,7 @@ import {
 } from '../components/ui';
 import {
   buildActiveProviderSummary,
+  buildSettingsOverviewItems,
   displayModelLabel,
   formatBytes,
   getConfiguredProviderIds,
@@ -118,6 +118,12 @@ export default function SettingsScreen() {
     summaryProviderLabel: summaryProvider.label,
     transcriptionModelLabel,
     summaryModelLabel,
+  });
+  const overviewItems = buildSettingsOverviewItems({
+    transcriptionProviderLabel: transcriptionProvider.label,
+    summaryProviderLabel: summaryProvider.label,
+    installedTranscriptionCount: installedTranscriptionModels.length,
+    installedSummaryCount: installedSummaryModels.length,
   });
 
   const updateForm = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
@@ -306,46 +312,37 @@ export default function SettingsScreen() {
       <ScreenBackground />
       <ScrollView contentContainerStyle={styles.container}>
         <FadeInView>
-          <EditorialHero
-            eyebrow="Editorial routing"
-            title="Choose who handles each step."
-            body="Keep provider setup separate from assignment. Configure credentials once, then route transcript and summary to the provider that fits each meeting."
-            pillLabel={`${configuredProviderIds.length} configured`}
-            chips={['Transcription', 'Summary', 'Local models']}
+          <SectionHeading
+            title="Current setup"
+            subtitle="Pick the provider for each job first. Configure credentials and local models below when you need to change them."
           />
         </FadeInView>
 
         <FadeInView delay={30}>
           <SurfaceCard muted style={styles.summaryCard}>
-            <SectionHeading
-              title="Current routing"
-              subtitle="This is the active processing path that will be used for new work."
-            />
-            <Text style={styles.summaryBody}>{activeProviderSummary}</Text>
-            <View style={styles.summaryGrid}>
-              <SummaryBlock
-                label="Transcription"
-                providerLabel={transcriptionProvider.label}
-                modelLabel={transcriptionModelLabel}
-                providerId={sanitizedForm.selectedTranscriptionProvider}
-              />
-              <SummaryBlock
-                label="Summary"
-                providerLabel={summaryProvider.label}
-                modelLabel={summaryModelLabel}
-                providerId={sanitizedForm.selectedSummaryProvider}
-              />
+            <View style={styles.summaryRows}>
+              {overviewItems.map((item) => (
+                <View key={item.label} style={styles.summaryRow}>
+                  <Text style={styles.summaryRowLabel}>{item.label}</Text>
+                  <Text style={styles.summaryRowValue}>{item.value}</Text>
+                </View>
+              ))}
             </View>
+            <Text style={styles.summaryBody}>{activeProviderSummary}</Text>
             <View style={styles.summaryActions}>
-              <PillButton label={isSaving ? 'Saving…' : 'Save settings'} onPress={handleSave} disabled={isSaving} />
+              <PillButton
+                label={isSaving ? 'Saving…' : 'Save settings'}
+                onPress={handleSave}
+                disabled={isSaving}
+              />
             </View>
           </SurfaceCard>
         </FadeInView>
 
         <AssignmentSection
           delay={60}
-          title="Transcription assignment"
-          subtitle="Pick which configured provider turns audio into text."
+          title="Transcription provider"
+          subtitle="Choose which configured provider turns audio into text."
           icon={<Feather name="mic" size={18} color={palette.ink} />}
           mode="transcription"
           selectedProviderId={sanitizedForm.selectedTranscriptionProvider}
@@ -357,8 +354,8 @@ export default function SettingsScreen() {
 
         <AssignmentSection
           delay={90}
-          title="Summary assignment"
-          subtitle="Pick which configured provider writes summaries, action items, and decisions."
+          title="Summary provider"
+          subtitle="Choose which configured provider writes summaries, action items, and decisions."
           icon={<Feather name="file-text" size={18} color={palette.ink} />}
           mode="summary"
           selectedProviderId={sanitizedForm.selectedSummaryProvider}
@@ -372,7 +369,7 @@ export default function SettingsScreen() {
           <SurfaceCard style={styles.providersSection}>
             <SectionHeading
               title="Configured providers"
-              subtitle="Select a provider to edit credentials, defaults, or local model bindings."
+              subtitle="Configure each provider once, then reuse it above for transcription or summary."
             />
             <View style={styles.providerStats}>
               <StatusChip label={`${configuredProviderIds.length} configured`} tone="secondary" />
@@ -580,8 +577,8 @@ export default function SettingsScreen() {
         <FadeInView delay={180}>
           <SurfaceCard muted style={styles.advancedSection}>
             <SectionHeading
-              title="Advanced controls"
-              subtitle="Privacy defaults and cleanup behavior for remote processing."
+              title="Advanced"
+              subtitle="Optional storage and cleanup behavior for remote processing."
             />
 
             <View style={styles.toggleRow}>
@@ -926,29 +923,6 @@ function ModelField({
   );
 }
 
-function SummaryBlock({
-  label,
-  providerLabel,
-  modelLabel,
-  providerId,
-}: {
-  label: string;
-  providerLabel: string;
-  modelLabel: string;
-  providerId: ProviderId;
-}) {
-  return (
-    <View style={styles.summaryBlock}>
-      <Text style={styles.summaryLabel}>{label}</Text>
-      <View style={styles.providerTitleRow}>
-        <ProviderIcon providerId={providerId} />
-        <Text style={styles.summaryProvider}>{providerLabel}</Text>
-      </View>
-      <Text style={styles.summaryModel}>{modelLabel}</Text>
-    </View>
-  );
-}
-
 function FieldGroup({ children }: { children: ReactNode }) {
   return <View style={styles.fieldGroup}>{children}</View>;
 }
@@ -1045,38 +1019,32 @@ const styles = StyleSheet.create({
   summaryCard: {
     gap: 14,
   },
-  summaryBody: {
-    color: palette.ink,
-    fontFamily: typography.bodyStrong.fontFamily,
-    fontSize: 15,
-    lineHeight: 22,
+  summaryRows: {
+    gap: 12,
   },
-  summaryGrid: {
-    gap: 10,
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
   },
-  summaryBlock: {
-    backgroundColor: palette.cardMuted,
-    borderRadius: radii.xl,
-    padding: 16,
-    gap: 8,
-  },
-  summaryLabel: {
-    color: palette.accent,
+  summaryRowLabel: {
+    color: palette.mutedInk,
     fontFamily: typography.label.fontFamily,
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    fontSize: 13,
   },
-  summaryProvider: {
+  summaryRowValue: {
     color: palette.ink,
     fontFamily: typography.heading.fontFamily,
-    fontSize: 17,
+    fontSize: 14,
+    flexShrink: 1,
+    textAlign: 'right',
   },
-  summaryModel: {
+  summaryBody: {
     color: palette.mutedInk,
     fontFamily: typography.body.fontFamily,
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 22,
   },
   summaryActions: {
     alignItems: 'flex-start',

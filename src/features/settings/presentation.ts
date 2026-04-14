@@ -59,3 +59,26 @@ export function buildActiveProviderSummary({
 }) {
   return `Transcript uses ${transcriptionProviderLabel} (${transcriptionModelLabel}). Summary uses ${summaryProviderLabel} (${summaryModelLabel}).`;
 }
+
+export function buildSettingsOverviewItems({
+  transcriptionProviderLabel,
+  summaryProviderLabel,
+  installedTranscriptionCount,
+  installedSummaryCount,
+}: {
+  transcriptionProviderLabel: string;
+  summaryProviderLabel: string;
+  installedTranscriptionCount: number;
+  installedSummaryCount: number;
+}) {
+  const installedCount = installedTranscriptionCount + installedSummaryCount;
+
+  return [
+    { label: 'Transcription', value: transcriptionProviderLabel },
+    { label: 'Summary', value: summaryProviderLabel },
+    {
+      label: 'Local models',
+      value: installedCount > 0 ? `${installedCount} installed` : 'None installed',
+    },
+  ];
+}
