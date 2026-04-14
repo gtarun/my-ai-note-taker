@@ -5,6 +5,7 @@ import {
   getMeetingDetailBackAction,
   getMeetingDetailEntryMethod,
   getMeetingDetailHeaderFallback,
+  shouldShowMeetingDetailMissingStateButton,
 } from './navigation';
 
 describe('meeting detail navigation', () => {
@@ -32,5 +33,10 @@ describe('meeting detail navigation', () => {
       label: 'Meetings',
       href: APP_TABS_ROUTE,
     });
+  });
+
+  test('hides the missing-state body button when the header already provides navigation', () => {
+    expect(shouldShowMeetingDetailMissingStateButton(true)).toBe(false);
+    expect(shouldShowMeetingDetailMissingStateButton(false)).toBe(false);
   });
 });

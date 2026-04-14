@@ -23,7 +23,10 @@ import {
   getMeetingDetailTitleDraftState,
   getPlaybackActionLabel,
 } from '../../src/features/meetings/detailPresentation';
-import { getMeetingDetailHeaderFallback } from '../../src/features/meetings/navigation';
+import {
+  getMeetingDetailHeaderFallback,
+  shouldShowMeetingDetailMissingStateButton,
+} from '../../src/features/meetings/navigation';
 import { APP_TABS_ROUTE } from '../../src/navigation/routes';
 import { getAppSettings } from '../../src/services/settings';
 import { MeetingRow, SummaryPayload } from '../../src/types';
@@ -42,7 +45,8 @@ export default function MeetingDetailScreen() {
   const [isDeleting, setIsDeleting] = useState(false);
   const player = useAudioPlayer(meeting?.audioUri ?? null);
   const playerStatus = useAudioPlayerStatus(player);
-  const headerFallback = getMeetingDetailHeaderFallback(router.canGoBack());
+  const canReturnToPreviousScreen = router.canGoBack();
+  const headerFallback = getMeetingDetailHeaderFallback(canReturnToPreviousScreen);
 
   const loadMeeting = useCallback(async () => {
     if (!id) {
@@ -203,9 +207,11 @@ export default function MeetingDetailScreen() {
           <Text style={styles.notFoundBody}>
             This recording may have been deleted or the link is no longer valid.
           </Text>
-          <Pressable style={styles.primaryButton} onPress={() => router.replace(APP_TABS_ROUTE)}>
-            <Text style={styles.primaryButtonText}>Back to meetings</Text>
-          </Pressable>
+          {shouldShowMeetingDetailMissingStateButton(canReturnToPreviousScreen) ? (
+            <Pressable style={styles.primaryButton} onPress={() => router.replace(APP_TABS_ROUTE)}>
+              <Text style={styles.primaryButtonText}>Back to meetings</Text>
+            </Pressable>
+          ) : null}
         </View>
       </SafeAreaView>
     );

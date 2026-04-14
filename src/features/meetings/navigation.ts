@@ -15,6 +15,10 @@ export function getMeetingDetailHeaderFallback(canReturnToPreviousScreen: boolea
   };
 }
 
+export function shouldShowMeetingDetailMissingStateButton(_canReturnToPreviousScreen: boolean) {
+  return false;
+}
+
 export function getMeetingDetailBackAction(canReturnToPreviousScreen: boolean) {
   if (canReturnToPreviousScreen) {
     return {
