@@ -150,11 +150,9 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: palette.paper },
         }}
       >
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-        <Stack.Screen name="index" options={{ title: 'Meetings' }} />
         <Stack.Screen name="account" options={{ title: 'Account' }} />
-        <Stack.Screen name="record" options={{ title: 'New Recording' }} />
-        <Stack.Screen name="settings" options={{ title: 'Settings' }} />
         <Stack.Screen name="meetings/[id]" options={{ title: 'Meeting' }} />
       </Stack>
     </>

@@ -17,6 +17,7 @@ import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 
 import { FadeInView } from '../../src/components/FadeInView';
 import { ScreenBackground } from '../../src/components/ScreenBackground';
+import { APP_TABS_ROUTE } from '../../src/navigation/routes';
 import { getAppSettings } from '../../src/services/settings';
 import { MeetingRow, SummaryPayload } from '../../src/types';
 import { deleteMeeting, getMeeting, processMeeting, renameMeeting } from '../../src/services/meetings';
@@ -122,7 +123,7 @@ export default function MeetingDetailScreen() {
             setIsDeleting(true);
             player.pause();
             await deleteMeeting(id);
-            router.replace('/');
+            router.replace(APP_TABS_ROUTE);
           } catch (error) {
             Alert.alert(
               'Delete failed',
@@ -162,7 +163,7 @@ export default function MeetingDetailScreen() {
           <Text style={styles.notFoundBody}>
             This recording may have been deleted or the link is no longer valid.
           </Text>
-          <Pressable style={styles.primaryButton} onPress={() => router.replace('/')}>
+          <Pressable style={styles.primaryButton} onPress={() => router.replace(APP_TABS_ROUTE)}>
             <Text style={styles.primaryButtonText}>Back to meetings</Text>
           </Pressable>
         </View>

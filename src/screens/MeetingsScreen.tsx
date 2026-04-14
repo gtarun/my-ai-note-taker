@@ -12,24 +12,25 @@ import {
   View,
 } from 'react-native';
 
-import { FadeInView } from '../src/components/FadeInView';
-import { ScreenBackground } from '../src/components/ScreenBackground';
+import { FadeInView } from '../components/FadeInView';
+import { ScreenBackground } from '../components/ScreenBackground';
 import {
   EditorialHero,
   PillButton,
   SectionHeading,
   StatusChip,
   SurfaceCard,
-} from '../src/components/ui';
+} from '../components/ui';
 import {
   getDashboardEmptyStateCopy,
   getMeetingStatusMeta,
-} from '../src/features/dashboard/presentation';
-import { getAuthSession } from '../src/services/account';
-import { createMeetingFromImport, listMeetings } from '../src/services/meetings';
-import type { AuthSession, MeetingRow } from '../src/types';
-import { palette, typography } from '../src/theme';
-import { formatDuration, formatTimestamp } from '../src/utils/format';
+} from '../features/dashboard/presentation';
+import { RECORD_TAB_ROUTE, SETTINGS_TAB_ROUTE, getMeetingDetailRoute } from '../navigation/routes';
+import { getAuthSession } from '../services/account';
+import { createMeetingFromImport, listMeetings } from '../services/meetings';
+import type { AuthSession, MeetingRow } from '../types';
+import { palette, typography } from '../theme';
+import { formatDuration, formatTimestamp } from '../utils/format';
 
 const emptyCopy = getDashboardEmptyStateCopy();
 
@@ -71,7 +72,7 @@ export default function HomeScreen() {
 
       const meetingId = await createMeetingFromImport(result.assets[0]);
       await loadMeetings();
-      router.push(`/meetings/${meetingId}`);
+      router.push(getMeetingDetailRoute(meetingId));
     } catch (error) {
       Alert.alert('Import failed', error instanceof Error ? error.message : 'Unable to import audio.');
     } finally {
@@ -111,7 +112,7 @@ export default function HomeScreen() {
                       color={palette.card}
                     />
                   }
-                  onPress={() => router.push('/record')}
+                  onPress={() => router.push(RECORD_TAB_ROUTE)}
                 />
                 <PillButton
                   label={importButtonLabel}
@@ -143,7 +144,7 @@ export default function HomeScreen() {
                     />
                     <PillButton
                       label="Settings"
-                      onPress={() => router.push('/settings')}
+                      onPress={() => router.push(SETTINGS_TAB_ROUTE)}
                       variant="ghost"
                     />
                   </View>
@@ -160,7 +161,7 @@ export default function HomeScreen() {
             const statusMeta = getMeetingStatusMeta(item.status);
 
             return (
-              <Pressable onPress={() => router.push(`/meetings/${item.id}`)}>
+              <Pressable onPress={() => router.push(getMeetingDetailRoute(item.id))}>
                 <SurfaceCard style={styles.meetingCard}>
                   <View style={styles.meetingHeader}>
                     <Text style={styles.meetingTitle}>{item.title}</Text>
@@ -178,7 +179,7 @@ export default function HomeScreen() {
                   <View style={styles.meetingAction}>
                     <PillButton
                       label="Open meeting"
-                      onPress={() => router.push(`/meetings/${item.id}`)}
+                      onPress={() => router.push(getMeetingDetailRoute(item.id))}
                       variant="ghost"
                     />
                   </View>
@@ -191,7 +192,7 @@ export default function HomeScreen() {
               <Text style={styles.emptyTitle}>{emptyCopy.title}</Text>
               <Text style={styles.emptyBody}>{emptyCopy.body}</Text>
               <View style={styles.emptyActions}>
-                <PillButton label="New recording" onPress={() => router.push('/record')} />
+                <PillButton label="New recording" onPress={() => router.push(RECORD_TAB_ROUTE)} />
                 <PillButton
                   label={importButtonLabel}
                   onPress={handleImport}

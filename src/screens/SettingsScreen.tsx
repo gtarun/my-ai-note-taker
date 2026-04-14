@@ -15,23 +15,23 @@ import {
   View,
 } from 'react-native';
 
-import { FadeInView } from '../src/components/FadeInView';
-import { ScreenBackground } from '../src/components/ScreenBackground';
+import { FadeInView } from '../components/FadeInView';
+import { ScreenBackground } from '../components/ScreenBackground';
 import {
   EditorialHero,
   PillButton,
   SectionHeading,
   StatusChip,
   SurfaceCard,
-} from '../src/components/ui';
+} from '../components/ui';
 import {
   buildActiveProviderSummary,
   displayModelLabel,
   formatBytes,
   getConfiguredProviderIds,
   pickInitialProvider,
-} from '../src/features/settings/presentation';
-import { getLocalDeviceSupport } from '../src/services/localInference';
+} from '../features/settings/presentation';
+import { getLocalDeviceSupport } from '../services/localInference';
 import {
   deleteInstalledModel,
   downloadModel,
@@ -39,9 +39,9 @@ import {
   getInstalledModels,
   getInstalledModelsForKind,
   getModelCatalog,
-} from '../src/services/localModels';
-import { defaultProviderConfigs, providerDefinitions, providerMap } from '../src/services/providers';
-import { getAppSettings, sanitizeAppSettings, saveAppSettings } from '../src/services/settings';
+} from '../services/localModels';
+import { defaultProviderConfigs, providerDefinitions, providerMap } from '../services/providers';
+import { getAppSettings, sanitizeAppSettings, saveAppSettings } from '../services/settings';
 import type {
   AppSettings,
   InstalledModelRow,
@@ -49,8 +49,8 @@ import type {
   ModelCatalogItem,
   ProviderConfig,
   ProviderId,
-} from '../src/types';
-import { palette, radii, typography } from '../src/theme';
+} from '../types';
+import { palette, radii, typography } from '../theme';
 
 export default function SettingsScreen() {
   const [form, setForm] = useState<AppSettings | null>(null);

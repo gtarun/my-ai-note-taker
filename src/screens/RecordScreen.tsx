@@ -19,12 +19,13 @@ import {
   View,
 } from 'react-native';
 
-import { FadeInView } from '../src/components/FadeInView';
-import { ScreenBackground } from '../src/components/ScreenBackground';
-import { uploadMeetingRecordingIfConfigured } from '../src/services/googleDrive';
-import { createMeetingFromRecording } from '../src/services/meetings';
-import { formatDuration } from '../src/utils/format';
-import { elevation, palette } from '../src/theme';
+import { FadeInView } from '../components/FadeInView';
+import { ScreenBackground } from '../components/ScreenBackground';
+import { getMeetingDetailRoute } from '../navigation/routes';
+import { uploadMeetingRecordingIfConfigured } from '../services/googleDrive';
+import { createMeetingFromRecording } from '../services/meetings';
+import { formatDuration } from '../utils/format';
+import { elevation, palette } from '../theme';
 
 export default function RecordScreen() {
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -69,7 +70,7 @@ export default function RecordScreen() {
           );
         }
 
-        router.replace(`/meetings/${meetingId}`);
+        router.replace(getMeetingDetailRoute(meetingId));
       } catch (error) {
         Alert.alert('Save failed', error instanceof Error ? error.message : 'Unable to save recording.');
       } finally {
