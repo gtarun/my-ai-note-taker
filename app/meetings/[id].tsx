@@ -24,8 +24,7 @@ import {
   getPlaybackActionLabel,
 } from '../../src/features/meetings/detailPresentation';
 import {
-  getMeetingDetailHeaderFallback,
-  shouldShowMeetingDetailMissingStateButton,
+  getMeetingDetailHeaderPresentation,
 } from '../../src/features/meetings/navigation';
 import { APP_TABS_ROUTE } from '../../src/navigation/routes';
 import { getAppSettings } from '../../src/services/settings';
@@ -46,7 +45,12 @@ export default function MeetingDetailScreen() {
   const player = useAudioPlayer(meeting?.audioUri ?? null);
   const playerStatus = useAudioPlayerStatus(player);
   const canReturnToPreviousScreen = router.canGoBack();
-  const headerFallback = getMeetingDetailHeaderFallback(canReturnToPreviousScreen);
+  const headerPresentation = getMeetingDetailHeaderPresentation(canReturnToPreviousScreen);
+  const screenOptions = getMeetingDetailScreenOptions(headerPresentation, () => {
+    if (headerPresentation.fallback) {
+      router.replace(headerPresentation.fallback.href);
+    }
+  });
 
   const loadMeeting = useCallback(async () => {
     if (!id) {
@@ -162,20 +166,7 @@ export default function MeetingDetailScreen() {
     return (
       <View style={styles.centered}>
         <Stack.Screen
-          options={{
-            headerBackVisible: !headerFallback,
-            headerLeft: headerFallback
-              ? () => (
-                  <Pressable
-                    style={styles.headerFallbackButton}
-                    onPress={() => router.replace(headerFallback.href)}
-                  >
-                    <Feather name="arrow-left" size={16} color={palette.ink} />
-                    <Text style={styles.headerFallbackButtonText}>{headerFallback.label}</Text>
-                  </Pressable>
-                )
-              : undefined,
-          }}
+          options={screenOptions}
         />
         <ActivityIndicator size="large" color={palette.ink} />
       </View>
@@ -186,20 +177,7 @@ export default function MeetingDetailScreen() {
     return (
       <SafeAreaView style={styles.safeArea}>
         <Stack.Screen
-          options={{
-            headerBackVisible: !headerFallback,
-            headerLeft: headerFallback
-              ? () => (
-                  <Pressable
-                    style={styles.headerFallbackButton}
-                    onPress={() => router.replace(headerFallback.href)}
-                  >
-                    <Feather name="arrow-left" size={16} color={palette.ink} />
-                    <Text style={styles.headerFallbackButtonText}>{headerFallback.label}</Text>
-                  </Pressable>
-                )
-              : undefined,
-          }}
+          options={screenOptions}
         />
         <ScreenBackground />
         <View style={styles.centered}>
@@ -207,11 +185,6 @@ export default function MeetingDetailScreen() {
           <Text style={styles.notFoundBody}>
             This recording may have been deleted or the link is no longer valid.
           </Text>
-          {shouldShowMeetingDetailMissingStateButton(canReturnToPreviousScreen) ? (
-            <Pressable style={styles.primaryButton} onPress={() => router.replace(APP_TABS_ROUTE)}>
-              <Text style={styles.primaryButtonText}>Back to meetings</Text>
-            </Pressable>
-          ) : null}
         </View>
       </SafeAreaView>
     );
@@ -223,20 +196,7 @@ export default function MeetingDetailScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <Stack.Screen
-        options={{
-          headerBackVisible: !headerFallback,
-          headerLeft: headerFallback
-            ? () => (
-                <Pressable
-                  style={styles.headerFallbackButton}
-                  onPress={() => router.replace(headerFallback.href)}
-                >
-                  <Feather name="arrow-left" size={16} color={palette.ink} />
-                  <Text style={styles.headerFallbackButtonText}>{headerFallback.label}</Text>
-                </Pressable>
-              )
-            : undefined,
-        }}
+        options={screenOptions}
       />
       <ScreenBackground />
       <ScrollView contentContainerStyle={styles.container}>
@@ -425,6 +385,27 @@ ${actionItems}
 
 Transcript
 ${meeting.transcriptText || 'No transcript yet.'}`;
+}
+
+function getMeetingDetailScreenOptions(
+  headerPresentation: ReturnType<typeof getMeetingDetailHeaderPresentation>,
+  handleFallbackPress: () => void
+) {
+  if (!headerPresentation.fallback) {
+    return {
+      headerBackButtonDisplayMode: headerPresentation.headerBackButtonDisplayMode,
+    };
+  }
+
+  return {
+    headerBackVisible: headerPresentation.headerBackVisible,
+    headerLeft: () => (
+      <Pressable style={styles.headerFallbackButton} onPress={handleFallbackPress}>
+        <Feather name="arrow-left" size={16} color={palette.ink} />
+        <Text style={styles.headerFallbackButtonText}>{headerPresentation.fallback.label}</Text>
+      </Pressable>
+    ),
+  };
 }
 
 const styles = StyleSheet.create({

@@ -2,10 +2,8 @@ import { describe, expect, test } from 'vitest';
 
 import { APP_TABS_ROUTE } from '../../navigation/routes';
 import {
-  getMeetingDetailBackAction,
   getMeetingDetailEntryMethod,
-  getMeetingDetailHeaderFallback,
-  shouldShowMeetingDetailMissingStateButton,
+  getMeetingDetailHeaderPresentation,
 } from './navigation';
 
 describe('meeting detail navigation', () => {
@@ -13,30 +11,20 @@ describe('meeting detail navigation', () => {
     expect(getMeetingDetailEntryMethod()).toBe('push');
   });
 
-  test('falls back to the tab shell when there is no back stack', () => {
-    expect(getMeetingDetailBackAction(true)).toEqual({
-      kind: 'history',
-      label: 'Back',
-    });
-
-    expect(getMeetingDetailBackAction(false)).toEqual({
-      kind: 'route',
-      label: 'Back to meetings',
-      href: APP_TABS_ROUTE,
+  test('uses the native back affordance without a route-group label when history exists', () => {
+    expect(getMeetingDetailHeaderPresentation(true)).toEqual({
+      headerBackButtonDisplayMode: 'minimal',
+      fallback: null,
     });
   });
 
-  test('provides a single header fallback when there is no stack history', () => {
-    expect(getMeetingDetailHeaderFallback(true)).toBeNull();
-
-    expect(getMeetingDetailHeaderFallback(false)).toEqual({
-      label: 'Meetings',
-      href: APP_TABS_ROUTE,
+  test('provides a single Meetings header fallback when there is no stack history', () => {
+    expect(getMeetingDetailHeaderPresentation(false)).toEqual({
+      headerBackVisible: false,
+      fallback: {
+        label: 'Meetings',
+        href: APP_TABS_ROUTE,
+      },
     });
-  });
-
-  test('hides the missing-state body button when the header already provides navigation', () => {
-    expect(shouldShowMeetingDetailMissingStateButton(true)).toBe(false);
-    expect(shouldShowMeetingDetailMissingStateButton(false)).toBe(false);
   });
 });
