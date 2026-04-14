@@ -13,7 +13,9 @@ describe('meeting detail navigation', () => {
 
   test('uses the native back affordance without a route-group label when history exists', () => {
     expect(getMeetingDetailHeaderPresentation(true)).toEqual({
+      headerBackVisible: true,
       headerBackButtonDisplayMode: 'minimal',
+      showHeaderFallback: false,
       fallback: null,
     });
   });
@@ -21,6 +23,8 @@ describe('meeting detail navigation', () => {
   test('provides a single Meetings header fallback when there is no stack history', () => {
     expect(getMeetingDetailHeaderPresentation(false)).toEqual({
       headerBackVisible: false,
+      headerBackButtonDisplayMode: 'default',
+      showHeaderFallback: true,
       fallback: {
         label: 'Meetings',
         href: APP_TABS_ROUTE,

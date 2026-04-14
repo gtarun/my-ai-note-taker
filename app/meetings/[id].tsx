@@ -391,20 +391,18 @@ function getMeetingDetailScreenOptions(
   headerPresentation: ReturnType<typeof getMeetingDetailHeaderPresentation>,
   handleFallbackPress: () => void
 ) {
-  if (!headerPresentation.fallback) {
-    return {
-      headerBackButtonDisplayMode: headerPresentation.headerBackButtonDisplayMode,
-    };
-  }
-
   return {
     headerBackVisible: headerPresentation.headerBackVisible,
-    headerLeft: () => (
-      <Pressable style={styles.headerFallbackButton} onPress={handleFallbackPress}>
-        <Feather name="arrow-left" size={16} color={palette.ink} />
-        <Text style={styles.headerFallbackButtonText}>{headerPresentation.fallback.label}</Text>
-      </Pressable>
-    ),
+    headerBackButtonDisplayMode: headerPresentation.headerBackButtonDisplayMode,
+    headerLeft:
+      headerPresentation.showHeaderFallback && headerPresentation.fallback
+        ? () => (
+            <Pressable style={styles.headerFallbackButton} onPress={handleFallbackPress}>
+              <Feather name="arrow-left" size={16} color={palette.ink} />
+              <Text style={styles.headerFallbackButtonText}>{headerPresentation.fallback.label}</Text>
+            </Pressable>
+          )
+        : undefined,
   };
 }
 
