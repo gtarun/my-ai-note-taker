@@ -33,7 +33,7 @@ Use the simplest architecture that works for a solo builder shipping fast.
 
 ### Local Data
 
-- [`src/db.ts`](/Users/tarun/Documents/projects/mu-fathom/src/db.ts) initializes SQLite
+- [`src/db.ts`](../src/db.ts) initializes SQLite
 - metadata is stored in the `meetings` table
 - local model install metadata is stored in the `installed_models` table
 - model files are stored under `documentDirectory/models`
@@ -43,15 +43,16 @@ Use the simplest architecture that works for a solo builder shipping fast.
 
 ### Services
 
-- [`src/services/bootstrap.ts`](/Users/tarun/Documents/projects/mu-fathom/src/services/bootstrap.ts): creates the local audio directory and initializes storage
-- [`src/services/meetings.ts`](/Users/tarun/Documents/projects/mu-fathom/src/services/meetings.ts): meeting CRUD and processing flow
-- [`src/services/ai.ts`](/Users/tarun/Documents/projects/mu-fathom/src/services/ai.ts): transcription and summary API calls
-- [`src/services/settings.ts`](/Users/tarun/Documents/projects/mu-fathom/src/services/settings.ts): local settings persistence
-- [`src/services/account.ts`](/Users/tarun/Documents/projects/mu-fathom/src/services/account.ts): Supabase auth client and Google Drive edge-function contract
-- [`src/services/googleDrive.ts`](/Users/tarun/Documents/projects/mu-fathom/src/services/googleDrive.ts): Drive folder creation and recording upload flow
-- [`src/services/providers.ts`](/Users/tarun/Documents/projects/mu-fathom/src/services/providers.ts): provider catalog and defaults
-- [`src/services/localModels.ts`](/Users/tarun/Documents/projects/mu-fathom/src/services/localModels.ts): model catalog loading, download, checksum verification, and install/delete
-- [`src/services/localInference.ts`](/Users/tarun/Documents/projects/mu-fathom/src/services/localInference.ts): local transcription/summary bridge and transcript chunking
+- [`src/services/bootstrap.ts`](../src/services/bootstrap.ts): creates the local audio directory and initializes storage
+- [`src/services/meetings.ts`](../src/services/meetings.ts): meeting CRUD and processing flow
+- [`src/services/ai.ts`](../src/services/ai.ts): transcription and summary API calls
+- [`src/services/settings.ts`](../src/services/settings.ts): local settings persistence
+- [`src/services/account.ts`](../src/services/account.ts): Supabase auth client and Google Drive edge-function contract
+- [`src/services/googleDrive.ts`](../src/services/googleDrive.ts): Drive folder creation and recording upload flow
+- [`src/services/providers.ts`](../src/services/providers.ts): provider catalog and defaults
+- [`src/services/localModels.ts`](../src/services/localModels.ts): model catalog loading, download, checksum verification, and install/delete
+- [`src/services/localInference.ts`](../src/services/localInference.ts): local transcription/summary bridge and transcript chunking
+- `modules/mu-fathom-local-ai`: Expo local native module that exposes the runtime support / transcription / summary contract
 - `supabase/functions/google-drive-connect-url`: Google OAuth start/callback handler
 - `supabase/functions/google-drive-access-token`: returns a fresh Drive access token for the signed-in user
 - `supabase/functions/google-drive-save-folder`: persists the user-picked Drive folder
@@ -89,15 +90,23 @@ Use the simplest architecture that works for a solo builder shipping fast.
 4. The app verifies file size and optional SHA-256 before marking the model installed
 5. Installed model metadata is saved into `installed_models`
 6. If the user selects `Local` for transcription and/or summary, `src/services/meetings.ts` routes processing into `src/services/localInference.ts`
-7. `localInference` expects an Expo native module named `MuFathomLocalAI`
-8. If that module is not present, the app shows a clear local-runtime-unavailable state instead of pretending offline inference works
+7. `localInference` calls the Expo native module named `MuFathomLocalAI`
+8. If that module is not present, the app shows a clear missing-runtime state
+9. If the module is present on iOS:
+   - `whisper-base` transcription runs for real and returns plain transcript text
+   - any other local transcription model fails clearly
+   - local summary still fails clearly because it is unsupported on-device
+10. On Android, the module remains a later-phase boundary-only contract
+11. The app does not pretend offline summary works until a real on-device summary engine is wired in
 
 ## Local Runtime Plan
 
-- transcription engine shape: `whisper.cpp`
-- summary engine shape: Gemma-family small model through `mediapipe-llm` or `litert-lm`
+- transcription engine shape: `whisper.cpp` on iOS first, with `whisper-base` now real
+- summary engine shape: Gemma-family small model through `mediapipe-llm` or `litert-lm` in a later slice
 - transcript chunking is already scaffolded in JS
-- the remaining work is native runtime implementation and a custom build path
+- the runtime boundary already exists
+- local summary remains unsupported in the current phase
+- Android stays on a later-phase boundary-only contract
 
 ## Current Limitations
 
@@ -107,7 +116,10 @@ Use the simplest architecture that works for a solo builder shipping fast.
 - Drive upload failures are surfaced as alerts but not persisted as retryable job state
 - no provider capability verification beyond local config
 - imported file duration is not yet resolved
-- Expo Go and web builds do not include the native local AI runtime
+- Expo Go and web builds do not provide real local inference
+- local summary is not available on-device yet
+- iOS local transcription is limited to `whisper-base`
+- Android project files are not currently checked in, so Android native verification still needs `npx expo prebuild -p android` or `npx expo run:android`
 - the built-in local model catalog is only a starter shape; real downloads require hosted model files and a real catalog URL
 - arbitrary local model import is intentionally not supported in v1
 

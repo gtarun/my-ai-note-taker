@@ -1,4 +1,5 @@
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { Stack, useLocalSearchParams, useFocusEffect, router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -19,15 +20,18 @@ import { FadeInView } from '../../src/components/FadeInView';
 import { ScreenBackground } from '../../src/components/ScreenBackground';
 import {
   MEETING_DETAIL_TITLE_ACTION_SLOT_MIN_WIDTH,
+  getMeetingDetailActionItemsCopyText,
+  getMeetingDetailDecisionsCopyText,
   getMeetingDetailPrimaryActionLabel,
+  getMeetingDetailSummaryCopyText,
   getMeetingDetailTitleDraftState,
+  getMeetingDetailTranscriptCopyText,
   getPlaybackActionLabel,
 } from '../../src/features/meetings/detailPresentation';
 import {
   getMeetingDetailHeaderPresentation,
 } from '../../src/features/meetings/navigation';
 import { APP_TABS_ROUTE } from '../../src/navigation/routes';
-import { getAppSettings } from '../../src/services/settings';
 import { MeetingRow, SummaryPayload } from '../../src/types';
 import { deleteMeeting, getMeeting, processMeeting, renameMeeting } from '../../src/services/meetings';
 import { formatDuration, formatTimestamp } from '../../src/utils/format';
@@ -38,10 +42,10 @@ export default function MeetingDetailScreen() {
   const [meeting, setMeeting] = useState<MeetingRow | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
-  const [runsOffline, setRunsOffline] = useState(false);
   const [draftTitle, setDraftTitle] = useState('');
   const [isSavingTitle, setIsSavingTitle] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [copiedSection, setCopiedSection] = useState<CopyableMeetingSection | null>(null);
   const player = useAudioPlayer(meeting?.audioUri ?? null);
   const playerStatus = useAudioPlayerStatus(player);
   const canReturnToPreviousScreen = router.canGoBack();
@@ -58,13 +62,9 @@ export default function MeetingDetailScreen() {
       return;
     }
 
-    const [data, settings] = await Promise.all([getMeeting(id), getAppSettings()]);
+    const data = await getMeeting(id);
     setMeeting(data);
     setDraftTitle(data?.title ?? '');
-    setRunsOffline(
-      settings.selectedTranscriptionProvider === 'local' &&
-        settings.selectedSummaryProvider === 'local'
-    );
     setHasLoaded(true);
   }, [id]);
 
@@ -73,6 +73,20 @@ export default function MeetingDetailScreen() {
       player.replace(meeting.audioUri);
     }
   }, [meeting?.audioUri, player]);
+
+  useEffect(() => {
+    if (!copiedSection) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      setCopiedSection((currentSection) => (currentSection === copiedSection ? null : currentSection));
+    }, 1200);
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [copiedSection]);
 
   useFocusEffect(
     useCallback(() => {
@@ -162,6 +176,15 @@ export default function MeetingDetailScreen() {
     player.play();
   };
 
+  const handleCopySection = async (section: CopyableMeetingSection, text: string) => {
+    try {
+      await Clipboard.setStringAsync(text);
+      setCopiedSection(section);
+    } catch (error) {
+      Alert.alert('Copy failed', error instanceof Error ? error.message : 'Unable to copy this text.');
+    }
+  };
+
   if (!hasLoaded) {
     return (
       <View style={styles.centered}>
@@ -192,6 +215,10 @@ export default function MeetingDetailScreen() {
 
   const summary = parseSummary(meeting.summaryJson);
   const titleDraftState = getMeetingDetailTitleDraftState(draftTitle, meeting.title);
+  const summaryCopyText = getMeetingDetailSummaryCopyText(summary);
+  const actionItemsCopyText = getMeetingDetailActionItemsCopyText(summary);
+  const decisionsCopyText = getMeetingDetailDecisionsCopyText(summary);
+  const transcriptCopyText = getMeetingDetailTranscriptCopyText(meeting.transcriptText);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -234,12 +261,6 @@ export default function MeetingDetailScreen() {
               <StatusIcon status={meeting.status} />
               <Text style={styles.status}>Status: {meeting.status.replace('_', ' ')}</Text>
             </View>
-            {runsOffline ? (
-              <View style={styles.inlineOfflineBadge}>
-                <Feather name="smartphone" size={14} color={palette.ink} />
-                <Text style={styles.inlineOfflineBadgeText}>Runs fully offline</Text>
-              </View>
-            ) : null}
           </View>
           {meeting.errorMessage ? <Text style={styles.errorText}>{meeting.errorMessage}</Text> : null}
         </FadeInView>
@@ -267,11 +288,21 @@ export default function MeetingDetailScreen() {
           </Pressable>
         </FadeInView>
 
-        <Section title="Summary" delay={120}>
-          <Text style={styles.bodyText}>{summary?.summary || 'No summary yet.'}</Text>
+        <Section
+          title="Summary"
+          delay={120}
+          isCopied={copiedSection === 'summary'}
+          onCopyPress={() => handleCopySection('summary', summaryCopyText)}
+        >
+          <Text style={styles.bodyText}>{summaryCopyText}</Text>
         </Section>
 
-        <Section title="Action items" delay={150}>
+        <Section
+          title="Action items"
+          delay={150}
+          isCopied={copiedSection === 'actionItems'}
+          onCopyPress={() => handleCopySection('actionItems', actionItemsCopyText)}
+        >
           {summary?.actionItems?.length ? (
             summary.actionItems.map((item) => (
               <Text key={item} style={styles.listText}>
@@ -283,7 +314,12 @@ export default function MeetingDetailScreen() {
           )}
         </Section>
 
-        <Section title="Decisions" delay={180}>
+        <Section
+          title="Decisions"
+          delay={180}
+          isCopied={copiedSection === 'decisions'}
+          onCopyPress={() => handleCopySection('decisions', decisionsCopyText)}
+        >
           {summary?.decisions?.length ? (
             summary.decisions.map((item) => (
               <Text key={item} style={styles.listText}>
@@ -295,8 +331,13 @@ export default function MeetingDetailScreen() {
           )}
         </Section>
 
-        <Section title="Transcript" delay={210}>
-          <Text style={styles.transcriptText}>{meeting.transcriptText || 'No transcript yet.'}</Text>
+        <Section
+          title="Transcript"
+          delay={210}
+          isCopied={copiedSection === 'transcript'}
+          onCopyPress={() => handleCopySection('transcript', transcriptCopyText)}
+        >
+          <Text style={styles.transcriptText}>{transcriptCopyText}</Text>
         </Section>
 
         <Section title="Recording" delay={240}>
@@ -340,18 +381,41 @@ function StatusIcon({ status }: { status: MeetingRow['status'] }) {
   }
 }
 
+type CopyableMeetingSection = 'summary' | 'actionItems' | 'decisions' | 'transcript';
+
 function Section({
   title,
   children,
   delay = 0,
+  isCopied = false,
+  onCopyPress,
 }: {
   title: string;
   children: React.ReactNode;
   delay?: number;
+  isCopied?: boolean;
+  onCopyPress?: () => void;
 }) {
   return (
     <FadeInView style={styles.section} delay={delay}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {onCopyPress ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Copy ${title}`}
+            hitSlop={10}
+            onPress={onCopyPress}
+            style={[styles.sectionCopyButton, isCopied && styles.sectionCopyButtonActive]}
+          >
+            <Feather
+              name={isCopied ? 'check' : 'copy'}
+              size={15}
+              color={isCopied ? palette.paper : palette.ink}
+            />
+          </Pressable>
+        ) : null}
+      </View>
       <View style={styles.sectionBody}>{children}</View>
     </FadeInView>
   );
@@ -394,7 +458,7 @@ function getMeetingDetailScreenOptions(
   return {
     headerBackVisible: headerPresentation.headerBackVisible,
     headerBackButtonDisplayMode: headerPresentation.headerBackButtonDisplayMode,
-    headerLeft:
+    headerRight:
       headerPresentation.showHeaderFallback && headerPresentation.fallback
         ? () => (
             <Pressable style={styles.headerFallbackButton} onPress={handleFallbackPress}>
@@ -617,10 +681,30 @@ const styles = StyleSheet.create({
     gap: 10,
     ...elevation.card,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
   sectionTitle: {
     color: palette.ink,
     fontWeight: '800',
     fontSize: 17,
+  },
+  sectionCopyButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: palette.card,
+  },
+  sectionCopyButtonActive: {
+    borderColor: palette.accent,
+    backgroundColor: palette.accent,
   },
   sectionBody: {
     gap: 8,

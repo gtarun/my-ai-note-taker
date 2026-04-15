@@ -16,6 +16,7 @@ import { Sha256 } from '../utils/sha256';
 const MODEL_DIR = `${FileSystem.documentDirectory}models`;
 const SHA256_CHUNK_BYTES = 256 * 1024;
 const HUGGING_FACE_BASE_URL = 'https://huggingface.co';
+const IOS_SUPPORTED_TRANSCRIPTION_MODEL_IDS = new Set(['whisper-base']);
 
 const BUILT_IN_MODEL_CATALOG: ModelCatalogItem[] = [
   {
@@ -46,7 +47,7 @@ const BUILT_IN_MODEL_CATALOG: ModelCatalogItem[] = [
     sourceLabel: 'View whisper.cpp files',
     sha256: '',
     sizeBytes: 488 * 1024 * 1024,
-    platforms: ['ios', 'android'],
+    platforms: ['android'],
     minFreeSpaceBytes: 2 * 1024 * 1024 * 1024,
     recommended: false,
     experimental: false,
@@ -204,7 +205,19 @@ export function getCatalogItemsForDevice(
 ) {
   const platform = getCurrentModelPlatform(support);
 
-  return catalog.filter((item) => item.platforms.includes(platform));
+  return catalog.filter((item) => {
+    if (platform === 'ios') {
+      if (item.kind === 'summary') {
+        return false;
+      }
+
+      if (item.kind === 'transcription' && !IOS_SUPPORTED_TRANSCRIPTION_MODEL_IDS.has(item.id)) {
+        return false;
+      }
+    }
+
+    return item.platforms.includes(platform);
+  });
 }
 
 export async function downloadModel(
@@ -223,6 +236,16 @@ export async function downloadModel(
 
   if (!catalogItem.platforms.includes(getCurrentModelPlatform())) {
     throw new Error('This model is not available for the current device platform.');
+  }
+
+  if (getCurrentModelPlatform() === 'ios') {
+    if (catalogItem.kind === 'summary') {
+      throw new Error('Local summary models are not available on iOS in this phase.');
+    }
+
+    if (catalogItem.kind === 'transcription' && !IOS_SUPPORTED_TRANSCRIPTION_MODEL_IDS.has(catalogItem.id)) {
+      throw new Error('Only whisper-base is supported for local transcription on iOS in this phase.');
+    }
   }
 
   const freeSpace = await FileSystem.getFreeDiskStorageAsync();

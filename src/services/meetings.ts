@@ -78,13 +78,6 @@ export async function processMeeting(id: string) {
     }
   }
 
-  if (settings.selectedSummaryProvider === 'local') {
-    const installedModel = await getInstalledModel(summaryProvider.summaryModel);
-    if (!installedModel || installedModel.status !== 'installed') {
-      throw new Error('Download and install the selected local summary model first.');
-    }
-  }
-
   try {
     await clearMeetingProcessingArtifacts(id);
     await updateMeetingStatus(

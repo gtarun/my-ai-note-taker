@@ -6,6 +6,7 @@ import {
   Modal,
   Pressable,
   PressableProps,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -31,7 +32,7 @@ import {
   getConfiguredProviderIds,
   pickInitialProvider,
 } from '../features/settings/presentation';
-import { getLocalDeviceSupport } from '../services/localInference';
+import { IOS_LOCAL_TRANSCRIPTION_MODEL_ID, getLocalDeviceSupport } from '../services/localInference';
 import {
   deleteInstalledModel,
   downloadModel,
@@ -52,10 +53,29 @@ import type {
 } from '../types';
 import { palette, radii, typography } from '../theme';
 
+function getLocalTranscriptionModelId(modelId: string, whisperBaseInstalled: boolean) {
+  const trimmed = modelId.trim();
+
+  if (Platform.OS !== 'ios') {
+    return trimmed;
+  }
+
+  if (!whisperBaseInstalled) {
+    return '';
+  }
+
+  if (!trimmed) {
+    return '';
+  }
+
+  return IOS_LOCAL_TRANSCRIPTION_MODEL_ID;
+}
+
 export default function SettingsScreen() {
   const [form, setForm] = useState<AppSettings | null>(null);
   const [catalog, setCatalog] = useState<ModelCatalogItem[]>([]);
   const [installedModels, setInstalledModels] = useState<InstalledModelRow[]>([]);
+  const [hasLoadedInstalledModels, setHasLoadedInstalledModels] = useState(false);
   const [deviceSupport, setDeviceSupport] = useState<LocalDeviceSupport | null>(null);
   const [editingProviderId, setEditingProviderId] = useState<ProviderId>('openai');
   const [isSaving, setIsSaving] = useState(false);
@@ -70,14 +90,55 @@ export default function SettingsScreen() {
     () => getInstalledModelsForKind(installedModels, 'transcription'),
     [installedModels]
   );
-  const installedSummaryModels = useMemo(
-    () => getInstalledModelsForKind(installedModels, 'summary'),
-    [installedModels]
+  const localTranscriptionModelIsInstalled = useMemo(
+    () => installedTranscriptionModels.some((model) => model.id === IOS_LOCAL_TRANSCRIPTION_MODEL_ID),
+    [installedTranscriptionModels]
+  );
+  const localTranscriptionOptions = useMemo(
+    () =>
+      (Platform.OS === 'ios'
+        ? installedTranscriptionModels.filter((model) => model.id === IOS_LOCAL_TRANSCRIPTION_MODEL_ID)
+        : installedTranscriptionModels
+      ).map((model) => ({
+        label: model.displayName,
+        value: model.id,
+      })),
+    [installedTranscriptionModels]
   );
   const visibleCatalog = useMemo(
     () => getCatalogItemsForDevice(catalog, deviceSupport),
     [catalog, deviceSupport]
   );
+
+  useEffect(() => {
+    if (!form || Platform.OS !== 'ios' || !hasLoadedInstalledModels) {
+      return;
+    }
+
+    const normalizedTranscriptionModelId = getLocalTranscriptionModelId(
+      form.providers.local.transcriptionModel,
+      localTranscriptionModelIsInstalled
+    );
+
+    if (normalizedTranscriptionModelId === form.providers.local.transcriptionModel) {
+      return;
+    }
+
+    setForm((current) =>
+      current
+        ? {
+            ...current,
+            providers: {
+              ...current.providers,
+              local: {
+                ...current.providers.local,
+                transcriptionModel: normalizedTranscriptionModelId,
+              },
+            },
+          }
+        : current
+    );
+  }, [form, hasLoadedInstalledModels, localTranscriptionModelIsInstalled]);
 
   if (!form) {
     return (
@@ -95,24 +156,19 @@ export default function SettingsScreen() {
   const editingConfig = form.providers[editingProviderId];
   const transcriptionProvider = providerMap[sanitizedForm.selectedTranscriptionProvider];
   const summaryProvider = providerMap[sanitizedForm.selectedSummaryProvider];
-  const localTranscriptionOptions = installedTranscriptionModels.map((model) => ({
-    label: model.displayName,
-    value: model.id,
-  }));
-  const localSummaryOptions = installedSummaryModels.map((model) => ({
-    label: model.displayName,
-    value: model.id,
-  }));
-  const transcriptionModelId = sanitizedForm.providers[sanitizedForm.selectedTranscriptionProvider].transcriptionModel;
+  const transcriptionModelId =
+    sanitizedForm.selectedTranscriptionProvider === 'local'
+      ? getLocalTranscriptionModelId(
+          sanitizedForm.providers.local.transcriptionModel,
+          localTranscriptionModelIsInstalled
+        )
+      : sanitizedForm.providers[sanitizedForm.selectedTranscriptionProvider].transcriptionModel;
   const summaryModelId = sanitizedForm.providers[sanitizedForm.selectedSummaryProvider].summaryModel;
   const transcriptionModelLabel =
     sanitizedForm.selectedTranscriptionProvider === 'local'
       ? displayModelLabel(installedTranscriptionModels, transcriptionModelId || 'No model selected yet')
       : transcriptionModelId || 'No model selected yet';
-  const summaryModelLabel =
-    sanitizedForm.selectedSummaryProvider === 'local'
-      ? displayModelLabel(installedSummaryModels, summaryModelId || 'No model selected yet')
-      : summaryModelId || 'No model selected yet';
+  const summaryModelLabel = summaryModelId || 'No model selected yet';
   const activeProviderSummary = buildActiveProviderSummary({
     transcriptionProviderLabel: transcriptionProvider.label,
     summaryProviderLabel: summaryProvider.label,
@@ -121,9 +177,7 @@ export default function SettingsScreen() {
   });
   const overviewItems = buildSettingsOverviewItems({
     transcriptionProviderLabel: transcriptionProvider.label,
-    summaryProviderLabel: summaryProvider.label,
     installedTranscriptionCount: installedTranscriptionModels.length,
-    installedSummaryCount: installedSummaryModels.length,
   });
 
   const updateForm = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
@@ -143,7 +197,13 @@ export default function SettingsScreen() {
               ...current.providers,
               [providerId]: {
                 ...current.providers[providerId],
-                [key]: value,
+                [key]:
+                  providerId === 'local' && key === 'transcriptionModel'
+                    ? (getLocalTranscriptionModelId(
+                        String(value),
+                        localTranscriptionModelIsInstalled
+                      ) as ProviderConfig[K])
+                    : value,
               },
             },
           }
@@ -193,9 +253,15 @@ export default function SettingsScreen() {
     try {
       setIsSaving(true);
       const next = sanitizeAppSettings(form);
+      if (Platform.OS === 'ios' && hasLoadedInstalledModels) {
+        next.providers.local.transcriptionModel = getLocalTranscriptionModelId(
+          next.providers.local.transcriptionModel,
+          localTranscriptionModelIsInstalled
+        );
+      }
       setForm(next);
       await saveAppSettings(next);
-      Alert.alert('Saved', 'Provider settings and local model preferences were stored on this device.');
+      Alert.alert('Saved', 'Provider settings and local transcription preferences were stored on this device.');
     } catch (error) {
       Alert.alert('Save failed', error instanceof Error ? error.message : 'Unable to save settings.');
     } finally {
@@ -232,10 +298,6 @@ export default function SettingsScreen() {
           next.providers.local.transcriptionModel = item.id;
         }
 
-        if (item.kind === 'summary' && !next.providers.local.summaryModel) {
-          next.providers.local.summaryModel = item.id;
-        }
-
         return next;
       });
 
@@ -267,16 +329,13 @@ export default function SettingsScreen() {
               }
 
               const next = { ...current, providers: { ...current.providers, local: { ...current.providers.local } } };
-              const nextTranscriptionFallback =
-                getInstalledModelsForKind(nextInstalledModels, 'transcription')[0]?.id ?? '';
-              const nextSummaryFallback = getInstalledModelsForKind(nextInstalledModels, 'summary')[0]?.id ?? '';
+              const nextTranscriptionFallback = getLocalTranscriptionModelId(
+                getInstalledModelsForKind(nextInstalledModels, 'transcription')[0]?.id ?? '',
+                nextInstalledModels.some((installedModel) => installedModel.id === IOS_LOCAL_TRANSCRIPTION_MODEL_ID)
+              );
 
               if (next.providers.local.transcriptionModel === model.id) {
                 next.providers.local.transcriptionModel = nextTranscriptionFallback;
-              }
-
-              if (next.providers.local.summaryModel === model.id) {
-                next.providers.local.summaryModel = nextSummaryFallback;
               }
 
               return next;
@@ -362,7 +421,7 @@ export default function SettingsScreen() {
           providerIds={summaryProviderIds}
           providers={sanitizedForm.providers}
           onSelect={(providerId) => updateForm('selectedSummaryProvider', providerId)}
-          localModelOptions={localSummaryOptions}
+          localModelOptions={[]}
         />
 
         <FadeInView delay={120}>
@@ -410,9 +469,14 @@ export default function SettingsScreen() {
                     <Text style={styles.utilityLabel}>On-device runtime</Text>
                     <Text style={styles.rowBody}>
                       {deviceSupport?.localProcessingAvailable
-                        ? 'Ready for local execution in this build.'
+                        ? 'Ready for local transcription in this build.'
                         : deviceSupport?.reason ?? 'Checking local runtime availability.'}
                     </Text>
+                    {Platform.OS === 'ios' ? (
+                      <Text style={styles.rowBody}>
+                        Local transcription on iOS currently supports whisper-base only.
+                      </Text>
+                    ) : null}
                   </SurfaceCard>
 
                   <ModelDropdown
@@ -420,15 +484,11 @@ export default function SettingsScreen() {
                     value={editingConfig.transcriptionModel}
                     options={localTranscriptionOptions}
                     onSelect={(value) => updateProvider('local', 'transcriptionModel', value)}
-                    emptyText="Download a local transcription model below before selecting Local here."
-                  />
-
-                  <ModelDropdown
-                    label="Active summary model"
-                    value={editingConfig.summaryModel}
-                    options={localSummaryOptions}
-                    onSelect={(value) => updateProvider('local', 'summaryModel', value)}
-                    emptyText="Download a local summary model below before selecting Local here."
+                    emptyText={
+                      Platform.OS === 'ios'
+                        ? 'Local transcription on iOS currently supports whisper-base only. Download whisper-base below before selecting Local here.'
+                        : 'Download a local transcription model below before selecting Local here.'
+                    }
                   />
 
                   <PillButton
@@ -499,7 +559,7 @@ export default function SettingsScreen() {
           <SurfaceCard style={styles.localModelsSection}>
             <SectionHeading
               title="Local models"
-              subtitle="Manage on-device models for offline or private transcription and summary."
+              subtitle="Manage on-device models for offline or private transcription."
             />
 
             <SurfaceCard muted style={styles.runtimeCard}>
@@ -508,7 +568,7 @@ export default function SettingsScreen() {
                   <Text style={styles.runtimeTitle}>Runtime status</Text>
                   <Text style={styles.rowBody}>
                     {deviceSupport?.reason ??
-                      'Checking device support for the native local AI runtime and model execution path.'}
+                      'Checking device support for the native local transcription runtime and model execution path.'}
                   </Text>
                 </View>
                 <StatusChip
@@ -550,25 +610,15 @@ export default function SettingsScreen() {
               title="Transcription models"
               items={visibleCatalog.filter((item) => item.kind === 'transcription')}
               installedModels={installedTranscriptionModels}
-              activeModelId={form.providers.local.transcriptionModel}
+              activeModelId={getLocalTranscriptionModelId(
+                form.providers.local.transcriptionModel,
+                localTranscriptionModelIsInstalled
+              )}
               downloadProgress={downloadProgress}
               onDownload={handleDownloadModel}
               onDelete={handleDeleteModel}
               onOpenSource={handleOpenModelSource}
               onSelectActive={(modelId) => updateProvider('local', 'transcriptionModel', modelId)}
-              allowDownload={deviceSupport ? deviceSupport.platform !== 'web' : false}
-            />
-
-            <ModelCatalogSection
-              title="Summary models"
-              items={visibleCatalog.filter((item) => item.kind === 'summary')}
-              installedModels={installedSummaryModels}
-              activeModelId={form.providers.local.summaryModel}
-              downloadProgress={downloadProgress}
-              onDownload={handleDownloadModel}
-              onDelete={handleDeleteModel}
-              onOpenSource={handleOpenModelSource}
-              onSelectActive={(modelId) => updateProvider('local', 'summaryModel', modelId)}
               allowDownload={deviceSupport ? deviceSupport.platform !== 'web' : false}
             />
           </SurfaceCard>
@@ -608,6 +658,7 @@ export default function SettingsScreen() {
     const [support, models] = await Promise.all([getLocalDeviceSupport(), getInstalledModels()]);
     setDeviceSupport(support);
     setInstalledModels(models);
+    setHasLoadedInstalledModels(true);
     await refreshCatalog(next.modelCatalogUrl);
   }
 }
@@ -682,8 +733,8 @@ function AssignmentSection({
           <SurfaceCard muted style={styles.emptyState}>
             <Text style={styles.emptyStateTitle}>No configured provider yet</Text>
             <Text style={styles.rowBody}>
-              Configure a provider below and add its API key once. Local will appear here after you choose an
-              installed model.
+              Configure a provider below and add its API key once. Local transcription will appear here after you
+              choose an installed model.
             </Text>
           </SurfaceCard>
         )}

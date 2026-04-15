@@ -5,6 +5,9 @@ import { LocalDeviceSupport, SummaryPayload } from '../types';
 
 const LOCAL_TRANSCRIPT_WINDOW = 8000;
 const LOCAL_TRANSCRIPT_OVERLAP = 500;
+export const IOS_LOCAL_TRANSCRIPTION_MODEL_ID = 'whisper-base';
+export const IOS_LOCAL_TRANSCRIPTION_MODEL_ERROR =
+  'Only whisper-base is supported for local transcription on iOS in this phase.';
 
 type LocalNativeModule = {
   getDeviceSupport?: () => Promise<Partial<LocalDeviceSupport>>;
@@ -65,6 +68,10 @@ export async function transcribeLocalAudio(params: { audioUri: string; modelId: 
 
   if (!params.modelId.trim()) {
     throw new Error('Pick an installed local transcription model in Settings first.');
+  }
+
+  if (Platform.OS === 'ios' && params.modelId.trim() !== IOS_LOCAL_TRANSCRIPTION_MODEL_ID) {
+    throw new Error(IOS_LOCAL_TRANSCRIPTION_MODEL_ERROR);
   }
 
   const transcript = await module.transcribe?.(params);

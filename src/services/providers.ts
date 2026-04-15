@@ -131,9 +131,9 @@ export const providerDefinitions: ProviderDefinition[] = [
   {
     id: 'local',
     label: 'Local',
-    description: 'Use on-device model downloads for offline transcription and summary.',
+    description: 'Use on-device model downloads for local transcription.',
     supportsTranscription: true,
-    supportsSummary: true,
+    supportsSummary: false,
     usesOpenAICompatibleApi: false,
     apiKeyPlaceholder: '',
     baseUrlPlaceholder: '',

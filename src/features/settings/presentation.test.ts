@@ -21,6 +21,7 @@ describe('settings presentation', () => {
     providers.openai.apiKey = 'sk-live';
     providers.openrouter.apiKey = 'sk-or-live';
     providers.local.transcriptionModel = 'whisper-base';
+    providers.local.summaryModel = 'gemma-3n-e2b-preview';
 
     expect(getConfiguredProviderIds(providers)).toEqual(['openai', 'openrouter', 'local']);
     expect(getConfiguredProviderIds(providers, 'transcription')).toEqual(['openai', 'openrouter', 'local']);
@@ -82,14 +83,11 @@ describe('settings presentation', () => {
     expect(
       buildSettingsOverviewItems({
         transcriptionProviderLabel: 'OpenAI',
-        summaryProviderLabel: 'OpenRouter',
         installedTranscriptionCount: 1,
-        installedSummaryCount: 2,
       })
     ).toEqual([
       { label: 'Transcription', value: 'OpenAI' },
-      { label: 'Summary', value: 'OpenRouter' },
-      { label: 'Local models', value: '3 installed' },
+      { label: 'Local transcription', value: '1 installed' },
     ]);
   });
 });

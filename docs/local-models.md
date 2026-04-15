@@ -16,22 +16,23 @@ This repo uses a catalog-driven local model design:
 What is implemented now:
 
 - `Local` can be selected as the transcription provider
-- `Local` can be selected as the summary provider
 - the app stores installed-model metadata in SQLite
 - the app downloads model files into `documentDirectory/models`
 - the app verifies file size and optional SHA-256
 - the meeting pipeline already routes local jobs through `src/services/localInference.ts`
-- summary chunking and JSON repair flow are scaffolded in JS
+- the repo now includes a real Expo local module named `MuFathomLocalAI`
+- iOS local transcription is real for `whisper-base`
+- local summary is still unsupported on-device
+- Android stays on a later-phase boundary-only contract
 
 What still is not implemented:
 
-- the native `MuFathomLocalAI` module
-- actual `whisper.cpp` on-device transcription
-- actual Gemma-family on-device summary runtime
+- actual on-device summary runtime
+- iOS support for any local transcription model other than `whisper-base`
 
 Blunt version:
 
-The local-model product flow is in place. The native inference engine is not.
+The local-model flow is in place, iOS transcription is real for `whisper-base`, and local summary is still blocked until a real on-device summary engine lands.
 
 ## Model Types
 
@@ -65,12 +66,18 @@ The built-in catalog is now meant to be useful on its own:
 2. User optionally sets `Model catalog URL` if they want to override the built-in curated list
 3. App loads the model catalog
 4. App filters the catalog for the current device platform
-5. User downloads a transcription model and a summary model
+5. User downloads `whisper-base` for iOS transcription
 6. App stores the files locally and writes install metadata
-7. User sets transcription and/or summary provider to `Local`
+7. User sets transcription provider to `Local`
 8. Meeting processing routes into the local inference bridge
 
 If the native runtime is not linked, the app shows that local processing requires a custom build.
+
+If the native runtime is linked:
+
+- iOS transcription works for `whisper-base`
+- local summary still reports as unsupported on-device
+- Android stays on a later-phase boundary-only contract
 
 ## Catalog Format
 
@@ -111,26 +118,30 @@ Rules:
 
 ## Runtime Assumptions
 
-Planned runtime split:
+Current runtime split:
 
-- iOS summary: MediaPipe-compatible Gemma-family small model
-- Android summary: LiteRT/MediaPipe-compatible Gemma-family small model
-- transcription on both: `whisper.cpp`
+- iOS transcription: `whisper.cpp` for `whisper-base`
+- iOS summary: unsupported in this phase
+- Android summary: LiteRT/MediaPipe-compatible Gemma-family small model in a later slice
 
 JS already assumes:
 
 - local transcription returns plain transcript text
-- local summary returns JSON with `summary`, `actionItems`, `decisions`, and `followUps`
+- local summary is unavailable on-device in this phase
 - long transcripts are chunked before the final combine pass
 
 ## Build Reality
 
 Local inference is not an Expo Go feature.
 
-To make this real, the project still needs:
+To test the iOS local transcription slice, use a custom dev build or Xcode build on a real iPhone.
 
-- a custom dev build or release build
-- the native `MuFathomLocalAI` module linked into the app
-- actual platform runtime code for iOS and Android
+The supported offline path is transcript-only:
 
-Until then, the local-model UX is a real scaffold, not a fake promise.
+- install `whisper-base`
+- select `Local` for transcription on iOS
+- run the meeting flow on a custom build or device build
+- expect local transcript generation to work offline
+- expect local summary to fail clearly because it is still unsupported on-device
+
+Right now, the local-model UX is real, the iOS `whisper-base` transcription path works, and the summary path still stops at a clear unsupported error.

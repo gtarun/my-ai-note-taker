@@ -4,13 +4,13 @@
 
 There are two practical ways to run this app locally:
 
-- `Expo Go`: fastest way to test recording, import, remote transcription, summaries, and most UI
-- `Xcode` or a custom dev build: use this when you need native iOS debugging, native modules, or anything the Expo Go shell does not include
+- `Expo Go`: fastest way to test recording, import, remote transcription, summaries, and most UI, but not the local engine
+- `Xcode` or a custom dev build on iPhone: use this when you need native iOS debugging or the real local transcription runtime
 
 Blunt rule:
 
 - if you just want to test the current remote-provider app, use Expo Go
-- if you want to work on local/offline model runtime, Expo Go is not enough
+- if you want to test iOS local transcription, Expo Go is not enough
 
 ## Prerequisites
 
@@ -64,7 +64,7 @@ Use `--lan` so your phone can see the dev server on the same Wi-Fi.
 
 ### What does not work in Expo Go
 
-- the future local/offline inference runtime
+- the local/offline inference runtime
 - anything that depends on the native `MuFathomLocalAI` module
 
 ## Option 2: Run From Xcode
@@ -101,7 +101,7 @@ cd ..
 
 Open:
 
-- [mufathom.xcworkspace](/Users/tarun/Documents/projects/mu-fathom/ios/mufathom.xcworkspace)
+- [mufathom.xcworkspace](../ios/mufathom.xcworkspace)
 
 Important:
 
@@ -168,7 +168,7 @@ npx expo start --dev-client --clear
 
 Use EAS when you want a real installable build instead of running everything directly from Xcode or Expo Go.
 
-This repo currently has these EAS build profiles in [eas.json](/Users/tarun/Documents/projects/mu-fathom/eas.json):
+This repo currently has these EAS build profiles in [eas.json](../eas.json):
 
 - `development`: internal dev client build
 - `preview`: internal preview build
@@ -233,10 +233,55 @@ eas submit --platform android --profile production
 For this repo today:
 
 - use `Expo Go` if you want to test the current working app
-- use `Xcode` only if you need iOS-native debugging or want to start wiring native runtime pieces
+- use `Xcode` or an `EAS development` build on a real iPhone if you want to test iOS local transcription
 - use `EAS development` if you want a custom dev client on a real device without living in Xcode
 
-The local/offline model system is not fully runnable yet because the native `MuFathomLocalAI` runtime is still missing.
+The iOS local transcription slice is real now for `whisper-base`. The supported offline validation path is a custom iPhone build running a transcript-only flow; local summary is still unsupported on-device.
+
+## Phase 2 Runtime Reality
+
+What is true now:
+
+- the repo includes a real Expo local module at `modules/mu-fathom-local-ai`
+- iOS custom builds can run the `whisper-base` local transcription path
+- iOS is the first platform with real local transcription
+- Android is a later-phase local-engine target
+
+What is still not true:
+
+- local summary on-device is still unsupported
+- Expo Go still cannot do real local inference
+
+## iOS Everyday Flow
+
+The iOS project is already checked in, so this is the normal path for local-transcription work:
+
+1. Keep using the checked-in `ios/` project.
+2. Install pods if needed:
+
+```bash
+cd ios
+pod install
+```
+
+3. Open [mufathom.xcworkspace](../ios/mufathom.xcworkspace) in Xcode or run `npx expo run:ios` for a dev build.
+4. Install `whisper-base` in the app.
+5. Select `Local` for transcription on iOS.
+6. Run a meeting transcription flow on the device.
+7. Verify the transcript comes back offline.
+8. Do not expect local summary to work yet.
+
+## Optional iOS Regeneration
+
+Only regenerate native files when config or plugin changes require it:
+
+```bash
+npx expo prebuild -p ios
+```
+
+That path is optional, not the day-to-day default.
+
+If you need Android later, the app-root `android/` project directory is still not checked in. The native module does include Android code under `modules/mu-fathom-local-ai/android`.
 
 ## Common Problems
 
@@ -265,7 +310,7 @@ The local/offline model system is not fully runnable yet because the native `MuF
 
 ### Local model mode fails
 
-That is expected right now unless you implement the native local AI runtime.
+That is expected right now for local summary, or if you try to use anything other than `whisper-base` for iOS transcription.
 
 The JS app supports:
 
@@ -275,6 +320,5 @@ The JS app supports:
 
 But it still does not include:
 
-- actual on-device `whisper.cpp`
-- actual Gemma-family local summary runtime
-- the native `MuFathomLocalAI` module
+- local summary on-device
+- iOS local transcription for models other than `whisper-base`

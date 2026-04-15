@@ -67,7 +67,7 @@ vi.mock('../db', () => ({
   }),
 }));
 
-import { saveAppSettings } from './settings';
+import { saveAppSettings, sanitizeAppSettings } from './settings';
 import { getHasSeenOnboarding, markOnboardingSeen } from './onboarding';
 import { defaultProviderConfigs } from './providers';
 import type { AppSettings } from '../types';
@@ -90,5 +90,23 @@ describe('settings persistence', () => {
     await saveAppSettings(settings);
 
     expect(await getHasSeenOnboarding()).toBe(true);
+  });
+
+  test('drops local summary as a selectable provider during sanitization', () => {
+    const settings: AppSettings = {
+      selectedTranscriptionProvider: 'local',
+      selectedSummaryProvider: 'local',
+      providers: structuredClone(defaultProviderConfigs),
+      deleteUploadedAudio: false,
+      modelCatalogUrl: '',
+    };
+
+    settings.providers.local.transcriptionModel = 'whisper-base';
+    settings.providers.local.summaryModel = 'gemma-3n-e2b-preview';
+
+    const sanitized = sanitizeAppSettings(settings);
+
+    expect(sanitized.selectedTranscriptionProvider).toBe('local');
+    expect(sanitized.selectedSummaryProvider).toBe('openai');
   });
 });

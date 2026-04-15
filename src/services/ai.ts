@@ -1,7 +1,13 @@
 import * as FileSystem from 'expo-file-system/legacy';
+import { Platform } from 'react-native';
 
 import { ProviderConfig, ProviderId, SummaryPayload } from '../types';
-import { summarizeLocalTranscript, transcribeLocalAudio } from './localInference';
+import {
+  IOS_LOCAL_TRANSCRIPTION_MODEL_ERROR,
+  IOS_LOCAL_TRANSCRIPTION_MODEL_ID,
+  summarizeLocalTranscript,
+  transcribeLocalAudio,
+} from './localInference';
 import { providerMap } from './providers';
 
 type TranscribeParams = {
@@ -37,6 +43,14 @@ export async function transcribeAudio(params: TranscribeParams) {
 
   if (!params.provider.transcriptionModel.trim()) {
     throw new Error(`Add a transcription model for ${providerDefinition.label} in Settings first.`);
+  }
+
+  if (
+    params.providerId === 'local' &&
+    Platform.OS === 'ios' &&
+    params.provider.transcriptionModel.trim() !== IOS_LOCAL_TRANSCRIPTION_MODEL_ID
+  ) {
+    throw new Error(IOS_LOCAL_TRANSCRIPTION_MODEL_ERROR);
   }
 
   if (params.providerId === 'local') {
