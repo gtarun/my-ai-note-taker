@@ -7,6 +7,40 @@ export type MeetingStatus =
   | 'ready'
   | 'failed';
 
+export type ExtractionLayerField = {
+  id: string;
+  title: string;
+  description: string;
+};
+
+export type ExtractionLayer = {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  spreadsheetId: string | null;
+  spreadsheetTitle: string | null;
+  sheetTitle: string | null;
+  fields: ExtractionLayerField[];
+};
+
+export type MeetingExtractionStatus = 'extracting' | 'ready' | 'failed';
+
+export type MeetingExtractionSyncStatus = 'not_synced' | 'syncing' | 'synced' | 'sync_failed';
+
+export type MeetingExtractionResult = {
+  layerId: string;
+  layerName: string;
+  fields: ExtractionLayerField[];
+  values: Record<string, string>;
+  extractionStatus: MeetingExtractionStatus;
+  extractionErrorMessage: string | null;
+  syncStatus: MeetingExtractionSyncStatus;
+  syncErrorMessage: string | null;
+  syncedAt: string | null;
+  syncedRowId: string | null;
+};
+
 export type MeetingRow = {
   id: string;
   title: string;
@@ -20,6 +54,7 @@ export type MeetingRow = {
   summaryJson: string | null;
   summaryShort: string | null;
   errorMessage: string | null;
+  extractionResult: MeetingExtractionResult | null;
 };
 
 export type SummaryPayload = {
@@ -117,6 +152,7 @@ export type DriveConnection = {
   /** Parent folder the user chose in Google Picker; uploads go under mu-fathom/recordings/… inside it. */
   saveFolderId: string | null;
   saveFolderName: string | null;
+  needsReconnect: boolean;
 };
 
 export type UserAccount = {
@@ -137,4 +173,15 @@ export type CloudBackendConfig = {
   projectRef: string;
   googleDriveConnectFunctionName: string;
   googleDriveRedirectUri: string;
+};
+
+export type ExtractionSheetConnection = {
+  spreadsheetId: string;
+  spreadsheetTitle: string;
+  sheetTitle: string;
+  spreadsheetUrl: string | null;
+};
+
+export type ExtractionSheetAppendResult = ExtractionSheetConnection & {
+  rowRange: string;
 };

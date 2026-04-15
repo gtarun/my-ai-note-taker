@@ -38,6 +38,37 @@ type MeetingStorageRow = {
   summary_json: string | null;
   summary_short: string | null;
   error_message: string | null;
+  selected_layer_id: string | null;
+  extraction_layer_name: string | null;
+  extraction_fields_json: string | null;
+  extraction_values_json: string | null;
+  extraction_status: string | null;
+  extraction_error_message: string | null;
+  extraction_sync_status: string | null;
+  extraction_sync_error_message: string | null;
+  extraction_synced_at: string | null;
+  extraction_synced_row_id: string | null;
+};
+
+type ExtractionLayerStorageRow = {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  spreadsheet_id: string | null;
+  spreadsheet_title: string | null;
+  sheet_title: string | null;
+};
+
+type ExtractionLayerFieldStorageRow = {
+  id: string;
+  layer_id: string;
+  field_id: string;
+  title: string;
+  description: string;
+  position: number;
+  created_at: string;
+  updated_at: string;
 };
 
 type InstalledModelStorageRow = {
@@ -62,6 +93,8 @@ const STORAGE_KEY = 'mu-fathom-web-db';
 
 type DatabaseShape = {
   meetings: MeetingStorageRow[];
+  extractionLayers: ExtractionLayerStorageRow[];
+  extractionLayerFields: ExtractionLayerFieldStorageRow[];
   settings: SettingsRow;
   appPreferences: AppPreferencesRow;
   providerSettings: ProviderSettingsRow[];
@@ -70,6 +103,8 @@ type DatabaseShape = {
 
 const defaultState: DatabaseShape = {
   meetings: [],
+  extractionLayers: [],
+  extractionLayerFields: [],
   settings: {
     id: 1,
     openai_base_url: 'https://api.openai.com/v1',
@@ -119,6 +154,8 @@ function readState(): DatabaseShape {
       providerSettings: state.providerSettings ?? [],
       installedModels: state.installedModels ?? [],
       meetings: state.meetings ?? [],
+      extractionLayers: state.extractionLayers ?? [],
+      extractionLayerFields: state.extractionLayerFields ?? [],
     };
   } catch {
     return structuredClone(defaultState);
@@ -161,6 +198,14 @@ const db = {
       state.installedModels = [];
     }
 
+    if (!state.extractionLayers) {
+      state.extractionLayers = [];
+    }
+
+    if (!state.extractionLayerFields) {
+      state.extractionLayerFields = [];
+    }
+
     writeState(state);
   },
   async getFirstAsync<T>(source: string, ...params: unknown[]): Promise<T | null> {
@@ -184,9 +229,14 @@ const db = {
       return (row ?? null) as T | null;
     }
 
+    if (source.includes('FROM extraction_layers WHERE id = ?')) {
+      const row = state.extractionLayers.find((layer) => layer.id === params[0]);
+      return (row ?? null) as T | null;
+    }
+
     return null;
   },
-  async getAllAsync<T>(source: string): Promise<T[]> {
+  async getAllAsync<T>(source: string, ...params: unknown[]): Promise<T[]> {
     const state = readState();
 
     if (source.includes('FROM provider_settings')) {
@@ -203,6 +253,29 @@ const db = {
       return [...state.meetings]
         .sort((a, b) => b.created_at.localeCompare(a.created_at))
         .map((row) => row as T);
+    }
+
+    if (source.includes('FROM extraction_layers')) {
+      return [...state.extractionLayers]
+        .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+        .map((row) => row as T);
+    }
+
+    if (source.includes('FROM extraction_layer_fields WHERE layer_id = ?')) {
+      return [...state.extractionLayerFields]
+        .filter((row) => row.layer_id === params[0])
+        .sort((a, b) => a.position - b.position)
+        .map((row) => {
+          if (source.includes('SELECT field_id')) {
+            return {
+              field_id: row.field_id,
+              title: row.title,
+              description: row.description,
+            } as T;
+          }
+
+          return row as T;
+        });
     }
 
     return [];
@@ -224,6 +297,16 @@ const db = {
         summary_json: null,
         summary_short: null,
         error_message: null,
+        selected_layer_id: null,
+        extraction_layer_name: null,
+        extraction_fields_json: null,
+        extraction_values_json: null,
+        extraction_status: null,
+        extraction_error_message: null,
+        extraction_sync_status: null,
+        extraction_sync_error_message: null,
+        extraction_synced_at: null,
+        extraction_synced_row_id: null,
       });
       writeState(state);
       return;
@@ -324,6 +407,60 @@ const db = {
       return;
     }
 
+    if (source.includes('INSERT INTO extraction_layers')) {
+      state.extractionLayers.push({
+        id: String(params[0]),
+        name: String(params[1]),
+        created_at: String(params[2]),
+        updated_at: String(params[3]),
+        spreadsheet_id: params[4] ? String(params[4]) : null,
+        spreadsheet_title: params[5] ? String(params[5]) : null,
+        sheet_title: params[6] ? String(params[6]) : null,
+      });
+      writeState(state);
+      return;
+    }
+
+    if (source.includes('UPDATE extraction_layers') && source.includes('SET name = ?')) {
+      const row = state.extractionLayers.find((layer) => layer.id === params[5]);
+      if (row) {
+        row.name = String(params[0]);
+        row.updated_at = String(params[1]);
+        row.spreadsheet_id = params[2] ? String(params[2]) : null;
+        row.spreadsheet_title = params[3] ? String(params[3]) : null;
+        row.sheet_title = params[4] ? String(params[4]) : null;
+        writeState(state);
+      }
+      return;
+    }
+
+    if (source.includes('DELETE FROM extraction_layer_fields WHERE layer_id = ?')) {
+      state.extractionLayerFields = state.extractionLayerFields.filter((row) => row.layer_id !== params[0]);
+      writeState(state);
+      return;
+    }
+
+    if (source.includes('INSERT INTO extraction_layer_fields')) {
+      state.extractionLayerFields.push({
+        id: String(params[0]),
+        layer_id: String(params[1]),
+        field_id: String(params[2]),
+        title: String(params[3]),
+        description: String(params[4]),
+        position: Number(params[5]),
+        created_at: String(params[6]),
+        updated_at: String(params[7]),
+      });
+      writeState(state);
+      return;
+    }
+
+    if (source.includes('DELETE FROM extraction_layers WHERE id = ?')) {
+      state.extractionLayers = state.extractionLayers.filter((row) => row.id !== params[0]);
+      writeState(state);
+      return;
+    }
+
     if (source.includes('DELETE FROM installed_models WHERE id = ?')) {
       state.installedModels = state.installedModels.filter((row) => row.id !== params[0]);
       writeState(state);
@@ -372,6 +509,16 @@ const db = {
         meeting.summary_json = null;
         meeting.summary_short = null;
         meeting.error_message = null;
+        meeting.selected_layer_id = null;
+        meeting.extraction_layer_name = null;
+        meeting.extraction_fields_json = null;
+        meeting.extraction_values_json = null;
+        meeting.extraction_status = null;
+        meeting.extraction_error_message = null;
+        meeting.extraction_sync_status = null;
+        meeting.extraction_sync_error_message = null;
+        meeting.extraction_synced_at = null;
+        meeting.extraction_synced_row_id = null;
         meeting.updated_at = String(params[0]);
         writeState(state);
       }
@@ -386,6 +533,49 @@ const db = {
         meeting.updated_at = String(params[2]);
         writeState(state);
       }
+      return;
+    }
+
+    if (source.includes('selected_layer_id = ?') && source.includes('extraction_layer_name = ?')) {
+      const meeting = state.meetings.find((row) => row.id === params[9]);
+      if (meeting) {
+        meeting.selected_layer_id = params[0] ? String(params[0]) : null;
+        meeting.extraction_layer_name = params[1] ? String(params[1]) : null;
+        meeting.extraction_fields_json = params[2] ? String(params[2]) : null;
+        meeting.extraction_values_json = params[3] ? String(params[3]) : null;
+        meeting.extraction_status = params[4] ? String(params[4]) : null;
+        meeting.extraction_error_message = params[5] ? String(params[5]) : null;
+        meeting.extraction_sync_status = params[6] ? String(params[6]) : null;
+        meeting.extraction_sync_error_message = params[7] ? String(params[7]) : null;
+        meeting.updated_at = String(params[8]);
+        writeState(state);
+      }
+      return;
+    }
+
+    if (source.includes('extraction_values_json = ?') && source.includes('extraction_sync_status = ?')) {
+      const meeting = state.meetings.find((row) => row.id === params[4]);
+      if (meeting) {
+        meeting.extraction_values_json = String(params[0]);
+        meeting.extraction_sync_status = String(params[1]);
+        meeting.extraction_sync_error_message = params[2] ? String(params[2]) : null;
+        meeting.updated_at = String(params[3]);
+        writeState(state);
+      }
+      return;
+    }
+
+    if (source.includes('extraction_sync_status = ?') && source.includes('extraction_sync_error_message = ?')) {
+      const meeting = state.meetings.find((row) => row.id === params[5]);
+      if (meeting) {
+        meeting.extraction_sync_status = String(params[0]);
+        meeting.extraction_sync_error_message = params[1] ? String(params[1]) : null;
+        meeting.extraction_synced_at = params[2] ? String(params[2]) : null;
+        meeting.extraction_synced_row_id = params[3] ? String(params[3]) : null;
+        meeting.updated_at = String(params[4]);
+        writeState(state);
+      }
+      return;
     }
 
     if (source.includes('DELETE FROM meetings WHERE id = ?')) {
@@ -404,6 +594,10 @@ export function getDatabase() {
 }
 
 export function mapMeetingRow(row: Record<string, unknown>): MeetingRow {
+  const selectedLayerId = row.selected_layer_id ? String(row.selected_layer_id) : null;
+  const extractionFields = parseJsonValue(row.extraction_fields_json);
+  const extractionValues = parseJsonValue(row.extraction_values_json);
+
   return {
     id: String(row.id),
     title: String(row.title),
@@ -417,5 +611,44 @@ export function mapMeetingRow(row: Record<string, unknown>): MeetingRow {
     summaryJson: row.summary_json ? String(row.summary_json) : null,
     summaryShort: row.summary_short ? String(row.summary_short) : null,
     errorMessage: row.error_message ? String(row.error_message) : null,
+    extractionResult: selectedLayerId
+      ? {
+          layerId: selectedLayerId,
+          layerName: row.extraction_layer_name ? String(row.extraction_layer_name) : '',
+          fields: Array.isArray(extractionFields) ? extractionFields : [],
+          values:
+            extractionValues && typeof extractionValues === 'object' && !Array.isArray(extractionValues)
+              ? (extractionValues as Record<string, string>)
+              : {},
+          extractionStatus:
+            row.extraction_status === 'extracting' || row.extraction_status === 'failed'
+              ? row.extraction_status
+              : 'ready',
+          extractionErrorMessage: row.extraction_error_message ? String(row.extraction_error_message) : null,
+          syncStatus:
+            row.extraction_sync_status === 'syncing' ||
+            row.extraction_sync_status === 'synced' ||
+            row.extraction_sync_status === 'sync_failed'
+              ? row.extraction_sync_status
+              : 'not_synced',
+          syncErrorMessage: row.extraction_sync_error_message
+            ? String(row.extraction_sync_error_message)
+            : null,
+          syncedAt: row.extraction_synced_at ? String(row.extraction_synced_at) : null,
+          syncedRowId: row.extraction_synced_row_id ? String(row.extraction_synced_row_id) : null,
+        }
+      : null,
   };
+}
+
+function parseJsonValue(value: unknown) {
+  if (!value || typeof value !== 'string') {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
 }

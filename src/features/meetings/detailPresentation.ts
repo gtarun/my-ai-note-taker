@@ -6,6 +6,7 @@ export const MEETING_DETAIL_SECTION_ORDER = [
   'summary',
   'actionItems',
   'decisions',
+  'extractedData',
   'transcript',
   'recording',
 ] as const;
@@ -21,7 +22,7 @@ export function getMeetingDetailTitleDraftState(draftTitle: string, savedTitle: 
 }
 
 export function getMeetingDetailPrimaryActionLabel(isBusy: boolean) {
-  return isBusy ? 'Processing…' : 'Run transcript + summary';
+  return isBusy ? 'Processing…' : 'Analyze recording';
 }
 
 export function getPlaybackActionLabel(isPlaying: boolean) {
@@ -42,6 +43,29 @@ export function getMeetingDetailDecisionsCopyText(summary: SummaryPayload | null
 
 export function getMeetingDetailTranscriptCopyText(transcriptText: string | null) {
   return transcriptText || 'No transcript yet.';
+}
+
+export function getMeetingDetailExtractionCopyText(
+  rows: Array<{ title: string; value: string }>
+) {
+  if (!rows.length) {
+    return 'No extracted data yet.';
+  }
+
+  return rows.map((row) => `${row.title}: ${row.value || ''}`.trimEnd()).join('\n');
+}
+
+export function getExtractionSyncLabel(status: 'not_synced' | 'syncing' | 'synced' | 'sync_failed') {
+  switch (status) {
+    case 'syncing':
+      return 'Syncing…';
+    case 'synced':
+      return 'Synced';
+    case 'sync_failed':
+      return 'Sync failed';
+    default:
+      return 'Not synced';
+  }
 }
 
 function formatMeetingDetailListCopyText(items: string[] | undefined, emptyState: string) {

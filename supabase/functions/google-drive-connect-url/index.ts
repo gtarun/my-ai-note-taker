@@ -78,6 +78,7 @@ Deno.serve(async (request) => {
             status: 'connected',
             accountEmail: profile.email,
             connectedAt: new Date().toISOString(),
+            needsReconnect: false,
           },
         },
       });
@@ -135,7 +136,7 @@ function readEnv() {
   // UserInfo requires openid + email (or userinfo.email); drive.file alone yields 401 on userinfo.
   const googleDriveScope =
     Deno.env.get('GOOGLE_DRIVE_SCOPE') ??
-    'openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file';
+    'openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets';
   const redirectUri =
     Deno.env.get('GOOGLE_DRIVE_REDIRECT_URI') ??
     `${supabaseUrl.replace(/\/$/, '')}/functions/v1/google-drive-connect-url`;

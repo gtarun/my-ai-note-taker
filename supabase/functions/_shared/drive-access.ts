@@ -34,16 +34,18 @@ type ConnectionRow = {
   access_token: string;
   refresh_token: string | null;
   expiry_date: string | null;
+  scope: string | null;
 };
 
 export async function getValidAccessToken(
   adminClient: SupabaseClient,
   env: GoogleDriveEnv,
-  userId: string
+  userId: string,
+  requiredScope?: string
 ): Promise<string> {
   const { data, error } = await adminClient
     .from('google_drive_connections')
-    .select('access_token, refresh_token, expiry_date')
+    .select('access_token, refresh_token, expiry_date, scope')
     .eq('user_id', userId)
     .maybeSingle();
 
@@ -55,6 +57,10 @@ export async function getValidAccessToken(
 
   if (!row) {
     throw new Error('Google Drive is not connected.');
+  }
+
+  if (requiredScope && !row.scope?.includes(requiredScope)) {
+    throw new Error('Reconnect Google to grant Google Sheets access for this feature.');
   }
 
   const expiryMs = row.expiry_date ? new Date(row.expiry_date).getTime() : 0;

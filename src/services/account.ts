@@ -413,6 +413,52 @@ export async function fetchGoogleDriveAccessToken(): Promise<string> {
   return data.accessToken;
 }
 
+export async function invokeAuthenticatedFunction<TResponse>(
+  functionName: string,
+  body?: Record<string, unknown>
+): Promise<TResponse> {
+  ensureSupabaseConfigured();
+
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
+
+  if (sessionError) {
+    throw sessionError;
+  }
+
+  if (!session?.access_token) {
+    throw new Error('Sign in first.');
+  }
+
+  const { data, error } = await supabase.functions.invoke<TResponse & { error?: string }>(functionName, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body,
+  });
+
+  if (error) {
+    if (error instanceof FunctionsHttpError) {
+      const message = await readFunctionsErrorMessage(error);
+      throw new Error(message);
+    }
+    throw error;
+  }
+
+  if (data && typeof data === 'object' && 'error' in data && typeof (data as { error: unknown }).error === 'string') {
+    throw new Error((data as { error: string }).error);
+  }
+
+  if (data == null) {
+    throw new Error('Edge function returned no data.');
+  }
+
+  return data as TResponse;
+}
+
 async function readFunctionsErrorMessage(error: FunctionsHttpError): Promise<string> {
   try {
     const body = await error.context.clone().json();
@@ -506,6 +552,7 @@ function readDriveConnection(user: User): DriveConnection {
       connectedAt: null,
       saveFolderId: null,
       saveFolderName: null,
+      needsReconnect: false,
     };
   }
 
@@ -517,5 +564,6 @@ function readDriveConnection(user: User): DriveConnection {
     connectedAt: typeof connection.connectedAt === 'string' ? connection.connectedAt : null,
     saveFolderId: typeof connection.saveFolderId === 'string' ? connection.saveFolderId : null,
     saveFolderName: typeof connection.saveFolderName === 'string' ? connection.saveFolderName : null,
+    needsReconnect: connection.needsReconnect === true,
   };
 }

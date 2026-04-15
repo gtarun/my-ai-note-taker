@@ -2,9 +2,11 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { DocumentPickerAsset } from 'expo-document-picker';
 
 import { getDatabase, mapMeetingRow } from '../db';
-import { SummaryPayload, type MeetingRow } from '../types';
+import { SummaryPayload, type MeetingExtractionStatus, type MeetingRow } from '../types';
 import { getAudioDirectory } from './bootstrap';
-import { summarizeTranscript, transcribeAudio } from './ai';
+import { extractStructuredData, summarizeTranscript, transcribeAudio } from './ai';
+import { getExtractionLayer } from './extractionLayers';
+import { appendExtractionLayerRow } from './googleSheets';
 import { getInstalledModel } from './localModels';
 import { isProviderConfigured } from './providers';
 import { getAppSettings } from './settings';
@@ -52,7 +54,7 @@ export async function createMeetingFromImport(asset: DocumentPickerAsset) {
   });
 }
 
-export async function processMeeting(id: string) {
+export async function processMeeting(id: string, options: { layerId?: string | null } = {}) {
   const meeting = await getMeeting(id);
 
   if (!meeting) {
@@ -62,6 +64,7 @@ export async function processMeeting(id: string) {
   const settings = await getAppSettings();
   const transcriptionProvider = settings.providers[settings.selectedTranscriptionProvider];
   const summaryProvider = settings.providers[settings.selectedSummaryProvider];
+  const layer = options.layerId ? await getExtractionLayer(options.layerId) : null;
 
   if (!isProviderConfigured(settings.selectedTranscriptionProvider, transcriptionProvider, 'transcription')) {
     throw new Error('Configure the selected transcription provider in Settings first.');
@@ -76,6 +79,10 @@ export async function processMeeting(id: string) {
     if (!installedModel || installedModel.status !== 'installed') {
       throw new Error('Download and install the selected local transcription model first.');
     }
+  }
+
+  if (options.layerId && !layer) {
+    throw new Error('Selected extraction layer no longer exists.');
   }
 
   try {
@@ -106,9 +113,125 @@ export async function processMeeting(id: string) {
 
     await saveSummary(id, summary);
     await updateMeetingStatus(id, 'ready', null);
+
+    if (layer) {
+      await saveMeetingExtractionResult(id, {
+        layerId: layer.id,
+        layerName: layer.name,
+        fields: layer.fields,
+        values: Object.fromEntries(layer.fields.map((field) => [field.id, ''])),
+        extractionStatus: 'extracting',
+        extractionErrorMessage: null,
+        syncStatus: 'not_synced',
+        syncErrorMessage: null,
+        syncedAt: null,
+        syncedRowId: null,
+      });
+
+      try {
+        const extractedValues = await extractStructuredData({
+          providerId: settings.selectedSummaryProvider,
+          provider: summaryProvider,
+          transcriptText,
+          fields: layer.fields,
+        });
+
+        await saveMeetingExtractionResult(id, {
+          layerId: layer.id,
+          layerName: layer.name,
+          fields: layer.fields,
+          values: extractedValues,
+          extractionStatus: 'ready',
+          extractionErrorMessage: null,
+          syncStatus: 'not_synced',
+          syncErrorMessage: null,
+          syncedAt: null,
+          syncedRowId: null,
+        });
+      } catch (error) {
+        await saveMeetingExtractionResult(id, {
+          layerId: layer.id,
+          layerName: layer.name,
+          fields: layer.fields,
+          values: Object.fromEntries(layer.fields.map((field) => [field.id, ''])),
+          extractionStatus: 'failed',
+          extractionErrorMessage: error instanceof Error ? error.message : 'Extraction failed.',
+          syncStatus: 'not_synced',
+          syncErrorMessage: null,
+          syncedAt: null,
+          syncedRowId: null,
+        });
+      }
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown processing error.';
     await updateMeetingStatus(id, 'failed', message);
+    throw error;
+  }
+}
+
+export async function saveMeetingExtractionValues(id: string, values: Record<string, string>) {
+  const meeting = await getMeeting(id);
+
+  if (!meeting?.extractionResult) {
+    throw new Error('No extracted data is available for this meeting yet.');
+  }
+
+  const nextValues = Object.fromEntries(
+    meeting.extractionResult.fields.map((field) => [field.id, values[field.id]?.trim() ?? ''])
+  );
+
+  const db = getDatabase();
+  await db.runAsync(
+    'UPDATE meetings SET extraction_values_json = ?, extraction_sync_status = ?, extraction_sync_error_message = ?, updated_at = ? WHERE id = ?',
+    JSON.stringify(nextValues),
+    'not_synced',
+    null,
+    new Date().toISOString(),
+    id
+  );
+}
+
+export async function syncMeetingExtractionResult(id: string) {
+  const meeting = await getMeeting(id);
+
+  if (!meeting?.extractionResult) {
+    throw new Error('No extracted data is available for this meeting yet.');
+  }
+
+  const layer = await getExtractionLayer(meeting.extractionResult.layerId);
+
+  if (!layer) {
+    throw new Error('The selected extraction layer no longer exists.');
+  }
+
+  await updateMeetingExtractionSync(id, {
+    syncStatus: 'syncing',
+    syncErrorMessage: null,
+    syncedAt: null,
+    syncedRowId: null,
+  });
+
+  try {
+    const result = await appendExtractionLayerRow({
+      layer,
+      values: meeting.extractionResult.values,
+    });
+
+    await updateMeetingExtractionSync(id, {
+      syncStatus: 'synced',
+      syncErrorMessage: null,
+      syncedAt: new Date().toISOString(),
+      syncedRowId: result.rowRange,
+    });
+  } catch (error) {
+    await updateMeetingExtractionSync(id, {
+      syncStatus: 'sync_failed',
+      syncErrorMessage: error instanceof Error ? error.message : 'Unable to sync this row.',
+      syncedAt: null,
+      syncedRowId: null,
+    });
+
     throw error;
   }
 }
@@ -213,6 +336,62 @@ async function saveSummary(id: string, summary: SummaryPayload) {
     'UPDATE meetings SET summary_json = ?, summary_short = ?, updated_at = ? WHERE id = ?',
     JSON.stringify(summary),
     summary.summary,
+    new Date().toISOString(),
+    id
+  );
+}
+
+async function saveMeetingExtractionResult(
+  id: string,
+  input: {
+    layerId: string;
+    layerName: string;
+    fields: Array<{ id: string; title: string; description: string }>;
+    values: Record<string, string>;
+    extractionStatus: MeetingExtractionStatus;
+    extractionErrorMessage: string | null;
+    syncStatus: 'not_synced' | 'syncing' | 'synced' | 'sync_failed';
+    syncErrorMessage: string | null;
+    syncedAt: string | null;
+    syncedRowId: string | null;
+  }
+) {
+  const db = getDatabase();
+  await db.runAsync(
+    `UPDATE meetings
+     SET selected_layer_id = ?, extraction_layer_name = ?, extraction_fields_json = ?, extraction_values_json = ?,
+         extraction_status = ?, extraction_error_message = ?, extraction_sync_status = ?,
+         extraction_sync_error_message = ?, updated_at = ?
+     WHERE id = ?`,
+    input.layerId,
+    input.layerName,
+    JSON.stringify(input.fields),
+    JSON.stringify(input.values),
+    input.extractionStatus,
+    input.extractionErrorMessage,
+    input.syncStatus,
+    input.syncErrorMessage,
+    new Date().toISOString(),
+    id
+  );
+}
+
+async function updateMeetingExtractionSync(
+  id: string,
+  input: {
+    syncStatus: 'syncing' | 'synced' | 'sync_failed';
+    syncErrorMessage: string | null;
+    syncedAt: string | null;
+    syncedRowId: string | null;
+  }
+) {
+  const db = getDatabase();
+  await db.runAsync(
+    'UPDATE meetings SET extraction_sync_status = ?, extraction_sync_error_message = ?, extraction_synced_at = ?, extraction_synced_row_id = ?, updated_at = ? WHERE id = ?',
+    input.syncStatus,
+    input.syncErrorMessage,
+    input.syncedAt,
+    input.syncedRowId,
     new Date().toISOString(),
     id
   );

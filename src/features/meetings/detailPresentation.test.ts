@@ -4,6 +4,8 @@ import { SummaryPayload } from '../../types';
 import {
   MEETING_DETAIL_TITLE_ACTION_SLOT_MIN_WIDTH,
   MEETING_DETAIL_SECTION_ORDER,
+  getExtractionSyncLabel,
+  getMeetingDetailExtractionCopyText,
   getMeetingDetailActionItemsCopyText,
   getMeetingDetailDecisionsCopyText,
   getMeetingDetailPrimaryActionLabel,
@@ -47,13 +49,14 @@ describe('meeting detail presentation', () => {
       'summary',
       'actionItems',
       'decisions',
+      'extractedData',
       'transcript',
       'recording',
     ]);
   });
 
   test('builds compact action labels for playback and processing', () => {
-    expect(getMeetingDetailPrimaryActionLabel(false)).toBe('Run transcript + summary');
+    expect(getMeetingDetailPrimaryActionLabel(false)).toBe('Analyze recording');
     expect(getMeetingDetailPrimaryActionLabel(true)).toBe('Processing…');
     expect(getPlaybackActionLabel(false)).toBe('Play recording');
     expect(getPlaybackActionLabel(true)).toBe('Pause recording');
@@ -95,5 +98,22 @@ describe('meeting detail presentation', () => {
       'Discussed launch timing and QA owner.'
     );
     expect(getMeetingDetailTranscriptCopyText(null)).toBe('No transcript yet.');
+  });
+
+  test('formats extracted field values for copy and review', () => {
+    expect(
+      getMeetingDetailExtractionCopyText([
+        { title: 'Full name', value: 'Priya Sharma' },
+        { title: 'Issue', value: 'Delayed payroll' },
+      ])
+    ).toBe('Full name: Priya Sharma\nIssue: Delayed payroll');
+    expect(getMeetingDetailExtractionCopyText([])).toBe('No extracted data yet.');
+  });
+
+  test('builds friendly sync status labels for extraction results', () => {
+    expect(getExtractionSyncLabel('not_synced')).toBe('Not synced');
+    expect(getExtractionSyncLabel('syncing')).toBe('Syncing…');
+    expect(getExtractionSyncLabel('synced')).toBe('Synced');
+    expect(getExtractionSyncLabel('sync_failed')).toBe('Sync failed');
   });
 });

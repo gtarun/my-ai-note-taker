@@ -19,7 +19,17 @@ export async function initializeDatabase() {
       transcript_text TEXT,
       summary_json TEXT,
       summary_short TEXT,
-      error_message TEXT
+      error_message TEXT,
+      selected_layer_id TEXT,
+      extraction_layer_name TEXT,
+      extraction_fields_json TEXT,
+      extraction_values_json TEXT,
+      extraction_status TEXT,
+      extraction_error_message TEXT,
+      extraction_sync_status TEXT,
+      extraction_sync_error_message TEXT,
+      extraction_synced_at TEXT,
+      extraction_synced_row_id TEXT
     );
 
     CREATE TABLE IF NOT EXISTS app_settings (
@@ -65,6 +75,28 @@ export async function initializeDatabase() {
       error_message TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS extraction_layers (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      spreadsheet_id TEXT,
+      spreadsheet_title TEXT,
+      sheet_title TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS extraction_layer_fields (
+      id TEXT PRIMARY KEY NOT NULL,
+      layer_id TEXT NOT NULL,
+      field_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(layer_id) REFERENCES extraction_layers(id) ON DELETE CASCADE
+    );
+
     INSERT OR IGNORE INTO app_settings (
       id,
       openai_base_url,
@@ -99,6 +131,26 @@ export async function initializeDatabase() {
   if (!appPreferenceColumns.some((column) => column.name === 'has_seen_onboarding')) {
     await db.execAsync('ALTER TABLE app_preferences ADD COLUMN has_seen_onboarding INTEGER NOT NULL DEFAULT 0;');
   }
+
+  const meetingColumns = await db.getAllAsync<{ name?: string }>('PRAGMA table_info(meetings)');
+  const requiredMeetingColumns = [
+    ['selected_layer_id', 'TEXT'],
+    ['extraction_layer_name', 'TEXT'],
+    ['extraction_fields_json', 'TEXT'],
+    ['extraction_values_json', 'TEXT'],
+    ['extraction_status', 'TEXT'],
+    ['extraction_error_message', 'TEXT'],
+    ['extraction_sync_status', 'TEXT'],
+    ['extraction_sync_error_message', 'TEXT'],
+    ['extraction_synced_at', 'TEXT'],
+    ['extraction_synced_row_id', 'TEXT'],
+  ] as const;
+
+  for (const [columnName, columnType] of requiredMeetingColumns) {
+    if (!meetingColumns.some((column) => column.name === columnName)) {
+      await db.execAsync(`ALTER TABLE meetings ADD COLUMN ${columnName} ${columnType};`);
+    }
+  }
 }
 
 export function getDatabase() {
@@ -106,6 +158,10 @@ export function getDatabase() {
 }
 
 export function mapMeetingRow(row: Record<string, unknown>): MeetingRow {
+  const selectedLayerId = row.selected_layer_id ? String(row.selected_layer_id) : null;
+  const extractionFields = parseJsonValue(row.extraction_fields_json);
+  const extractionValues = parseJsonValue(row.extraction_values_json);
+
   return {
     id: String(row.id),
     title: String(row.title),
@@ -119,5 +175,44 @@ export function mapMeetingRow(row: Record<string, unknown>): MeetingRow {
     summaryJson: row.summary_json ? String(row.summary_json) : null,
     summaryShort: row.summary_short ? String(row.summary_short) : null,
     errorMessage: row.error_message ? String(row.error_message) : null,
+    extractionResult: selectedLayerId
+      ? {
+          layerId: selectedLayerId,
+          layerName: row.extraction_layer_name ? String(row.extraction_layer_name) : '',
+          fields: Array.isArray(extractionFields) ? extractionFields : [],
+          values:
+            extractionValues && typeof extractionValues === 'object' && !Array.isArray(extractionValues)
+              ? (extractionValues as Record<string, string>)
+              : {},
+          extractionStatus:
+            row.extraction_status === 'failed' || row.extraction_status === 'extracting'
+              ? row.extraction_status
+              : 'ready',
+          extractionErrorMessage: row.extraction_error_message ? String(row.extraction_error_message) : null,
+          syncStatus:
+            row.extraction_sync_status === 'syncing' ||
+            row.extraction_sync_status === 'synced' ||
+            row.extraction_sync_status === 'sync_failed'
+              ? row.extraction_sync_status
+              : 'not_synced',
+          syncErrorMessage: row.extraction_sync_error_message
+            ? String(row.extraction_sync_error_message)
+            : null,
+          syncedAt: row.extraction_synced_at ? String(row.extraction_synced_at) : null,
+          syncedRowId: row.extraction_synced_row_id ? String(row.extraction_synced_row_id) : null,
+        }
+      : null,
   };
+}
+
+function parseJsonValue(value: unknown) {
+  if (!value || typeof value !== 'string') {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
 }

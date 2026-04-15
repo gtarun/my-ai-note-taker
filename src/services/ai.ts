@@ -1,7 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 
-import { ProviderConfig, ProviderId, SummaryPayload } from '../types';
+import { ExtractionLayerField, ProviderConfig, ProviderId, SummaryPayload } from '../types';
 import {
   IOS_LOCAL_TRANSCRIPTION_MODEL_ERROR,
   IOS_LOCAL_TRANSCRIPTION_MODEL_ID,
@@ -20,6 +20,13 @@ type SummarizeParams = {
   providerId: ProviderId;
   provider: ProviderConfig;
   transcriptText: string;
+};
+
+type ExtractParams = {
+  providerId: ProviderId;
+  provider: ProviderConfig;
+  transcriptText: string;
+  fields: ExtractionLayerField[];
 };
 
 const summaryJsonSchema = {
@@ -87,6 +94,37 @@ export async function summarizeTranscript(params: SummarizeParams) {
     default:
       return summarizeWithOpenAICompatible(params.provider, params.transcriptText, params.providerId);
   }
+}
+
+export async function extractStructuredData(params: ExtractParams): Promise<Record<string, string>> {
+  if (!params.fields.length) {
+    return {};
+  }
+
+  if (params.providerId === 'local') {
+    throw new Error('Local extraction is not supported yet.');
+  }
+
+  let rawValues: unknown;
+
+  switch (params.providerId) {
+    case 'anthropic':
+      rawValues = await extractWithAnthropic(params.provider, params.transcriptText, params.fields);
+      break;
+    case 'gemini':
+      rawValues = await extractWithGemini(params.provider, params.transcriptText, params.fields);
+      break;
+    default:
+      rawValues = await extractWithOpenAICompatible(
+        params.provider,
+        params.transcriptText,
+        params.providerId,
+        params.fields
+      );
+      break;
+  }
+
+  return normalizeExtractedValues(rawValues, params.fields);
 }
 
 async function transcribeOpenAICompatible(provider: ProviderConfig, audioUri: string) {
@@ -332,6 +370,156 @@ async function summarizeWithGemini(provider: ProviderConfig, transcriptText: str
   return JSON.parse(content) as SummaryPayload;
 }
 
+async function extractWithOpenAICompatible(
+  provider: ProviderConfig,
+  transcriptText: string,
+  providerId: ProviderId,
+  fields: ExtractionLayerField[]
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${provider.apiKey}`,
+    'Content-Type': 'application/json',
+  };
+
+  if (providerId === 'openrouter') {
+    headers['HTTP-Referer'] = 'https://mu-fathom.local';
+    headers['X-Title'] = 'mu-fathom';
+  }
+
+  const response = await fetch(buildUrl(provider.baseUrl, '/chat/completions'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: provider.summaryModel,
+      temperature: 0,
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'meeting_extraction',
+          schema: buildExtractionJsonSchema(fields),
+        },
+      },
+      messages: buildExtractionMessages(transcriptText, fields),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  const payload = (await response.json()) as {
+    choices?: Array<{
+      message?: {
+        content?: string;
+      };
+    }>;
+  };
+  const content = payload.choices?.[0]?.message?.content;
+
+  if (!content) {
+    throw new Error('Extraction API returned no content.');
+  }
+
+  return JSON.parse(content);
+}
+
+async function extractWithAnthropic(
+  provider: ProviderConfig,
+  transcriptText: string,
+  fields: ExtractionLayerField[]
+) {
+  const response = await fetch(buildUrl(provider.baseUrl, '/messages'), {
+    method: 'POST',
+    headers: {
+      'x-api-key': provider.apiKey,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: provider.summaryModel,
+      max_tokens: 1200,
+      system:
+        'You extract structured meeting data from transcripts. Return valid JSON only. Use empty strings for missing values.',
+      messages: [
+        {
+          role: 'user',
+          content: buildExtractionPrompt(transcriptText, fields),
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  const payload = (await response.json()) as {
+    content?: Array<{ type?: string; text?: string }>;
+  };
+  const content = payload.content?.find((item) => item.type === 'text')?.text;
+
+  if (!content) {
+    throw new Error('Anthropic returned no extraction content.');
+  }
+
+  return JSON.parse(extractJson(content));
+}
+
+async function extractWithGemini(
+  provider: ProviderConfig,
+  transcriptText: string,
+  fields: ExtractionLayerField[]
+) {
+  const baseUrl = provider.baseUrl.replace(/\/$/, '');
+  const response = await fetch(
+    `${baseUrl}/models/${provider.summaryModel}:generateContent?key=${encodeURIComponent(provider.apiKey)}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text:
+                  'You extract structured meeting data from transcripts. Return valid JSON only. Use empty strings for missing values.',
+              },
+              {
+                text: buildExtractionPrompt(transcriptText, fields),
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseJsonSchema: buildExtractionJsonSchema(fields),
+        },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  const payload = (await response.json()) as {
+    candidates?: Array<{
+      content?: {
+        parts?: Array<{ text?: string }>;
+      };
+    }>;
+  };
+  const content = payload.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  if (!content) {
+    throw new Error('Gemini returned no extraction content.');
+  }
+
+  return JSON.parse(content);
+}
+
 function buildSummaryMessages(transcriptText: string) {
   return [
     {
@@ -347,6 +535,64 @@ Transcript:
 ${transcriptText}`,
     },
   ];
+}
+
+function buildExtractionMessages(transcriptText: string, fields: ExtractionLayerField[]) {
+  return [
+    {
+      role: 'system',
+      content:
+        'You extract structured meeting data from transcripts. Return valid JSON only. Use empty strings for missing values and never invent facts.',
+    },
+    {
+      role: 'user',
+      content: buildExtractionPrompt(transcriptText, fields),
+    },
+  ];
+}
+
+function buildExtractionPrompt(transcriptText: string, fields: ExtractionLayerField[]) {
+  const fieldInstructions = fields
+    .map((field) => `- ${field.id}: ${field.title}. ${field.description || 'Extract this value from the transcript.'}`)
+    .join('\n');
+
+  return `Return JSON only. Use each field id as the JSON key. If a value is missing or uncertain, return an empty string.
+
+Fields:
+${fieldInstructions}
+
+Transcript:
+${transcriptText}`;
+}
+
+function buildExtractionJsonSchema(fields: ExtractionLayerField[]) {
+  const properties = Object.fromEntries(
+    fields.map((field) => [
+      field.id,
+      {
+        type: 'string',
+        description: field.description || field.title,
+      },
+    ])
+  );
+
+  return {
+    type: 'object',
+    additionalProperties: false,
+    properties,
+    required: fields.map((field) => field.id),
+  };
+}
+
+function normalizeExtractedValues(value: unknown, fields: ExtractionLayerField[]) {
+  const raw = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+
+  return Object.fromEntries(
+    fields.map((field) => {
+      const candidate = (raw as Record<string, unknown>)[field.id];
+      return [field.id, typeof candidate === 'string' ? candidate.trim() : ''];
+    })
+  );
 }
 
 function buildUrl(baseUrl: string, path: string) {

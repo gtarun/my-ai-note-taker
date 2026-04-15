@@ -1,10 +1,12 @@
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import { Stack, useLocalSearchParams, useFocusEffect, router } from 'expo-router';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -14,37 +16,49 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 
 import { FadeInView } from '../../src/components/FadeInView';
 import { ScreenBackground } from '../../src/components/ScreenBackground';
 import {
   MEETING_DETAIL_TITLE_ACTION_SLOT_MIN_WIDTH,
+  getExtractionSyncLabel,
   getMeetingDetailActionItemsCopyText,
   getMeetingDetailDecisionsCopyText,
+  getMeetingDetailExtractionCopyText,
   getMeetingDetailPrimaryActionLabel,
   getMeetingDetailSummaryCopyText,
   getMeetingDetailTitleDraftState,
   getMeetingDetailTranscriptCopyText,
   getPlaybackActionLabel,
 } from '../../src/features/meetings/detailPresentation';
+import { getMeetingDetailHeaderPresentation } from '../../src/features/meetings/navigation';
+import { APP_TABS_ROUTE, LAYERS_ROUTE } from '../../src/navigation/routes';
+import { listExtractionLayers } from '../../src/services/extractionLayers';
 import {
-  getMeetingDetailHeaderPresentation,
-} from '../../src/features/meetings/navigation';
-import { APP_TABS_ROUTE } from '../../src/navigation/routes';
-import { MeetingRow, SummaryPayload } from '../../src/types';
-import { deleteMeeting, getMeeting, processMeeting, renameMeeting } from '../../src/services/meetings';
-import { formatDuration, formatTimestamp } from '../../src/utils/format';
+  deleteMeeting,
+  getMeeting,
+  processMeeting,
+  renameMeeting,
+  saveMeetingExtractionValues,
+  syncMeetingExtractionResult,
+} from '../../src/services/meetings';
+import type { ExtractionLayer, MeetingRow, SummaryPayload } from '../../src/types';
 import { elevation, palette } from '../../src/theme';
+import { formatDuration, formatTimestamp } from '../../src/utils/format';
 
 export default function MeetingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [meeting, setMeeting] = useState<MeetingRow | null>(null);
+  const [availableLayers, setAvailableLayers] = useState<ExtractionLayer[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [draftTitle, setDraftTitle] = useState('');
+  const [extractionDraftValues, setExtractionDraftValues] = useState<Record<string, string>>({});
   const [isSavingTitle, setIsSavingTitle] = useState(false);
+  const [isSavingExtraction, setIsSavingExtraction] = useState(false);
+  const [isSyncingExtraction, setIsSyncingExtraction] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isLayerPickerVisible, setIsLayerPickerVisible] = useState(false);
   const [copiedSection, setCopiedSection] = useState<CopyableMeetingSection | null>(null);
   const player = useAudioPlayer(meeting?.audioUri ?? null);
   const playerStatus = useAudioPlayerStatus(player);
@@ -62,8 +76,9 @@ export default function MeetingDetailScreen() {
       return;
     }
 
-    const data = await getMeeting(id);
+    const [data, layers] = await Promise.all([getMeeting(id), listExtractionLayers()]);
     setMeeting(data);
+    setAvailableLayers(layers);
     setDraftTitle(data?.title ?? '');
     setHasLoaded(true);
   }, [id]);
@@ -88,20 +103,24 @@ export default function MeetingDetailScreen() {
     };
   }, [copiedSection]);
 
+  useEffect(() => {
+    setExtractionDraftValues(meeting?.extractionResult?.values ?? {});
+  }, [meeting?.extractionResult]);
+
   useFocusEffect(
     useCallback(() => {
-      loadMeeting();
+      void loadMeeting();
     }, [loadMeeting])
   );
 
-  const handleProcess = async () => {
+  const runAnalysis = async (layerId?: string | null) => {
     if (!id) {
       return;
     }
 
     try {
       setIsBusy(true);
-      await processMeeting(id);
+      await processMeeting(id, { layerId: layerId ?? null });
       await loadMeeting();
     } catch (error) {
       Alert.alert('Processing failed', error instanceof Error ? error.message : 'Unable to process meeting.');
@@ -110,15 +129,18 @@ export default function MeetingDetailScreen() {
     }
   };
 
+  const handleProcess = () => {
+    setIsLayerPickerVisible(true);
+  };
+
   const handleShare = async () => {
     if (!meeting) {
       return;
     }
 
-    const shareBody = buildShareText(meeting);
     await Share.share({
       title: meeting.title,
-      message: shareBody,
+      message: buildShareText(meeting),
     });
   };
 
@@ -143,7 +165,7 @@ export default function MeetingDetailScreen() {
       return;
     }
 
-    Alert.alert('Delete recording?', 'This removes the audio file, transcript, and summary from this device.', [
+    Alert.alert('Delete recording?', 'This removes the audio file, transcript, summary, and extracted data from this device.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -185,12 +207,45 @@ export default function MeetingDetailScreen() {
     }
   };
 
+  const handleSaveExtraction = async () => {
+    if (!meeting?.extractionResult || !id) {
+      return;
+    }
+
+    try {
+      setIsSavingExtraction(true);
+      await saveMeetingExtractionValues(id, extractionDraftValues);
+      await loadMeeting();
+    } catch (error) {
+      Alert.alert('Save failed', error instanceof Error ? error.message : 'Unable to save extracted values.');
+    } finally {
+      setIsSavingExtraction(false);
+    }
+  };
+
+  const handleSyncExtraction = async () => {
+    if (!meeting?.extractionResult || !id) {
+      return;
+    }
+
+    try {
+      setIsSyncingExtraction(true);
+      await saveMeetingExtractionValues(id, extractionDraftValues);
+      await syncMeetingExtractionResult(id);
+      await loadMeeting();
+      Alert.alert('Synced', 'The extracted row was sent to Google Sheets.');
+    } catch (error) {
+      await loadMeeting();
+      Alert.alert('Sync failed', error instanceof Error ? error.message : 'Unable to sync this row.');
+    } finally {
+      setIsSyncingExtraction(false);
+    }
+  };
+
   if (!hasLoaded) {
     return (
       <View style={styles.centered}>
-        <Stack.Screen
-          options={screenOptions}
-        />
+        <Stack.Screen options={screenOptions} />
         <ActivityIndicator size="large" color={palette.ink} />
       </View>
     );
@@ -199,9 +254,7 @@ export default function MeetingDetailScreen() {
   if (!meeting) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <Stack.Screen
-          options={screenOptions}
-        />
+        <Stack.Screen options={screenOptions} />
         <ScreenBackground />
         <View style={styles.centered}>
           <Text style={styles.notFoundTitle}>Meeting not found</Text>
@@ -214,17 +267,29 @@ export default function MeetingDetailScreen() {
   }
 
   const summary = parseSummary(meeting.summaryJson);
+  const extraction = meeting.extractionResult;
   const titleDraftState = getMeetingDetailTitleDraftState(draftTitle, meeting.title);
   const summaryCopyText = getMeetingDetailSummaryCopyText(summary);
   const actionItemsCopyText = getMeetingDetailActionItemsCopyText(summary);
   const decisionsCopyText = getMeetingDetailDecisionsCopyText(summary);
   const transcriptCopyText = getMeetingDetailTranscriptCopyText(meeting.transcriptText);
+  const extractionRows =
+    extraction?.fields.map((field) => ({
+      id: field.id,
+      title: field.title,
+      description: field.description,
+      value: extractionDraftValues[field.id] ?? '',
+    })) ?? [];
+  const extractionCopyText = getMeetingDetailExtractionCopyText(
+    extractionRows.map((row) => ({ title: row.title, value: row.value }))
+  );
+  const extractionHasChanges =
+    extraction?.fields.some((field) => (extraction.values[field.id] ?? '') !== (extractionDraftValues[field.id] ?? '')) ??
+    false;
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <Stack.Screen
-        options={screenOptions}
-      />
+      <Stack.Screen options={screenOptions} />
       <ScreenBackground />
       <ScrollView contentContainerStyle={styles.container}>
         <FadeInView style={styles.headerCard}>
@@ -332,6 +397,92 @@ export default function MeetingDetailScreen() {
         </Section>
 
         <Section
+          title="Extracted data"
+          delay={195}
+          isCopied={copiedSection === 'extractedData'}
+          onCopyPress={extraction ? () => handleCopySection('extractedData', extractionCopyText) : undefined}
+        >
+          {extraction ? (
+            <View style={styles.extractionWrap}>
+              <View style={styles.extractionMetaRow}>
+                <Text style={styles.extractionMetaText}>Layer: {extraction.layerName}</Text>
+                <View
+                  style={[
+                    styles.extractionSyncBadge,
+                    extraction.syncStatus === 'synced' && styles.extractionSyncBadgeReady,
+                    extraction.syncStatus === 'sync_failed' && styles.extractionSyncBadgeFailed,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.extractionSyncBadgeText,
+                      extraction.syncStatus === 'synced' && styles.extractionSyncBadgeTextReady,
+                      extraction.syncStatus === 'sync_failed' && styles.extractionSyncBadgeTextFailed,
+                    ]}
+                  >
+                    {getExtractionSyncLabel(extraction.syncStatus)}
+                  </Text>
+                </View>
+              </View>
+
+              {extraction.extractionErrorMessage ? (
+                <Text style={styles.extractionErrorText}>{extraction.extractionErrorMessage}</Text>
+              ) : null}
+              {extraction.syncErrorMessage ? (
+                <Text style={styles.extractionErrorText}>{extraction.syncErrorMessage}</Text>
+              ) : null}
+
+              {extractionRows.map((row) => (
+                <View key={row.id} style={styles.extractionFieldCard}>
+                  <Text style={styles.extractionFieldTitle}>{row.title}</Text>
+                  {row.description ? <Text style={styles.extractionFieldDescription}>{row.description}</Text> : null}
+                  <TextInput
+                    style={styles.extractionInput}
+                    value={row.value}
+                    onChangeText={(value) =>
+                      setExtractionDraftValues((current) => ({
+                        ...current,
+                        [row.id]: value,
+                      }))
+                    }
+                    placeholder="No value extracted yet"
+                    placeholderTextColor={palette.mutedInk}
+                    multiline
+                  />
+                </View>
+              ))}
+
+              <View style={styles.extractionActions}>
+                <Pressable
+                  style={[
+                    styles.secondaryButton,
+                    (!extractionHasChanges || isSavingExtraction || isSyncingExtraction) && styles.secondaryButtonDisabled,
+                  ]}
+                  onPress={handleSaveExtraction}
+                  disabled={!extractionHasChanges || isSavingExtraction || isSyncingExtraction}
+                >
+                  <Feather name="save" size={17} color={palette.ink} />
+                  <Text style={styles.secondaryButtonText}>{isSavingExtraction ? 'Saving…' : 'Save changes'}</Text>
+                </Pressable>
+
+                <Pressable
+                  style={[styles.primaryButton, styles.extractionSyncButton, isSyncingExtraction && styles.primaryButtonDisabled]}
+                  onPress={handleSyncExtraction}
+                  disabled={isSyncingExtraction}
+                >
+                  <Feather name="upload-cloud" size={17} color={palette.paper} />
+                  <Text style={styles.primaryButtonText}>
+                    {isSyncingExtraction ? 'Syncing…' : 'Sync to Google Sheets'}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <Text style={styles.bodyText}>No extracted data yet. Choose a layer when you run Analyze.</Text>
+          )}
+        </Section>
+
+        <Section
           title="Transcript"
           delay={210}
           isCopied={copiedSection === 'transcript'}
@@ -353,7 +504,7 @@ export default function MeetingDetailScreen() {
         <FadeInView style={styles.dangerZone} delay={270}>
           <Text style={styles.dangerZoneTitle}>Delete meeting</Text>
           <Text style={styles.dangerZoneBody}>
-            This permanently removes the audio file, transcript, and summary from this device.
+            This permanently removes the audio file, transcript, summary, and extracted data from this device.
           </Text>
           <Pressable style={styles.dangerButton} onPress={handleDelete} disabled={isDeleting}>
             <Feather name="trash-2" size={16} color={palette.danger} />
@@ -361,6 +512,65 @@ export default function MeetingDetailScreen() {
           </Pressable>
         </FadeInView>
       </ScrollView>
+
+      <Modal visible={isLayerPickerVisible} animationType="slide" transparent onRequestClose={() => setIsLayerPickerVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.layerPickerCard}>
+            <View style={styles.layerPickerHeader}>
+              <Text style={styles.layerPickerTitle}>Choose an extraction layer</Text>
+              <Pressable onPress={() => setIsLayerPickerVisible(false)} hitSlop={10}>
+                <Feather name="x" size={20} color={palette.ink} />
+              </Pressable>
+            </View>
+            <Text style={styles.layerPickerBody}>
+              Pick a layer for structured extraction, or continue without one to run the normal transcript + summary flow.
+            </Text>
+
+            <ScrollView contentContainerStyle={styles.layerPickerOptions}>
+              <Pressable
+                style={styles.layerOption}
+                onPress={() => {
+                  setIsLayerPickerVisible(false);
+                  void runAnalysis(null);
+                }}
+              >
+                <Text style={styles.layerOptionTitle}>No layer</Text>
+                <Text style={styles.layerOptionBody}>Run transcript + summary only.</Text>
+              </Pressable>
+
+              {availableLayers.map((layer) => (
+                <Pressable
+                  key={layer.id}
+                  style={styles.layerOption}
+                  onPress={() => {
+                    setIsLayerPickerVisible(false);
+                    void runAnalysis(layer.id);
+                  }}
+                >
+                  <Text style={styles.layerOptionTitle}>{layer.name}</Text>
+                  <Text style={styles.layerOptionBody}>
+                    {layer.fields.length} fields
+                    {layer.spreadsheetTitle ? ` • ${layer.spreadsheetTitle}` : ' • Google Sheet not connected yet'}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+
+            <View style={styles.layerPickerActions}>
+              <Pressable
+                style={styles.secondaryButton}
+                onPress={() => {
+                  setIsLayerPickerVisible(false);
+                  router.push(LAYERS_ROUTE);
+                }}
+              >
+                <Feather name="layers" size={17} color={palette.ink} />
+                <Text style={styles.secondaryButtonText}>Manage layers</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -381,7 +591,7 @@ function StatusIcon({ status }: { status: MeetingRow['status'] }) {
   }
 }
 
-type CopyableMeetingSection = 'summary' | 'actionItems' | 'decisions' | 'transcript';
+type CopyableMeetingSection = 'summary' | 'actionItems' | 'decisions' | 'extractedData' | 'transcript';
 
 function Section({
   title,
@@ -577,22 +787,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  inlineOfflineBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: palette.accentMist,
-    borderWidth: 1,
-    borderColor: palette.line,
-  },
-  inlineOfflineBadgeText: {
-    color: palette.ink,
-    fontSize: 13,
-    fontWeight: '700',
-  },
   errorText: {
     color: palette.danger,
     fontSize: 14,
@@ -617,6 +811,9 @@ const styles = StyleSheet.create({
     ...elevation.card,
     gap: 8,
   },
+  primaryButtonDisabled: {
+    opacity: 0.7,
+  },
   primaryButtonText: {
     color: palette.paper,
     fontWeight: '700',
@@ -634,9 +831,16 @@ const styles = StyleSheet.create({
     backgroundColor: palette.cardStrong,
     gap: 8,
   },
+  secondaryButtonDisabled: {
+    opacity: 0.5,
+  },
   secondaryButtonText: {
     color: palette.ink,
     fontWeight: '700',
+  },
+  extractionSyncButton: {
+    flex: 1,
+    minWidth: 220,
   },
   dangerZone: {
     backgroundColor: '#fff4f2',
@@ -723,5 +927,135 @@ const styles = StyleSheet.create({
     color: palette.ink,
     lineHeight: 22,
     fontSize: 14,
+  },
+  extractionWrap: {
+    gap: 12,
+  },
+  extractionMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  extractionMetaText: {
+    flex: 1,
+    color: palette.mutedInk,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  extractionSyncBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: palette.card,
+  },
+  extractionSyncBadgeReady: {
+    backgroundColor: '#d7f4e5',
+  },
+  extractionSyncBadgeFailed: {
+    backgroundColor: '#fde3e0',
+  },
+  extractionSyncBadgeText: {
+    color: palette.ink,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  extractionSyncBadgeTextReady: {
+    color: '#146c43',
+  },
+  extractionSyncBadgeTextFailed: {
+    color: palette.danger,
+  },
+  extractionErrorText: {
+    color: palette.danger,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  extractionFieldCard: {
+    gap: 6,
+    padding: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: palette.card,
+  },
+  extractionFieldTitle: {
+    color: palette.ink,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  extractionFieldDescription: {
+    color: palette.mutedInk,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  extractionInput: {
+    minHeight: 56,
+    borderWidth: 1,
+    borderColor: palette.line,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: palette.paper,
+    color: palette.ink,
+    textAlignVertical: 'top',
+  },
+  extractionActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(22, 29, 37, 0.32)',
+    justifyContent: 'flex-end',
+  },
+  layerPickerCard: {
+    maxHeight: '80%',
+    backgroundColor: palette.paper,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 20,
+    gap: 14,
+  },
+  layerPickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  layerPickerTitle: {
+    color: palette.ink,
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  layerPickerBody: {
+    color: palette.mutedInk,
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  layerPickerOptions: {
+    gap: 10,
+    paddingBottom: 8,
+  },
+  layerOption: {
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: palette.card,
+    gap: 4,
+  },
+  layerOptionTitle: {
+    color: palette.ink,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  layerOptionBody: {
+    color: palette.mutedInk,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  layerPickerActions: {
+    alignItems: 'flex-start',
   },
 });

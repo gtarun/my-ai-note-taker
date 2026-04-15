@@ -226,7 +226,7 @@ export default function AccountScreen() {
             <Text style={styles.heroTitle}>Google account and Drive</Text>
           </View>
           <Text style={styles.heroBody}>
-            Sign in with Google first, then connect Google Drive for per-customer cloud storage.
+            Sign in with Google first, then connect the same Google account for Drive backups and Google Sheets sync.
           </Text>
         </FadeInView>
 
@@ -240,7 +240,7 @@ export default function AccountScreen() {
                 ? `${session.user.email}\nDrive: ${
                     driveConnection?.status === 'connected' ? 'Connected' : 'Not connected'
                   }`
-                : 'Use Google sign-in first. Once signed in, connect the same Google account to Drive.'}
+                : 'Use Google sign-in first. Once signed in, connect the same Google account to Drive and Sheets.'}
             </Text>
             {driveConnection?.accountEmail ? (
               <Text style={styles.rowBody}>Drive account: {driveConnection.accountEmail}</Text>
