@@ -58,6 +58,42 @@ export async function saveCloudOnboardingState(hasSeenOnboarding: boolean) {
   });
 }
 
+export async function listCloudExtractionLayers() {
+  const session = await getAuthSession();
+
+  if (!session) {
+    return [] as ExtractionLayer[];
+  }
+
+  const response = await invokeAuthenticatedFunction<{ layers: ExtractionLayer[] }>(
+    'user-extraction-layers-sync',
+    {
+      action: 'list',
+    }
+  );
+
+  return response.layers;
+}
+
+export async function saveCloudExtractionLayer(layer: ExtractionLayer) {
+  const response = await invokeAuthenticatedFunction<{ layer: ExtractionLayer }>(
+    'user-extraction-layers-sync',
+    {
+      action: 'save',
+      layer,
+    }
+  );
+
+  return response.layer;
+}
+
+export async function deleteCloudExtractionLayer(layerId: string) {
+  await invokeAuthenticatedFunction('user-extraction-layers-sync', {
+    action: 'delete',
+    layerId,
+  });
+}
+
 export function mapBootstrapSnapshotToAppSettings(snapshot: CloudUserDataSnapshot): AppSettings {
   const providers = buildProviderMapFromSnapshot(snapshot);
   const availableTranscriptionProviders = providerDefinitions

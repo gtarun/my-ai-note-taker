@@ -1,5 +1,17 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
+const {
+  mockGetAuthSession,
+  mockListCloudExtractionLayers,
+  mockSaveCloudExtractionLayer,
+  mockDeleteCloudExtractionLayer,
+} = vi.hoisted(() => ({
+  mockGetAuthSession: vi.fn(),
+  mockListCloudExtractionLayers: vi.fn(),
+  mockSaveCloudExtractionLayer: vi.fn(),
+  mockDeleteCloudExtractionLayer: vi.fn(),
+}));
+
 type LayerRecord = {
   id: string;
   name: string;
@@ -28,7 +40,22 @@ beforeEach(() => {
   layerRows.length = 0;
   fieldRows.length = 0;
   vi.resetModules();
+  mockGetAuthSession.mockReset();
+  mockListCloudExtractionLayers.mockReset();
+  mockSaveCloudExtractionLayer.mockReset();
+  mockDeleteCloudExtractionLayer.mockReset();
+  mockGetAuthSession.mockResolvedValue(null);
 });
+
+vi.mock('./account', () => ({
+  getAuthSession: mockGetAuthSession,
+}));
+
+vi.mock('./cloudUserData', () => ({
+  listCloudExtractionLayers: mockListCloudExtractionLayers,
+  saveCloudExtractionLayer: mockSaveCloudExtractionLayer,
+  deleteCloudExtractionLayer: mockDeleteCloudExtractionLayer,
+}));
 
 vi.mock('../db', () => ({
   getDatabase: () => ({
@@ -217,6 +244,49 @@ describe('extraction layers service', () => {
       spreadsheetTitle: 'Leads tracker',
       sheetTitle: 'Inbound',
       fields: [{ id: 'company', title: 'Company', description: '' }],
+    });
+  });
+
+  test('lists cloud layers first when the user is signed in', async () => {
+    mockGetAuthSession.mockResolvedValue({ accessToken: 'token', user: { id: 'user-1' } });
+    mockListCloudExtractionLayers.mockResolvedValue([
+      {
+        id: 'layer-1',
+        name: 'Leads',
+        spreadsheetId: 'spreadsheet-1',
+        spreadsheetTitle: 'Leads tracker',
+        sheetTitle: 'Inbound',
+        createdAt: '2026-04-16T00:00:00.000Z',
+        updatedAt: '2026-04-16T00:00:00.000Z',
+        fields: [{ id: 'company', title: 'Company', description: '' }],
+      },
+    ]);
+
+    const { listExtractionLayers } = await import('./extractionLayers');
+
+    await expect(listExtractionLayers()).resolves.toMatchObject([
+      { id: 'layer-1', spreadsheetId: 'spreadsheet-1', sheetTitle: 'Inbound' },
+    ]);
+  });
+
+  test('keeps an existing sheet connection when editing a synced layer', async () => {
+    mockGetAuthSession.mockResolvedValue({ accessToken: 'token', user: { id: 'user-1' } });
+    mockSaveCloudExtractionLayer.mockImplementation(async (layer) => layer);
+
+    const { saveExtractionLayer } = await import('./extractionLayers');
+
+    await expect(
+      saveExtractionLayer({
+        id: 'layer-1',
+        name: 'Leads',
+        spreadsheetId: 'spreadsheet-1',
+        spreadsheetTitle: 'Leads tracker',
+        sheetTitle: 'Inbound',
+        fields: [{ id: 'company', title: 'Company', description: '' }],
+      })
+    ).resolves.toMatchObject({
+      spreadsheetId: 'spreadsheet-1',
+      sheetTitle: 'Inbound',
     });
   });
 

@@ -1,5 +1,11 @@
 import { getDatabase } from '../db';
 import type { ExtractionLayer, ExtractionLayerField } from '../types';
+import { getAuthSession } from './account';
+import {
+  deleteCloudExtractionLayer,
+  listCloudExtractionLayers,
+  saveCloudExtractionLayer,
+} from './cloudUserData';
 
 type LayerRow = {
   id: string;
@@ -27,13 +33,85 @@ type SaveExtractionLayerInput = {
 };
 
 export async function listExtractionLayers(): Promise<ExtractionLayer[]> {
+  const cached = await listLocalExtractionLayers();
+
+  try {
+    const session = await getAuthSession();
+
+    if (!session) {
+      return cached;
+    }
+
+    const cloudLayers = await listCloudExtractionLayers();
+    await replaceLocalExtractionLayers(cloudLayers);
+    return cloudLayers;
+  } catch {
+    return cached;
+  }
+}
+
+export async function getExtractionLayer(id: string): Promise<ExtractionLayer | null> {
+  const local = await getLocalExtractionLayer(id);
+
+  if (local) {
+    return local;
+  }
+
+  const session = await getAuthSession();
+
+  if (!session) {
+    return null;
+  }
+
+  const cloudLayers = await listCloudExtractionLayers();
+  await replaceLocalExtractionLayers(cloudLayers);
+  return cloudLayers.find((layer) => layer.id === id) ?? null;
+}
+
+export async function saveExtractionLayer(input: SaveExtractionLayerInput): Promise<ExtractionLayer> {
+  const localSaved = await saveExtractionLayerToLocalCache(input);
+  const session = await getAuthSession();
+
+  if (!session) {
+    return localSaved;
+  }
+
+  const cloudSaved = await saveCloudExtractionLayer(localSaved);
+  await saveExtractionLayerToLocalCache(cloudSaved);
+  return cloudSaved;
+}
+
+export async function deleteExtractionLayer(id: string) {
+  await deleteExtractionLayerFromLocalCache(id);
+  const session = await getAuthSession();
+
+  if (!session) {
+    return;
+  }
+
+  await deleteCloudExtractionLayer(id);
+}
+
+export async function replaceLocalExtractionLayers(layers: ExtractionLayer[]) {
+  const existing = await listLocalExtractionLayers();
+
+  for (const layer of existing) {
+    await deleteExtractionLayerFromLocalCache(layer.id);
+  }
+
+  for (const layer of layers) {
+    await saveExtractionLayerToLocalCache(layer);
+  }
+}
+
+async function listLocalExtractionLayers(): Promise<ExtractionLayer[]> {
   const db = getDatabase();
   const rows = await db.getAllAsync<LayerRow>('SELECT * FROM extraction_layers ORDER BY datetime(updated_at) DESC');
 
   return Promise.all(rows.map((row) => hydrateLayer(row)));
 }
 
-export async function getExtractionLayer(id: string): Promise<ExtractionLayer | null> {
+async function getLocalExtractionLayer(id: string): Promise<ExtractionLayer | null> {
   const db = getDatabase();
   const row = await db.getFirstAsync<LayerRow>('SELECT * FROM extraction_layers WHERE id = ?', id);
 
@@ -44,7 +122,7 @@ export async function getExtractionLayer(id: string): Promise<ExtractionLayer | 
   return hydrateLayer(row);
 }
 
-export async function saveExtractionLayer(input: SaveExtractionLayerInput): Promise<ExtractionLayer> {
+async function saveExtractionLayerToLocalCache(input: SaveExtractionLayerInput): Promise<ExtractionLayer> {
   const db = getDatabase();
   const cleanName = input.name.trim();
   const cleanFields = normalizeFields(input.fields);
@@ -59,7 +137,7 @@ export async function saveExtractionLayer(input: SaveExtractionLayerInput): Prom
     throw new Error('Add at least one field to the layer.');
   }
 
-  const existing = input.id ? await getExtractionLayer(input.id) : null;
+  const existing = input.id ? await getLocalExtractionLayer(input.id) : null;
 
   if (existing) {
     await db.runAsync(
@@ -106,7 +184,7 @@ export async function saveExtractionLayer(input: SaveExtractionLayerInput): Prom
     );
   }
 
-  const saved = await getExtractionLayer(layerId);
+  const saved = await getLocalExtractionLayer(layerId);
 
   if (!saved) {
     throw new Error('Layer could not be reloaded after saving.');
@@ -115,7 +193,7 @@ export async function saveExtractionLayer(input: SaveExtractionLayerInput): Prom
   return saved;
 }
 
-export async function deleteExtractionLayer(id: string) {
+async function deleteExtractionLayerFromLocalCache(id: string) {
   const db = getDatabase();
   await db.runAsync('DELETE FROM extraction_layer_fields WHERE layer_id = ?', id);
   await db.runAsync('DELETE FROM extraction_layers WHERE id = ?', id);
