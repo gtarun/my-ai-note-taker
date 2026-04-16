@@ -192,6 +192,34 @@ describe('extraction layers service', () => {
     });
   });
 
+  test('keeps existing sheet metadata when updating layer fields', async () => {
+    const { getExtractionLayer, saveExtractionLayer } = await import('./extractionLayers');
+
+    const created = await saveExtractionLayer({
+      name: 'Lead intake',
+      spreadsheetId: 'sheet-123',
+      spreadsheetTitle: 'Leads tracker',
+      sheetTitle: 'Inbound',
+      fields: [{ id: 'name', title: 'Name', description: '' }],
+    });
+
+    await saveExtractionLayer({
+      id: created.id,
+      name: 'Lead intake',
+      spreadsheetId: 'sheet-123',
+      spreadsheetTitle: 'Leads tracker',
+      sheetTitle: 'Inbound',
+      fields: [{ id: 'company', title: 'Company', description: '' }],
+    });
+
+    await expect(getExtractionLayer(created.id)).resolves.toMatchObject({
+      spreadsheetId: 'sheet-123',
+      spreadsheetTitle: 'Leads tracker',
+      sheetTitle: 'Inbound',
+      fields: [{ id: 'company', title: 'Company', description: '' }],
+    });
+  });
+
   test('deletes a layer and its field rows', async () => {
     const { deleteExtractionLayer, listExtractionLayers, saveExtractionLayer } = await import('./extractionLayers');
 
