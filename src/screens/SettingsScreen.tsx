@@ -1,5 +1,4 @@
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Alert,
@@ -33,7 +32,6 @@ import {
   getConfiguredProviderIds,
   pickInitialProvider,
 } from '../features/settings/presentation';
-import { LAYERS_ROUTE } from '../navigation/routes';
 import { IOS_LOCAL_TRANSCRIPTION_MODEL_ID, getLocalDeviceSupport } from '../services/localInference';
 import {
   deleteInstalledModel,
@@ -400,30 +398,8 @@ export default function SettingsScreen() {
           </SurfaceCard>
         </FadeInView>
 
-        <FadeInView delay={45}>
-          <SurfaceCard muted style={styles.summaryCard}>
-            <View style={styles.summaryRows}>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryRowLabel}>Structured capture</Text>
-                <Text style={styles.summaryRowValue}>Extraction layers</Text>
-              </View>
-            </View>
-            <Text style={styles.summaryBody}>
-              Define reusable field schemas for post-call extraction, review them on each meeting, and sync approved rows to Google Sheets.
-            </Text>
-            <View style={styles.summaryActions}>
-              <PillButton
-                label="Manage layers"
-                icon={<Feather name="layers" size={18} color={palette.ink} />}
-                onPress={() => router.push(LAYERS_ROUTE)}
-                variant="secondary"
-              />
-            </View>
-          </SurfaceCard>
-        </FadeInView>
-
         <AssignmentSection
-          delay={60}
+          delay={45}
           title="Transcription provider"
           subtitle="Choose which configured provider turns audio into text."
           icon={<Feather name="mic" size={18} color={palette.ink} />}
@@ -436,7 +412,7 @@ export default function SettingsScreen() {
         />
 
         <AssignmentSection
-          delay={90}
+          delay={75}
           title="Summary provider"
           subtitle="Choose which configured provider writes summaries, action items, and decisions."
           icon={<Feather name="file-text" size={18} color={palette.ink} />}
@@ -448,7 +424,7 @@ export default function SettingsScreen() {
           localModelOptions={[]}
         />
 
-        <FadeInView delay={120}>
+        <FadeInView delay={105}>
           <SurfaceCard style={styles.providersSection}>
             <SectionHeading
               title="Configured providers"
