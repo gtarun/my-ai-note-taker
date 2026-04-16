@@ -1,6 +1,31 @@
 import { describe, expect, test, vi } from 'vitest';
 
-const invoke = vi.fn();
+const { invoke, getSession, getUser } = vi.hoisted(() => ({
+  invoke: vi.fn(),
+  getSession: vi.fn(async () => ({
+    data: {
+      session: {
+        access_token: 'access-token',
+        user: {
+          id: 'user-1',
+          email: 'owner@example.com',
+          user_metadata: {},
+        },
+      },
+    },
+    error: null,
+  })),
+  getUser: vi.fn(async () => ({
+    data: {
+      user: {
+        id: 'user-1',
+        email: 'owner@example.com',
+        user_metadata: {},
+      },
+    },
+    error: null,
+  })),
+}));
 
 vi.mock('react-native', () => ({
   Platform: {
@@ -41,14 +66,8 @@ vi.mock('expo-constants', () => ({
 vi.mock('@supabase/supabase-js', () => ({
   createClient: vi.fn(() => ({
     auth: {
-      getSession: vi.fn(async () => ({
-        data: {
-          session: {
-            access_token: 'access-token',
-          },
-        },
-        error: null,
-      })),
+      getSession,
+      getUser,
     },
     functions: {
       invoke,
@@ -65,6 +84,40 @@ vi.mock('@supabase/supabase-js', () => ({
 }));
 
 describe('google drive auth session wiring', () => {
+  test('maps mirrored drive connection metadata from the server user', async () => {
+    getUser.mockResolvedValueOnce({
+      data: {
+        user: {
+          id: 'user-1',
+          email: 'owner@example.com',
+          user_metadata: {
+            driveConnection: {
+              status: 'connected',
+              accountEmail: 'owner@example.com',
+              connectedAt: '2026-04-16T00:00:00.000Z',
+              saveFolderId: 'folder-1',
+              saveFolderName: 'Recordings',
+              needsReconnect: false,
+            },
+          },
+        },
+      },
+      error: null,
+    });
+
+    const account = await import('./account');
+
+    await expect(account.getAuthSession()).resolves.toMatchObject({
+      user: {
+        driveConnection: expect.objectContaining({
+          status: 'connected',
+          accountEmail: 'owner@example.com',
+          saveFolderId: 'folder-1',
+        }),
+      },
+    });
+  });
+
   test('uses the app redirect URL for auth-session completion', async () => {
     const account = await import('./account');
 

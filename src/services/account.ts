@@ -105,9 +105,10 @@ export async function getAuthSession(): Promise<AuthSession | null> {
     return null;
   }
 
-  // getSession() returns the user snapshot from local storage. Drive connection is written to
-  // user_metadata on the server when OAuth completes, so we must load the user from Auth to
-  // see `driveConnection` after restarts (same idea as refreshCurrentSession).
+  // getSession() returns the user snapshot from local storage. We mirror the canonical
+  // `user_integrations` Google state into `user_metadata.driveConnection` for fast session reads,
+  // so we still need a fresh Auth user fetch here to see updated connection info after restarts
+  // (same idea as refreshCurrentSession).
   const {
     data: { user: serverUser },
     error: userError,
