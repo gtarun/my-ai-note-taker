@@ -1,4 +1,22 @@
-import { describe, expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+
+const {
+  mockGetAuthSession,
+  mockFetchCloudUserDataSnapshot,
+  mockSaveCloudSettings,
+  mockSaveCloudOnboardingState,
+  localStorageMock,
+} = vi.hoisted(() => ({
+  mockGetAuthSession: vi.fn(),
+  mockFetchCloudUserDataSnapshot: vi.fn(),
+  mockSaveCloudSettings: vi.fn(),
+  mockSaveCloudOnboardingState: vi.fn(),
+  localStorageMock: {
+    getItem: vi.fn(() => null),
+    setItem: vi.fn(),
+    removeItem: vi.fn(),
+  },
+}));
 
 vi.mock('react-native', () => ({
   Platform: {
@@ -16,6 +34,10 @@ vi.mock('expo-secure-store', () => ({
   setItemAsync: vi.fn(),
   deleteItemAsync: vi.fn(),
 }));
+
+vi.stubGlobal('window', {
+  localStorage: localStorageMock,
+});
 
 const appPreferencesState = {
   id: 1,
@@ -67,12 +89,41 @@ vi.mock('../db', () => ({
   }),
 }));
 
-import { saveAppSettings, sanitizeAppSettings } from './settings';
+vi.mock('./account', () => ({
+  getAuthSession: mockGetAuthSession,
+}));
+
+vi.mock('./cloudUserData', async () => {
+  const actual = await vi.importActual<typeof import('./cloudUserData')>('./cloudUserData');
+
+  return {
+    ...actual,
+    fetchCloudUserDataSnapshot: mockFetchCloudUserDataSnapshot,
+    saveCloudSettings: mockSaveCloudSettings,
+    saveCloudOnboardingState: mockSaveCloudOnboardingState,
+  };
+});
+
+import { getAppSettings, saveAppSettings, sanitizeAppSettings } from './settings';
 import { getHasSeenOnboarding, markOnboardingSeen } from './onboarding';
 import { defaultProviderConfigs } from './providers';
 import type { AppSettings } from '../types';
 
 describe('settings persistence', () => {
+  beforeEach(() => {
+    appPreferencesState.selected_transcription_provider = 'openai';
+    appPreferencesState.selected_summary_provider = 'openai';
+    appPreferencesState.delete_uploaded_audio = 0;
+    appPreferencesState.model_catalog_url = '';
+    appPreferencesState.has_seen_onboarding = 0;
+    mockGetAuthSession.mockReset();
+    mockFetchCloudUserDataSnapshot.mockReset();
+    mockSaveCloudSettings.mockReset();
+    mockSaveCloudOnboardingState.mockReset();
+    mockGetAuthSession.mockResolvedValue(null);
+    localStorageMock.getItem.mockReturnValue(null);
+  });
+
   test('preserves onboarding completion when saving app settings', async () => {
     const settings: AppSettings = {
       selectedTranscriptionProvider: 'openai',
@@ -89,6 +140,41 @@ describe('settings persistence', () => {
 
     await saveAppSettings(settings);
 
+    expect(await getHasSeenOnboarding()).toBe(true);
+    expect(mockSaveCloudOnboardingState).toHaveBeenCalledWith(true);
+  });
+
+  test('hydrates local settings from cloud when the user is signed in', async () => {
+    mockGetAuthSession.mockResolvedValue({ accessToken: 'token', user: { id: 'user-1' } });
+    mockFetchCloudUserDataSnapshot.mockResolvedValue({
+      profile: { displayName: 'Tarun', avatarUrl: null, timezone: null },
+      preferences: {
+        selectedTranscriptionProvider: 'openai',
+        selectedSummaryProvider: 'groq',
+        deleteUploadedAudio: true,
+        modelCatalogUrl: '',
+        hasSeenOnboarding: true,
+      },
+      providers: [
+        {
+          providerId: 'groq',
+          apiKey: 'groq-key',
+          baseUrl: 'https://api.groq.com/openai/v1',
+          transcriptionModel: 'whisper-large-v3',
+          summaryModel: 'llama-3.3-70b',
+        },
+      ],
+      integrations: [],
+      layers: [],
+    });
+
+    await expect(getAppSettings()).resolves.toMatchObject({
+      selectedSummaryProvider: 'groq',
+      deleteUploadedAudio: true,
+      providers: {
+        groq: expect.objectContaining({ apiKey: 'groq-key' }),
+      },
+    });
     expect(await getHasSeenOnboarding()).toBe(true);
   });
 

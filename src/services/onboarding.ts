@@ -1,4 +1,5 @@
 import { getDatabase } from '../db';
+import { saveCloudOnboardingState } from './cloudUserData';
 
 export type OnboardingPreferenceRow = {
   has_seen_onboarding?: number | null;
@@ -28,4 +29,6 @@ export async function markOnboardingSeen() {
     'UPDATE app_preferences SET has_seen_onboarding = ? WHERE id = 1',
     buildHasSeenOnboardingValue(true)
   );
+
+  await saveCloudOnboardingState(true);
 }

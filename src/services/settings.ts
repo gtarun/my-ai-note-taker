@@ -3,6 +3,8 @@ import { Platform } from 'react-native';
 
 import { getDatabase } from '../db';
 import { AppSettings, ProviderConfig, ProviderId } from '../types';
+import { getAuthSession } from './account';
+import { fetchCloudUserDataSnapshot, mapBootstrapSnapshotToAppSettings, saveCloudSettings } from './cloudUserData';
 import {
   defaultProviderConfigs,
   isProviderConfigured,
@@ -10,6 +12,7 @@ import {
   providerDefinitions,
   providerMap,
 } from './providers';
+import { getHasSeenOnboarding } from './onboarding';
 
 const LEGACY_SETTINGS_V3_STORAGE_KEY = 'app_settings_v3';
 const LEGACY_SETTINGS_V2_STORAGE_KEY = 'app_settings_v2';
@@ -48,72 +51,45 @@ function getDefaultSettings(): AppSettings {
 }
 
 export async function getAppSettings(): Promise<AppSettings> {
-  const defaultSettings = getDefaultSettings();
-  const db = getDatabase();
-  const [storedPreferences, storedProviders] = await Promise.all([
-    db.getFirstAsync<AppPreferencesRow>('SELECT * FROM app_preferences WHERE id = 1'),
-    db.getAllAsync<ProviderSettingsRow>('SELECT * FROM provider_settings'),
-  ]);
+  const cached = await getLocalAppSettings();
 
-  if (!storedProviders.length) {
-    const migratedSettings = await readLegacySettings(defaultSettings);
+  try {
+    const session = await getAuthSession();
 
-    if (migratedSettings) {
-      const sanitized = sanitizeAppSettings(migratedSettings);
-      await saveAppSettings(sanitized);
-      return sanitized;
+    if (!session) {
+      return cached;
     }
+
+    const snapshot = await fetchCloudUserDataSnapshot();
+    const next = mapBootstrapSnapshotToAppSettings(snapshot);
+    await saveAppSettingsToLocalCache(next, {
+      hasSeenOnboarding: snapshot.preferences.hasSeenOnboarding,
+    });
+    return next;
+  } catch {
+    return cached;
   }
-
-  const providers = buildProvidersFromRows(defaultSettings.providers, storedProviders);
-
-  return sanitizeAppSettings({
-    selectedTranscriptionProvider:
-      storedPreferences?.selected_transcription_provider ?? defaultSettings.selectedTranscriptionProvider,
-    selectedSummaryProvider: storedPreferences?.selected_summary_provider ?? defaultSettings.selectedSummaryProvider,
-    providers,
-    deleteUploadedAudio:
-      storedPreferences?.delete_uploaded_audio != null
-        ? Boolean(storedPreferences.delete_uploaded_audio)
-        : defaultSettings.deleteUploadedAudio,
-    modelCatalogUrl: storedPreferences?.model_catalog_url?.trim?.() ?? defaultSettings.modelCatalogUrl,
-  });
 }
 
 export async function saveAppSettings(settings: AppSettings) {
   const sanitized = sanitizeAppSettings(settings);
-  const db = getDatabase();
+  const hasSeenOnboarding = await getHasSeenOnboarding();
+  await saveAppSettingsToLocalCache(sanitized);
 
-  await db.runAsync(
-    `UPDATE app_preferences SET
-      selected_transcription_provider = ?,
-      selected_summary_provider = ?,
-      delete_uploaded_audio = ?,
-      model_catalog_url = ?
-    WHERE id = 1`,
-    sanitized.selectedTranscriptionProvider,
-    sanitized.selectedSummaryProvider,
-    sanitized.deleteUploadedAudio ? 1 : 0,
-    sanitized.modelCatalogUrl
-  );
+  const session = await getAuthSession();
 
-  for (const definition of providerDefinitions) {
-    const provider = sanitized.providers[definition.id];
-    await db.runAsync(
-      `INSERT OR REPLACE INTO provider_settings (
-        provider_id,
-        api_key,
-        base_url,
-        transcription_model,
-        summary_model
-      ) VALUES (?, ?, ?, ?, ?)`,
-      definition.id,
-      provider.apiKey,
-      provider.baseUrl,
-      provider.transcriptionModel,
-      provider.summaryModel
-    );
+  if (!session) {
+    return;
   }
+
+  await saveCloudSettings({
+    selectedTranscriptionProvider: sanitized.selectedTranscriptionProvider,
+    selectedSummaryProvider: sanitized.selectedSummaryProvider,
+    deleteUploadedAudio: sanitized.deleteUploadedAudio,
+    modelCatalogUrl: sanitized.modelCatalogUrl,
+    hasSeenOnboarding,
+    providers: sanitized.providers,
+  });
 }
 
 export function sanitizeAppSettings(settings: AppSettings): AppSettings {
@@ -238,6 +214,85 @@ async function readLegacySettings(defaultSettings: AppSettings) {
     deleteUploadedAudio: legacySettings?.deleteUploadedAudio ?? defaultSettings.deleteUploadedAudio,
     modelCatalogUrl: legacySettings?.modelCatalogUrl?.trim?.() ?? defaultSettings.modelCatalogUrl,
   };
+}
+
+export async function saveAppSettingsToLocalCache(
+  settings: AppSettings,
+  options?: { hasSeenOnboarding?: boolean }
+) {
+  const sanitized = sanitizeAppSettings(settings);
+  const db = getDatabase();
+
+  await db.runAsync(
+    `UPDATE app_preferences SET
+      selected_transcription_provider = ?,
+      selected_summary_provider = ?,
+      delete_uploaded_audio = ?,
+      model_catalog_url = ?
+    WHERE id = 1`,
+    sanitized.selectedTranscriptionProvider,
+    sanitized.selectedSummaryProvider,
+    sanitized.deleteUploadedAudio ? 1 : 0,
+    sanitized.modelCatalogUrl
+  );
+
+  if (options?.hasSeenOnboarding != null) {
+    await db.runAsync(
+      'UPDATE app_preferences SET has_seen_onboarding = ? WHERE id = 1',
+      options.hasSeenOnboarding ? 1 : 0
+    );
+  }
+
+  for (const definition of providerDefinitions) {
+    const provider = sanitized.providers[definition.id];
+    await db.runAsync(
+      `INSERT OR REPLACE INTO provider_settings (
+        provider_id,
+        api_key,
+        base_url,
+        transcription_model,
+        summary_model
+      ) VALUES (?, ?, ?, ?, ?)`,
+      definition.id,
+      provider.apiKey,
+      provider.baseUrl,
+      provider.transcriptionModel,
+      provider.summaryModel
+    );
+  }
+}
+
+async function getLocalAppSettings(): Promise<AppSettings> {
+  const defaultSettings = getDefaultSettings();
+  const db = getDatabase();
+  const [storedPreferences, storedProviders] = await Promise.all([
+    db.getFirstAsync<AppPreferencesRow>('SELECT * FROM app_preferences WHERE id = 1'),
+    db.getAllAsync<ProviderSettingsRow>('SELECT * FROM provider_settings'),
+  ]);
+
+  if (!storedProviders.length) {
+    const migratedSettings = await readLegacySettings(defaultSettings);
+
+    if (migratedSettings) {
+      const sanitized = sanitizeAppSettings(migratedSettings);
+      await saveAppSettingsToLocalCache(sanitized);
+      return sanitized;
+    }
+  }
+
+  const providers = buildProvidersFromRows(defaultSettings.providers, storedProviders);
+
+  return sanitizeAppSettings({
+    selectedTranscriptionProvider:
+      storedPreferences?.selected_transcription_provider ?? defaultSettings.selectedTranscriptionProvider,
+    selectedSummaryProvider: storedPreferences?.selected_summary_provider ?? defaultSettings.selectedSummaryProvider,
+    providers,
+    deleteUploadedAudio:
+      storedPreferences?.delete_uploaded_audio != null
+        ? Boolean(storedPreferences.delete_uploaded_audio)
+        : defaultSettings.deleteUploadedAudio,
+    modelCatalogUrl: storedPreferences?.model_catalog_url?.trim?.() ?? defaultSettings.modelCatalogUrl,
+  });
 }
 
 async function readLegacyStoredSettingsV3(): Promise<LegacyStoredSettings | null> {

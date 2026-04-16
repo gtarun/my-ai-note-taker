@@ -19,3 +19,12 @@ verify_jwt = false
 
 [functions.google-sheets-browser]
 verify_jwt = false
+
+[functions.user-data-bootstrap]
+verify_jwt = false
+
+[functions.user-settings-sync]
+verify_jwt = false
+
+[functions.user-extraction-layers-sync]
+verify_jwt = false

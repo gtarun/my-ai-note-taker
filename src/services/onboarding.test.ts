@@ -1,10 +1,18 @@
 import { describe, expect, test, vi } from 'vitest';
 
+const { saveCloudOnboardingState } = vi.hoisted(() => ({
+  saveCloudOnboardingState: vi.fn(),
+}));
+
 vi.mock('../db', () => ({
   getDatabase: () => ({
     getFirstAsync: vi.fn(),
     runAsync: vi.fn(),
   }),
+}));
+
+vi.mock('./cloudUserData', () => ({
+  saveCloudOnboardingState,
 }));
 
 import {
