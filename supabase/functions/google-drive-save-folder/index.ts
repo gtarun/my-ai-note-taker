@@ -1,5 +1,10 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
 
+import {
+  buildGoogleIntegrationSummary,
+  GOOGLE_INTEGRATION_PROVIDER,
+  normalizeGrantedScopes,
+} from '../_shared/google-integration.ts';
 import { readGoogleDriveEnv } from '../_shared/drive-access.ts';
 
 const corsHeaders = {
@@ -41,28 +46,52 @@ Deno.serve(async (request) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const { data: existing, error: fetchError } = await adminClient
-      .from('google_drive_connections')
-      .select('user_id')
-      .eq('user_id', user.id)
-      .maybeSingle();
+    const [{ data: existingIntegration, error: fetchIntegrationError }, { data: existingLegacy, error: fetchLegacyError }] =
+      await Promise.all([
+        adminClient
+          .from('user_integrations')
+          .select(
+            'status, account_email, granted_scopes, needs_reconnect, drive_save_folder_id, drive_save_folder_name, updated_at'
+          )
+          .eq('user_id', user.id)
+          .eq('provider', GOOGLE_INTEGRATION_PROVIDER)
+          .maybeSingle(),
+        adminClient
+          .from('google_drive_connections')
+          .select('google_account_email, scope, updated_at')
+          .eq('user_id', user.id)
+          .maybeSingle(),
+      ]);
 
-    if (fetchError) {
-      return jsonResponse({ error: fetchError.message }, 500);
+    if (fetchIntegrationError) {
+      return jsonResponse({ error: fetchIntegrationError.message }, 500);
     }
 
-    if (!existing) {
+    if (fetchLegacyError) {
+      return jsonResponse({ error: fetchLegacyError.message }, 500);
+    }
+
+    if (!existingIntegration && !existingLegacy) {
       return jsonResponse({ error: 'Connect Google Drive first.' }, 400);
     }
 
-    const { error: updateConnError } = await adminClient
-      .from('google_drive_connections')
-      .update({
-        save_folder_id: folderId,
-        save_folder_name: folderName || null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', user.id);
+    const updatedAt = new Date().toISOString();
+    const { error: updateConnError } = await adminClient.from('user_integrations').upsert(
+      {
+        user_id: user.id,
+        provider: GOOGLE_INTEGRATION_PROVIDER,
+        status: existingIntegration?.status ?? 'connected',
+        account_email: existingIntegration?.account_email ?? existingLegacy?.google_account_email ?? null,
+        granted_scopes: normalizeGrantedScopes(
+          existingIntegration?.granted_scopes ?? existingLegacy?.scope ?? []
+        ),
+        needs_reconnect: existingIntegration?.needs_reconnect ?? false,
+        drive_save_folder_id: folderId,
+        drive_save_folder_name: folderName || null,
+        updated_at: updatedAt,
+      },
+      { onConflict: 'user_id,provider' }
+    );
 
     if (updateConnError) {
       return jsonResponse({ error: updateConnError.message }, 500);
@@ -82,9 +111,17 @@ Deno.serve(async (request) => {
         ...(targetUser.user.user_metadata ?? {}),
         driveConnection: {
           ...prevObj,
-          status: 'connected',
-          saveFolderId: folderId,
-          saveFolderName: folderName || null,
+          ...buildGoogleIntegrationSummary({
+            status: existingIntegration?.status ?? 'connected',
+            account_email: existingIntegration?.account_email ?? existingLegacy?.google_account_email ?? null,
+            granted_scopes: normalizeGrantedScopes(
+              existingIntegration?.granted_scopes ?? existingLegacy?.scope ?? []
+            ),
+            needs_reconnect: existingIntegration?.needs_reconnect ?? false,
+            drive_save_folder_id: folderId,
+            drive_save_folder_name: folderName || null,
+            updated_at: updatedAt,
+          }),
         },
       },
     });

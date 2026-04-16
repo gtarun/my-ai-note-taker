@@ -1,6 +1,12 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
 
+import {
+  buildGoogleIntegrationSummary,
+  GOOGLE_INTEGRATION_PROVIDER,
+  normalizeGrantedScopes,
+} from '../_shared/google-integration.ts';
 import { buildRedirectUrl, isAllowedRedirectBase } from '../_shared/redirect-base.ts';
+import { decryptSecret, encryptSecret, readEncryptionKey } from '../_shared/secrets.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -28,11 +34,22 @@ Deno.serve(async (request) => {
     if (request.method === 'GET' && urlCode && urlState) {
       const statePayload = await parseState(urlState, env.stateSecret);
       const adminClient = createAdminClient(env);
-      const { data: existingConnection } = await adminClient
-        .from('google_drive_connections')
-        .select('refresh_token')
-        .eq('user_id', statePayload.userId)
-        .maybeSingle();
+      const encryptionKey = readEncryptionKey();
+      const [{ data: existingIntegration }, { data: existingLegacyConnection }] = await Promise.all([
+        adminClient
+          .from('user_integrations')
+          .select(
+            'account_email, granted_scopes, encrypted_refresh_token, drive_save_folder_id, drive_save_folder_name, updated_at'
+          )
+          .eq('user_id', statePayload.userId)
+          .eq('provider', GOOGLE_INTEGRATION_PROVIDER)
+          .maybeSingle(),
+        adminClient
+          .from('google_drive_connections')
+          .select('google_account_email, refresh_token, scope, save_folder_id, save_folder_name, updated_at')
+          .eq('user_id', statePayload.userId)
+          .maybeSingle(),
+      ]);
 
       const tokens = await exchangeCodeForTokens({
         code: urlCode,
@@ -42,21 +59,36 @@ Deno.serve(async (request) => {
       });
 
       const profile = await fetchGoogleProfile(tokens.access_token);
+      const existingRefreshToken = await decryptSecret(
+        existingIntegration?.encrypted_refresh_token,
+        encryptionKey
+      );
+      const nextScopes = normalizeGrantedScopes(tokens.scope ?? env.googleDriveScope);
+      const nextUpdatedAt = new Date().toISOString();
 
-      const upsertResult = await adminClient.from('google_drive_connections').upsert(
+      const upsertResult = await adminClient.from('user_integrations').upsert(
         {
           user_id: statePayload.userId,
-          google_account_email: profile.email,
-          access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token ?? existingConnection?.refresh_token ?? null,
-          scope: tokens.scope ?? env.googleDriveScope,
-          token_type: tokens.token_type ?? 'Bearer',
-          expiry_date: tokens.expires_in
+          provider: GOOGLE_INTEGRATION_PROVIDER,
+          status: 'connected',
+          account_email: profile.email,
+          granted_scopes: nextScopes,
+          encrypted_access_token: await encryptSecret(tokens.access_token, encryptionKey),
+          encrypted_refresh_token: await encryptSecret(
+            tokens.refresh_token ?? existingRefreshToken ?? existingLegacyConnection?.refresh_token ?? '',
+            encryptionKey
+          ),
+          token_expires_at: tokens.expires_in
             ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
             : null,
-          updated_at: new Date().toISOString(),
+          needs_reconnect: false,
+          drive_save_folder_id:
+            existingIntegration?.drive_save_folder_id ?? existingLegacyConnection?.save_folder_id ?? null,
+          drive_save_folder_name:
+            existingIntegration?.drive_save_folder_name ?? existingLegacyConnection?.save_folder_name ?? null,
+          updated_at: nextUpdatedAt,
         },
-        { onConflict: 'user_id' }
+        { onConflict: 'user_id,provider' }
       );
 
       if (upsertResult.error) {
@@ -81,10 +113,16 @@ Deno.serve(async (request) => {
           ...(targetUser.user.user_metadata ?? {}),
           driveConnection: {
             ...prevDriveObj,
-            status: 'connected',
-            accountEmail: profile.email,
-            connectedAt: new Date().toISOString(),
-            needsReconnect: false,
+            ...buildGoogleIntegrationSummary({
+              status: 'connected',
+              account_email: profile.email,
+              granted_scopes: nextScopes,
+              drive_save_folder_id:
+                existingIntegration?.drive_save_folder_id ?? existingLegacyConnection?.save_folder_id ?? null,
+              drive_save_folder_name:
+                existingIntegration?.drive_save_folder_name ?? existingLegacyConnection?.save_folder_name ?? null,
+              updated_at: nextUpdatedAt,
+            }),
           },
         },
       });
