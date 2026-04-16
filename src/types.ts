@@ -185,3 +185,17 @@ export type ExtractionSheetConnection = {
 export type ExtractionSheetAppendResult = ExtractionSheetConnection & {
   rowRange: string;
 };
+
+export type SpreadsheetBrowserSpreadsheet = {
+  id: string;
+  title: string;
+  modifiedTime: string | null;
+};
+
+export type SpreadsheetBrowserResponse = {
+  spreadsheets?: SpreadsheetBrowserSpreadsheet[];
+  spreadsheetTitle?: string | null;
+  tabs?: string[];
+  sheetTitle?: string | null;
+  headers?: string[];
+};
