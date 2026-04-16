@@ -1,0 +1,1003 @@
+import { Feather } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
+import {
+  Alert,
+  Modal,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+
+import { FadeInView } from '../components/FadeInView';
+import { ScreenBackground } from '../components/ScreenBackground';
+import { PillButton, SectionHeading, SurfaceCard } from '../components/ui';
+import {
+  applySheetSelection,
+  createDraftFromLayer,
+  createEditableField,
+  createEmptyDraft,
+  toSaveLayerInput,
+  type EditableField,
+  type LayerDraft,
+} from '../features/layers/draft';
+import { deleteExtractionLayer, listExtractionLayers, saveExtractionLayer } from '../services/extractionLayers';
+import {
+  browseRecentSpreadsheets,
+  ensureExtractionLayerSheet,
+  getSpreadsheetTabsAndHeaders,
+  searchSpreadsheets,
+} from '../services/googleSheets';
+import type { ExtractionLayer, SpreadsheetBrowserSpreadsheet } from '../types';
+import { palette, radii, typography } from '../theme';
+
+export default function LayersScreen() {
+  const [layers, setLayers] = useState<ExtractionLayer[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isEditorVisible, setIsEditorVisible] = useState(false);
+  const [draft, setDraft] = useState<LayerDraft>(createEmptyDraft());
+  const [isSaving, setIsSaving] = useState(false);
+  const [isPreparingSheet, setIsPreparingSheet] = useState(false);
+  const [recentSpreadsheets, setRecentSpreadsheets] = useState<SpreadsheetBrowserSpreadsheet[]>([]);
+  const [searchResults, setSearchResults] = useState<SpreadsheetBrowserSpreadsheet[]>([]);
+  const [spreadsheetSearch, setSpreadsheetSearch] = useState('');
+  const [selectedSpreadsheet, setSelectedSpreadsheet] = useState<SpreadsheetBrowserSpreadsheet | null>(null);
+  const [availableTabs, setAvailableTabs] = useState<string[]>([]);
+  const [isLoadingRecent, setIsLoadingRecent] = useState(false);
+  const [isSearchingSheets, setIsSearchingSheets] = useState(false);
+  const [isLoadingTabs, setIsLoadingTabs] = useState(false);
+  const [isFieldEditorVisible, setIsFieldEditorVisible] = useState(false);
+  const [activeField, setActiveField] = useState<EditableField | null>(null);
+
+  const loadLayers = useCallback(async () => {
+    const nextLayers = await listExtractionLayers();
+    setLayers(nextLayers);
+    setIsLoaded(true);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadLayers();
+    }, [loadLayers])
+  );
+
+  const connectedCount = useMemo(
+    () => layers.filter((layer) => layer.spreadsheetId && layer.sheetTitle).length,
+    [layers]
+  );
+
+  const resetEditorState = useCallback((nextDraft: LayerDraft) => {
+    setDraft(nextDraft);
+    setSearchResults([]);
+    setSpreadsheetSearch('');
+    setAvailableTabs(nextDraft.sheetTitle ? [nextDraft.sheetTitle] : []);
+    setSelectedSpreadsheet(
+      nextDraft.spreadsheetId && nextDraft.spreadsheetTitle
+        ? {
+            id: nextDraft.spreadsheetId,
+            title: nextDraft.spreadsheetTitle,
+            modifiedTime: null,
+          }
+        : null
+    );
+    setActiveField(null);
+    setIsFieldEditorVisible(false);
+  }, []);
+
+  const loadRecentSpreadsheetOptions = useCallback(async () => {
+    try {
+      setIsLoadingRecent(true);
+      const data = await browseRecentSpreadsheets();
+      setRecentSpreadsheets(data.spreadsheets ?? []);
+    } catch (error) {
+      Alert.alert('Google Sheets', error instanceof Error ? error.message : 'Unable to load recent spreadsheets.');
+    } finally {
+      setIsLoadingRecent(false);
+    }
+  }, []);
+
+  const loadSpreadsheetDetails = useCallback(
+    async (spreadsheet: SpreadsheetBrowserSpreadsheet, sheetTitle?: string) => {
+      try {
+        setIsLoadingTabs(true);
+        const data = await getSpreadsheetTabsAndHeaders(spreadsheet.id, sheetTitle);
+        setSelectedSpreadsheet({
+          id: spreadsheet.id,
+          title: data.spreadsheetTitle ?? spreadsheet.title,
+          modifiedTime: spreadsheet.modifiedTime ?? null,
+        });
+        setAvailableTabs(data.tabs ?? []);
+        return data;
+      } catch (error) {
+        Alert.alert(
+          'Google Sheets',
+          error instanceof Error ? error.message : 'Unable to load tabs for this spreadsheet.'
+        );
+        return null;
+      } finally {
+        setIsLoadingTabs(false);
+      }
+    },
+    []
+  );
+
+  const openCreateModal = () => {
+    resetEditorState(createEmptyDraft());
+    setIsEditorVisible(true);
+    void loadRecentSpreadsheetOptions();
+  };
+
+  const openEditModal = (layer: ExtractionLayer) => {
+    const nextDraft = createDraftFromLayer(layer);
+    resetEditorState(nextDraft);
+    setIsEditorVisible(true);
+    void loadRecentSpreadsheetOptions();
+
+    if (layer.spreadsheetId && layer.spreadsheetTitle) {
+      void loadSpreadsheetDetails(
+        {
+          id: layer.spreadsheetId,
+          title: layer.spreadsheetTitle,
+          modifiedTime: null,
+        },
+        layer.sheetTitle ?? undefined
+      );
+    }
+  };
+
+  const closeEditor = () => {
+    if (isSaving || isPreparingSheet) {
+      return;
+    }
+
+    setIsEditorVisible(false);
+    resetEditorState(createEmptyDraft());
+  };
+
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+      await saveExtractionLayer(toSaveLayerInput(draft));
+      await loadLayers();
+      closeEditor();
+    } catch (error) {
+      Alert.alert('Save failed', error instanceof Error ? error.message : 'Unable to save this extraction layer.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = (layer: ExtractionLayer) => {
+    Alert.alert('Delete layer?', `Remove ${layer.name} and its field schema?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteExtractionLayer(layer.id);
+            await loadLayers();
+          } catch (error) {
+            Alert.alert('Delete failed', error instanceof Error ? error.message : 'Unable to delete this layer.');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleCreateOrRefreshSheet = async () => {
+    const payload = toSaveLayerInput(draft);
+
+    if (!payload.name.trim()) {
+      Alert.alert('Layer name required', 'Add a layer name before creating a sheet.');
+      return;
+    }
+
+    if (!payload.fields.length) {
+      Alert.alert('Add fields first', 'Create at least one field before preparing a sheet.');
+      return;
+    }
+
+    try {
+      setIsPreparingSheet(true);
+      const connection = await ensureExtractionLayerSheet({
+        id: payload.id ?? 'draft-layer',
+        name: payload.name,
+        fields: payload.fields,
+        spreadsheetId: payload.spreadsheetId,
+        spreadsheetTitle: payload.spreadsheetTitle,
+        sheetTitle: payload.sheetTitle,
+      });
+
+      setDraft((current) => ({
+        ...current,
+        spreadsheetId: connection.spreadsheetId,
+        spreadsheetTitle: connection.spreadsheetTitle,
+        sheetTitle: connection.sheetTitle,
+      }));
+      setSelectedSpreadsheet({
+        id: connection.spreadsheetId,
+        title: connection.spreadsheetTitle,
+        modifiedTime: null,
+      });
+      setAvailableTabs((current) => Array.from(new Set([...current, connection.sheetTitle])));
+      Alert.alert(
+        'Google Sheets ready',
+        `${payload.name} is now connected to ${connection.spreadsheetTitle} / ${connection.sheetTitle}.`
+      );
+    } catch (error) {
+      Alert.alert(
+        'Sheet setup failed',
+        error instanceof Error ? error.message : 'Unable to prepare the Google Sheet for this layer.'
+      );
+    } finally {
+      setIsPreparingSheet(false);
+    }
+  };
+
+  const handleSearchSheets = async () => {
+    const query = spreadsheetSearch.trim();
+    if (!query) {
+      setSearchResults([]);
+      return;
+    }
+
+    try {
+      setIsSearchingSheets(true);
+      const data = await searchSpreadsheets(query);
+      setSearchResults(data.spreadsheets ?? []);
+    } catch (error) {
+      Alert.alert('Google Sheets', error instanceof Error ? error.message : 'Unable to search spreadsheets.');
+    } finally {
+      setIsSearchingSheets(false);
+    }
+  };
+
+  const handleSelectSpreadsheet = async (spreadsheet: SpreadsheetBrowserSpreadsheet) => {
+    const details = await loadSpreadsheetDetails(spreadsheet);
+    if (details && !(details.tabs ?? []).length) {
+      Alert.alert('No tabs found', 'This spreadsheet has no visible tabs yet.');
+    }
+  };
+
+  const handleSelectTab = async (tabTitle: string) => {
+    if (!selectedSpreadsheet) {
+      return;
+    }
+
+    const details = await loadSpreadsheetDetails(selectedSpreadsheet, tabTitle);
+    if (!details) {
+      return;
+    }
+
+    const headers = details.headers ?? [];
+    const spreadsheetTitle = details.spreadsheetTitle ?? selectedSpreadsheet.title;
+
+    Alert.alert(
+      'Use sheet columns?',
+      headers.length
+        ? `Choose whether "${tabTitle}" should replace this layer's fields with its header row.`
+        : `No header row was found on "${tabTitle}". You can still use it as the destination and keep your current fields.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Keep current fields',
+          onPress: () => {
+            setDraft((current) =>
+              applySheetSelection(current, {
+                spreadsheetId: selectedSpreadsheet.id,
+                spreadsheetTitle,
+                sheetTitle: tabTitle,
+                headers,
+                mode: 'keep',
+              })
+            );
+          },
+        },
+        {
+          text: 'Import columns',
+          onPress: () => {
+            setDraft((current) =>
+              applySheetSelection(current, {
+                spreadsheetId: selectedSpreadsheet.id,
+                spreadsheetTitle,
+                sheetTitle: tabTitle,
+                headers,
+                mode: 'import',
+              })
+            );
+
+            if (!headers.length) {
+              Alert.alert(
+                'No headers found',
+                'This tab has no header row yet, so your current fields were kept.'
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const openFieldEditor = (field?: EditableField) => {
+    setActiveField(field ? { ...field } : createEditableField());
+    setIsFieldEditorVisible(true);
+  };
+
+  const closeFieldEditor = () => {
+    setIsFieldEditorVisible(false);
+    setActiveField(null);
+  };
+
+  const handleSaveField = () => {
+    if (!activeField) {
+      return;
+    }
+
+    const nextField = {
+      ...activeField,
+      id: activeField.id.trim(),
+      title: activeField.title.trim(),
+      description: activeField.description.trim(),
+    };
+
+    if (!nextField.id || !nextField.title) {
+      Alert.alert('Field details required', 'Each field needs both an ID and a title.');
+      return;
+    }
+
+    setDraft((current) => {
+      const exists = current.fields.some((field) => field.key === nextField.key);
+      return {
+        ...current,
+        fields: exists
+          ? current.fields.map((field) => (field.key === nextField.key ? nextField : field))
+          : [...current.fields, nextField],
+      };
+    });
+    closeFieldEditor();
+  };
+
+  const handleDeleteField = () => {
+    if (!activeField) {
+      return;
+    }
+
+    setDraft((current) => ({
+      ...current,
+      fields: current.fields.filter((field) => field.key !== activeField.key),
+    }));
+    closeFieldEditor();
+  };
+
+  const currentDestination = draft.spreadsheetTitle
+    ? `${draft.spreadsheetTitle}${draft.sheetTitle ? ` • ${draft.sheetTitle}` : ''}`
+    : 'No sheet connected yet.';
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <ScreenBackground />
+      <ScrollView contentContainerStyle={styles.container}>
+        <FadeInView>
+          <SectionHeading
+            title="Extraction layers"
+            subtitle="Define reusable field schemas, attach them at analysis time, and send approved rows to Google Sheets."
+          />
+        </FadeInView>
+
+        <FadeInView delay={40}>
+          <SurfaceCard muted style={styles.heroCard}>
+            <View style={styles.heroStats}>
+              <View style={styles.heroStat}>
+                <Text style={styles.heroLabel}>Layers</Text>
+                <Text style={styles.heroValue}>{layers.length}</Text>
+              </View>
+              <View style={styles.heroStat}>
+                <Text style={styles.heroLabel}>Sheets ready</Text>
+                <Text style={styles.heroValue}>{connectedCount}</Text>
+              </View>
+            </View>
+            <Text style={styles.heroBody}>
+              Build reusable extraction schemas, attach them at analysis time, and send approved rows to the right Google Sheet tab.
+            </Text>
+            <View style={styles.heroActions}>
+              <PillButton
+                label="New layer"
+                icon={<Feather name="plus" size={18} color={palette.card} />}
+                onPress={openCreateModal}
+              />
+            </View>
+          </SurfaceCard>
+        </FadeInView>
+
+        {isLoaded && !layers.length ? (
+          <FadeInView delay={80}>
+            <SurfaceCard style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>No extraction layers yet</Text>
+              <Text style={styles.emptyBody}>
+                Start with a schema for names, qualification, issue, or any other fields you want the AI to pull from transcripts.
+              </Text>
+            </SurfaceCard>
+          </FadeInView>
+        ) : null}
+
+        {layers.map((layer, index) => (
+          <FadeInView key={layer.id} delay={80 + index * 30}>
+            <SurfaceCard style={styles.layerCard}>
+              <View style={styles.layerHeader}>
+                <View style={styles.layerCopy}>
+                  <Text style={styles.layerTitle}>{layer.name}</Text>
+                  <Text style={styles.layerMeta}>
+                    {layer.fields.length} fields
+                    {layer.spreadsheetTitle
+                      ? ` • ${layer.spreadsheetTitle}${layer.sheetTitle ? ` / ${layer.sheetTitle}` : ''}`
+                      : ' • Google Sheet not connected yet'}
+                  </Text>
+                </View>
+                <View style={[styles.sheetBadge, layer.spreadsheetId ? styles.sheetBadgeReady : null]}>
+                  <Text style={[styles.sheetBadgeText, layer.spreadsheetId ? styles.sheetBadgeTextReady : null]}>
+                    {layer.spreadsheetId ? 'Sheets ready' : 'Needs sheet'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.fieldPreviewList}>
+                {layer.fields.map((field) => (
+                  <View key={field.id} style={styles.fieldPreviewRow}>
+                    <Text style={styles.fieldPreviewTitle}>{field.title}</Text>
+                    <Text style={styles.fieldPreviewMeta}>{field.id}</Text>
+                  </View>
+                ))}
+              </View>
+
+              <View style={styles.cardActions}>
+                <PillButton label="Edit" onPress={() => openEditModal(layer)} variant="ghost" />
+                <PillButton
+                  label={layer.spreadsheetId ? 'Change sheet' : 'Connect sheet'}
+                  onPress={() => openEditModal(layer)}
+                  variant="secondary"
+                />
+                <PillButton label="Delete" onPress={() => handleDelete(layer)} variant="ghost" />
+              </View>
+            </SurfaceCard>
+          </FadeInView>
+        ))}
+      </ScrollView>
+
+      <Modal visible={isEditorVisible} animationType="slide" transparent onRequestClose={closeEditor}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <ScrollView contentContainerStyle={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{draft.id ? 'Edit layer' : 'New layer'}</Text>
+                <Pressable onPress={closeEditor} hitSlop={10}>
+                  <Feather name="x" size={20} color={palette.ink} />
+                </Pressable>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.inputLabel}>Layer name</Text>
+                <TextInput
+                  style={styles.input}
+                  value={draft.name}
+                  onChangeText={(value) => setDraft((current) => ({ ...current, name: value }))}
+                  placeholder="Lead intake"
+                  placeholderTextColor={palette.mutedInk}
+                />
+              </View>
+
+              <View style={styles.sheetSection}>
+                <View style={styles.formSectionHeader}>
+                  <Text style={styles.inputLabel}>Sheet destination</Text>
+                  <PillButton
+                    label={isPreparingSheet ? 'Preparing…' : 'Create new sheet'}
+                    onPress={handleCreateOrRefreshSheet}
+                    variant="secondary"
+                    disabled={isPreparingSheet}
+                  />
+                </View>
+
+                <View style={styles.sheetSummaryCard}>
+                  <Text style={styles.sheetSummaryLabel}>Current destination</Text>
+                  <Text style={styles.sheetSummaryTitle}>{currentDestination}</Text>
+                  {selectedSpreadsheet && !draft.sheetTitle ? (
+                    <Text style={styles.sheetSummaryBody}>Choose a tab for {selectedSpreadsheet.title}.</Text>
+                  ) : (
+                    <Text style={styles.sheetSummaryBody}>
+                      Choose an existing spreadsheet and tab, or create a new sheet from this layer.
+                    </Text>
+                  )}
+                </View>
+
+                <View style={styles.sheetActionsRow}>
+                  <PillButton
+                    label={isLoadingRecent ? 'Refreshing…' : 'Refresh recent'}
+                    onPress={() => void loadRecentSpreadsheetOptions()}
+                    variant="ghost"
+                    disabled={isLoadingRecent}
+                  />
+                </View>
+
+                {recentSpreadsheets.length ? (
+                  <View style={styles.optionList}>
+                    <Text style={styles.smallSectionLabel}>Recent spreadsheets</Text>
+                    {recentSpreadsheets.map((spreadsheet) => (
+                      <Pressable
+                        key={spreadsheet.id}
+                        style={styles.optionRow}
+                        onPress={() => void handleSelectSpreadsheet(spreadsheet)}
+                      >
+                        <Text style={styles.optionTitle}>{spreadsheet.title}</Text>
+                        <Text style={styles.optionBody}>
+                          {spreadsheet.modifiedTime ? new Date(spreadsheet.modifiedTime).toLocaleDateString() : 'Recent'}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+
+                <View style={styles.searchSection}>
+                  <Text style={styles.smallSectionLabel}>Search spreadsheets</Text>
+                  <View style={styles.searchRow}>
+                    <TextInput
+                      style={[styles.input, styles.searchInput]}
+                      value={spreadsheetSearch}
+                      onChangeText={setSpreadsheetSearch}
+                      placeholder="Search by spreadsheet name"
+                      placeholderTextColor={palette.mutedInk}
+                    />
+                    <PillButton
+                      label={isSearchingSheets ? 'Searching…' : 'Search'}
+                      onPress={() => void handleSearchSheets()}
+                      variant="secondary"
+                      disabled={isSearchingSheets}
+                    />
+                  </View>
+                </View>
+
+                {searchResults.length ? (
+                  <View style={styles.optionList}>
+                    {searchResults.map((spreadsheet) => (
+                      <Pressable
+                        key={spreadsheet.id}
+                        style={styles.optionRow}
+                        onPress={() => void handleSelectSpreadsheet(spreadsheet)}
+                      >
+                        <Text style={styles.optionTitle}>{spreadsheet.title}</Text>
+                        <Text style={styles.optionBody}>Search result</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+
+                {selectedSpreadsheet ? (
+                  <View style={styles.optionList}>
+                    <Text style={styles.smallSectionLabel}>Choose a tab for {selectedSpreadsheet.title}</Text>
+                    {isLoadingTabs ? <Text style={styles.optionBody}>Loading tabs…</Text> : null}
+                    {availableTabs.map((tab) => {
+                      const isSelected =
+                        draft.spreadsheetId === selectedSpreadsheet.id && draft.sheetTitle === tab;
+                      return (
+                        <Pressable
+                          key={tab}
+                          style={[styles.optionRow, isSelected ? styles.optionRowSelected : null]}
+                          onPress={() => void handleSelectTab(tab)}
+                        >
+                          <Text style={styles.optionTitle}>{tab}</Text>
+                          <Text style={styles.optionBody}>
+                            {isSelected ? 'Connected here' : 'Tap to keep fields or import columns'}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ) : null}
+              </View>
+
+              <View style={styles.formSectionHeader}>
+                <Text style={styles.inputLabel}>Fields</Text>
+                <PillButton label="Add field" onPress={() => openFieldEditor()} variant="secondary" />
+              </View>
+
+              {draft.fields.length ? (
+                <View style={styles.fieldList}>
+                  {draft.fields.map((field) => (
+                    <Pressable key={field.key} style={styles.fieldListRow} onPress={() => openFieldEditor(field)}>
+                      <View style={styles.fieldListCopy}>
+                        <Text style={styles.fieldListTitle}>{field.title}</Text>
+                        <Text style={styles.fieldListMeta}>{field.id}</Text>
+                      </View>
+                      <Feather name="chevron-right" size={18} color={palette.mutedInk} />
+                    </Pressable>
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.emptyFieldsCard}>
+                  <Text style={styles.emptyFieldsTitle}>No fields yet</Text>
+                  <Text style={styles.emptyFieldsBody}>Add a field to describe what the AI should extract.</Text>
+                </View>
+              )}
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <PillButton label="Cancel" onPress={closeEditor} variant="ghost" />
+              <PillButton label={isSaving ? 'Saving…' : 'Save layer'} onPress={handleSave} disabled={isSaving} />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={isFieldEditorVisible} animationType="slide" transparent onRequestClose={closeFieldEditor}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.fieldModalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{activeField ? 'Field details' : 'New field'}</Text>
+              <Pressable onPress={closeFieldEditor} hitSlop={10}>
+                <Feather name="x" size={20} color={palette.ink} />
+              </Pressable>
+            </View>
+
+            {activeField ? (
+              <View style={styles.fieldModalContent}>
+                <TextInput
+                  style={styles.input}
+                  value={activeField.id}
+                  onChangeText={(value) => setActiveField((current) => (current ? { ...current, id: value } : current))}
+                  placeholder="field_id"
+                  autoCapitalize="none"
+                  placeholderTextColor={palette.mutedInk}
+                />
+                <TextInput
+                  style={styles.input}
+                  value={activeField.title}
+                  onChangeText={(value) =>
+                    setActiveField((current) => (current ? { ...current, title: value } : current))
+                  }
+                  placeholder="Field title"
+                  placeholderTextColor={palette.mutedInk}
+                />
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  value={activeField.description}
+                  onChangeText={(value) =>
+                    setActiveField((current) => (current ? { ...current, description: value } : current))
+                  }
+                  placeholder="What should the AI extract here?"
+                  placeholderTextColor={palette.mutedInk}
+                  multiline
+                />
+              </View>
+            ) : null}
+
+            <View style={styles.modalActions}>
+              {activeField && draft.fields.some((field) => field.key === activeField.key) ? (
+                <PillButton label="Delete" onPress={handleDeleteField} variant="ghost" />
+              ) : (
+                <PillButton label="Cancel" onPress={closeFieldEditor} variant="ghost" />
+              )}
+              <PillButton label="Save field" onPress={handleSaveField} />
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: palette.paper,
+  },
+  container: {
+    padding: 20,
+    gap: 16,
+    paddingBottom: 36,
+  },
+  heroCard: {
+    gap: 14,
+  },
+  heroStats: {
+    flexDirection: 'row',
+    gap: 24,
+  },
+  heroStat: {
+    gap: 4,
+  },
+  heroLabel: {
+    color: palette.mutedInk,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 12,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  heroValue: {
+    color: palette.ink,
+    fontFamily: typography.heading.fontFamily,
+    fontSize: 28,
+  },
+  heroBody: {
+    color: palette.mutedInk,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  heroActions: {
+    alignItems: 'flex-start',
+  },
+  emptyCard: {
+    gap: 8,
+  },
+  emptyTitle: {
+    color: palette.ink,
+    fontFamily: typography.heading.fontFamily,
+    fontSize: 20,
+  },
+  emptyBody: {
+    color: palette.mutedInk,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  layerCard: {
+    gap: 14,
+  },
+  layerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  layerCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  layerTitle: {
+    color: palette.ink,
+    fontFamily: typography.heading.fontFamily,
+    fontSize: 20,
+  },
+  layerMeta: {
+    color: palette.mutedInk,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  sheetBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: palette.cardStrong,
+    alignSelf: 'flex-start',
+  },
+  sheetBadgeReady: {
+    backgroundColor: '#d7f4e5',
+  },
+  sheetBadgeText: {
+    color: palette.ink,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 12,
+  },
+  sheetBadgeTextReady: {
+    color: '#146c43',
+  },
+  fieldPreviewList: {
+    gap: 8,
+  },
+  fieldPreviewRow: {
+    padding: 12,
+    borderRadius: radii.card,
+    backgroundColor: palette.cardStrong,
+    gap: 2,
+  },
+  fieldPreviewTitle: {
+    color: palette.ink,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 14,
+  },
+  fieldPreviewMeta: {
+    color: palette.mutedInk,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 12,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginLeft: -8,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(22, 29, 37, 0.32)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    maxHeight: '92%',
+    backgroundColor: palette.paper,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden',
+  },
+  fieldModalCard: {
+    backgroundColor: palette.paper,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 20,
+    gap: 16,
+  },
+  modalContent: {
+    padding: 20,
+    gap: 18,
+  },
+  fieldModalContent: {
+    gap: 12,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    color: palette.ink,
+    fontFamily: typography.heading.fontFamily,
+    fontSize: 24,
+  },
+  formGroup: {
+    gap: 8,
+  },
+  formSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  inputLabel: {
+    color: palette.ink,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 13,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  smallSectionLabel: {
+    color: palette.mutedInk,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: palette.line,
+    borderRadius: radii.card,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: palette.ink,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 15,
+    backgroundColor: palette.card,
+  },
+  searchInput: {
+    flex: 1,
+  },
+  textArea: {
+    minHeight: 88,
+    textAlignVertical: 'top',
+  },
+  sheetSection: {
+    gap: 12,
+  },
+  sheetSummaryCard: {
+    gap: 6,
+    padding: 14,
+    borderRadius: radii.card,
+    backgroundColor: palette.cardStrong,
+  },
+  sheetSummaryLabel: {
+    color: palette.mutedInk,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  sheetSummaryTitle: {
+    color: palette.ink,
+    fontFamily: typography.heading.fontFamily,
+    fontSize: 18,
+  },
+  sheetSummaryBody: {
+    color: palette.mutedInk,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  sheetActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+  },
+  searchSection: {
+    gap: 8,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  optionList: {
+    gap: 8,
+  },
+  optionRow: {
+    padding: 12,
+    borderRadius: radii.card,
+    backgroundColor: palette.cardStrong,
+    gap: 4,
+  },
+  optionRowSelected: {
+    borderWidth: 1,
+    borderColor: palette.accent,
+  },
+  optionTitle: {
+    color: palette.ink,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 14,
+  },
+  optionBody: {
+    color: palette.mutedInk,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  fieldList: {
+    gap: 10,
+  },
+  fieldListRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    padding: 14,
+    borderRadius: radii.card,
+    backgroundColor: palette.cardStrong,
+  },
+  fieldListCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  fieldListTitle: {
+    color: palette.ink,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 14,
+  },
+  fieldListMeta: {
+    color: palette.mutedInk,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 12,
+  },
+  emptyFieldsCard: {
+    gap: 6,
+    padding: 14,
+    borderRadius: radii.card,
+    backgroundColor: palette.cardStrong,
+  },
+  emptyFieldsTitle: {
+    color: palette.ink,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 14,
+  },
+  emptyFieldsBody: {
+    color: palette.mutedInk,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: palette.line,
+  },
+});

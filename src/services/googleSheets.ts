@@ -2,6 +2,7 @@ import type {
   ExtractionLayer,
   ExtractionSheetAppendResult,
   ExtractionSheetConnection,
+  SpreadsheetBrowserResponse,
 } from '../types';
 import { invokeAuthenticatedFunction } from './account';
 
@@ -38,5 +39,29 @@ export async function appendExtractionLayerRow(params: {
       description: field.description,
     })),
     values: params.values,
+  });
+}
+
+export async function browseRecentSpreadsheets(): Promise<SpreadsheetBrowserResponse> {
+  return invokeAuthenticatedFunction<SpreadsheetBrowserResponse>('google-sheets-browser', {
+    mode: 'recent',
+  });
+}
+
+export async function searchSpreadsheets(query: string): Promise<SpreadsheetBrowserResponse> {
+  return invokeAuthenticatedFunction<SpreadsheetBrowserResponse>('google-sheets-browser', {
+    mode: 'search',
+    query,
+  });
+}
+
+export async function getSpreadsheetTabsAndHeaders(
+  spreadsheetId: string,
+  sheetTitle?: string
+): Promise<SpreadsheetBrowserResponse> {
+  return invokeAuthenticatedFunction<SpreadsheetBrowserResponse>('google-sheets-browser', {
+    mode: 'details',
+    spreadsheetId,
+    sheetTitle,
   });
 }

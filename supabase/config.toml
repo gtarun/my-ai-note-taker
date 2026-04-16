@@ -16,3 +16,6 @@ verify_jwt = false
 
 [functions.google-sheets-append-row]
 verify_jwt = false
+
+[functions.google-sheets-browser]
+verify_jwt = false
