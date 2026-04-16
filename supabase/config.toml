@@ -22,3 +22,6 @@ verify_jwt = false
 
 [functions.user-data-bootstrap]
 verify_jwt = false
+
+[functions.user-settings-sync]
+verify_jwt = false

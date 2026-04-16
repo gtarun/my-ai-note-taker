@@ -1,5 +1,5 @@
 import type { AppSettings, CloudUserDataSnapshot, ExtractionLayer, ProviderConfig, ProviderId } from '../types';
-import { invokeAuthenticatedFunction } from './account';
+import { getAuthSession, invokeAuthenticatedFunction } from './account';
 import {
   defaultProviderConfigs,
   isProviderConfigured,
@@ -10,6 +10,52 @@ import {
 
 export async function fetchCloudUserDataSnapshot() {
   return invokeAuthenticatedFunction<CloudUserDataSnapshot>('user-data-bootstrap', {});
+}
+
+export async function saveCloudSettings(params: {
+  selectedTranscriptionProvider: ProviderId;
+  selectedSummaryProvider: ProviderId;
+  deleteUploadedAudio: boolean;
+  modelCatalogUrl: string;
+  hasSeenOnboarding: boolean;
+  providers: Record<ProviderId, ProviderConfig>;
+}) {
+  const session = await getAuthSession();
+
+  if (!session) {
+    return;
+  }
+
+  await invokeAuthenticatedFunction('user-settings-sync', {
+    preferences: {
+      selectedTranscriptionProvider: params.selectedTranscriptionProvider,
+      selectedSummaryProvider: params.selectedSummaryProvider,
+      deleteUploadedAudio: params.deleteUploadedAudio,
+      modelCatalogUrl: params.modelCatalogUrl,
+      hasSeenOnboarding: params.hasSeenOnboarding,
+    },
+    providers: Object.entries(params.providers).map(([providerId, config]) => ({
+      providerId,
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl,
+      transcriptionModel: config.transcriptionModel,
+      summaryModel: config.summaryModel,
+    })),
+  });
+}
+
+export async function saveCloudOnboardingState(hasSeenOnboarding: boolean) {
+  const session = await getAuthSession();
+
+  if (!session) {
+    return;
+  }
+
+  await invokeAuthenticatedFunction('user-settings-sync', {
+    preferences: {
+      hasSeenOnboarding,
+    },
+  });
 }
 
 export function mapBootstrapSnapshotToAppSettings(snapshot: CloudUserDataSnapshot): AppSettings {
