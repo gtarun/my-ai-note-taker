@@ -19,3 +19,6 @@ verify_jwt = false
 
 [functions.google-sheets-browser]
 verify_jwt = false
+
+[functions.user-data-bootstrap]
+verify_jwt = false

@@ -91,6 +91,49 @@ export type AppSettings = {
   modelCatalogUrl: string;
 };
 
+export type CloudUserProfile = {
+  displayName: string | null;
+  avatarUrl: string | null;
+  timezone: string | null;
+};
+
+export type CloudUserPreferences = {
+  selectedTranscriptionProvider: ProviderId;
+  selectedSummaryProvider: ProviderId;
+  deleteUploadedAudio: boolean;
+  modelCatalogUrl: string;
+  hasSeenOnboarding: boolean;
+};
+
+export type CloudUserProviderConfig = {
+  providerId: ProviderId;
+  apiKey: string;
+  baseUrl: string;
+  transcriptionModel: string;
+  summaryModel: string;
+};
+
+export type CloudIntegrationProvider = 'google';
+
+export type CloudUserIntegration = {
+  provider: CloudIntegrationProvider;
+  status: 'not_connected' | 'connected';
+  accountEmail: string | null;
+  grantedScopes: string[];
+  connectedAt: string | null;
+  needsReconnect: boolean;
+  saveFolderId: string | null;
+  saveFolderName: string | null;
+};
+
+export type CloudUserDataSnapshot = {
+  profile: CloudUserProfile;
+  preferences: CloudUserPreferences;
+  providers: CloudUserProviderConfig[];
+  integrations: CloudUserIntegration[];
+  layers: ExtractionLayer[];
+};
+
 export type LocalModelKind = 'transcription' | 'summary';
 
 export type LocalModelEngine = 'whisper.cpp' | 'mediapipe-llm' | 'litert-lm';
