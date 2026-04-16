@@ -77,6 +77,28 @@ export function toSaveLayerInput(draft: LayerDraft) {
   };
 }
 
+export function applySheetSelection(
+  draft: LayerDraft,
+  input: {
+    spreadsheetId: string;
+    spreadsheetTitle: string;
+    sheetTitle: string;
+    headers: string[];
+    mode: 'keep' | 'import';
+  }
+): LayerDraft {
+  return {
+    ...draft,
+    spreadsheetId: input.spreadsheetId,
+    spreadsheetTitle: input.spreadsheetTitle,
+    sheetTitle: input.sheetTitle,
+    fields:
+      input.mode === 'import' && input.headers.length
+        ? applyImportedHeaders(input.headers).map((field) => createEditableField(field))
+        : draft.fields,
+  };
+}
+
 function normalizeHeaderId(header: string, index: number) {
   const normalized = header
     .toLowerCase()
