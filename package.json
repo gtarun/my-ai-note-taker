@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "scripts": {
+    "postinstall": "node scripts/patch-expo-sqlite-podspec.cjs",
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
+    "ios:release": "npx expo run:ios --device --configuration Release",
     "web": "expo start --web",
     "test": "vitest run",
     "build:ios": "eas build --profile production --platform ios",
@@ -48,6 +50,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
+    "supabase": "^2.91.2",
     "typescript": "~5.9.2",
     "vitest": "^3.2.4"
   },

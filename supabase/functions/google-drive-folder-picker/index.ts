@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
 
 import { getValidAccessToken, readGoogleDriveEnv } from '../_shared/drive-access.ts';
+import { buildSupabaseFunctionUrl, isAllowedRedirectBase } from '../_shared/redirect-base.ts';
 import { createSignedPayload, parseSignedPayload } from '../_shared/signed-payload.ts';
 
 const corsHeaders = {
@@ -24,7 +25,7 @@ Deno.serve(async (request) => {
 
   try {
     if (request.method === 'POST') {
-      return await handlePost(request, requestUrl);
+      return await handlePost(request);
     }
 
     if (request.method === 'GET') {
@@ -40,7 +41,7 @@ Deno.serve(async (request) => {
   }
 });
 
-async function handlePost(request: Request, requestUrl: URL) {
+async function handlePost(request: Request) {
   const env = readGoogleDriveEnv();
   const stateSecret = Deno.env.get('GOOGLE_STATE_SECRET') ?? '';
 
@@ -74,8 +75,7 @@ async function handlePost(request: Request, requestUrl: URL) {
     stateSecret
   );
 
-  requestUrl.search = '';
-  const baseUrl = requestUrl.toString();
+  const baseUrl = buildSupabaseFunctionUrl(env.supabaseUrl, 'google-drive-folder-picker');
   return jsonResponse({ url: `${baseUrl}?t=${encodeURIComponent(token)}` });
 }
 
@@ -138,27 +138,6 @@ async function handleGet(requestUrl: URL) {
       redirectBase: payload.redirectBase,
     })
   );
-}
-
-function isAllowedRedirectBase(value: string): boolean {
-  if (!value || value.length > 2048) {
-    return false;
-  }
-
-  try {
-    const parsed = new URL(value);
-    if (parsed.protocol === 'mufathom:' || parsed.protocol === 'exp:') {
-      return true;
-    }
-
-    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-      return ['localhost', '127.0.0.1'].includes(parsed.hostname);
-    }
-
-    return false;
-  } catch {
-    return false;
-  }
 }
 
 function createUserScopedClient(request: Request, env: ReturnType<typeof readGoogleDriveEnv>) {

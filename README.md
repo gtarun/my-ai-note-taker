@@ -208,6 +208,7 @@ If you override `GOOGLE_DRIVE_SCOPE`, it must still include:
 - `openid`
 - `https://www.googleapis.com/auth/userinfo.email`
 - `https://www.googleapis.com/auth/drive.file`
+- `https://www.googleapis.com/auth/spreadsheets`
 
 ### Deploy
 
@@ -217,5 +218,7 @@ Run the database migration(s) and deploy these functions:
 - `google-drive-access-token`
 - `google-drive-save-folder`
 - `google-drive-folder-picker`
+- `google-sheets-ensure-layer-sheet`
+- `google-sheets-append-row`
 
 `google-drive-connect-url` now preserves existing `driveConnection` fields on reconnect so it does not wipe `saveFolderId` / `saveFolderName`.

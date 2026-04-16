@@ -190,6 +190,14 @@ export default function AccountScreen() {
       const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
 
       if (result.type === 'success' && result.url) {
+        const parsed = Linking.parse(result.url);
+        const driveStatus = firstQueryParam(parsed.queryParams?.drive);
+        const driveError = firstQueryParam(parsed.queryParams?.error);
+
+        if (driveStatus === 'error') {
+          throw new Error(driveError || 'Google Drive connection failed.');
+        }
+
         const nextSession = await refreshCurrentSession();
         setSession(nextSession);
         Alert.alert('Google Drive', 'Connected. Your account has been updated.');

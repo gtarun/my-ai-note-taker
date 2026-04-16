@@ -1,5 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
 
+import { buildRedirectUrl, isAllowedRedirectBase } from '../_shared/redirect-base.ts';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -20,7 +22,7 @@ Deno.serve(async (request) => {
     const urlError = requestUrl.searchParams.get('error');
 
     if (request.method === 'GET' && urlError) {
-      return htmlResponse(renderErrorPage(`Google OAuth returned an error: ${urlError}`));
+      return htmlOrRedirectError(`Google OAuth returned an error: ${urlError}`, null);
     }
 
     if (request.method === 'GET' && urlCode && urlState) {
@@ -58,13 +60,17 @@ Deno.serve(async (request) => {
       );
 
       if (upsertResult.error) {
-        return htmlResponse(renderErrorPage(upsertResult.error.message), 500);
+        return htmlOrRedirectError(upsertResult.error.message, statePayload.redirectBase, 500);
       }
 
       const { data: targetUser, error: targetUserError } = await adminClient.auth.admin.getUserById(statePayload.userId);
 
       if (targetUserError || !targetUser.user) {
-        return htmlResponse(renderErrorPage(targetUserError?.message ?? 'Unable to load the target user.'), 500);
+        return htmlOrRedirectError(
+          targetUserError?.message ?? 'Unable to load the target user.',
+          statePayload.redirectBase,
+          500
+        );
       }
 
       const prevDrive = targetUser.user.user_metadata?.driveConnection;
@@ -84,7 +90,16 @@ Deno.serve(async (request) => {
       });
 
       if (updateResult.error) {
-        return htmlResponse(renderErrorPage(updateResult.error.message), 500);
+        return htmlOrRedirectError(updateResult.error.message, statePayload.redirectBase, 500);
+      }
+
+      if (statePayload.redirectBase) {
+        return redirectResponse(
+          buildRedirectUrl(statePayload.redirectBase, {
+            drive: 'connected',
+            accountEmail: profile.email,
+          })
+        );
       }
 
       return htmlResponse(renderSuccessPage(profile.email));
@@ -100,10 +115,18 @@ Deno.serve(async (request) => {
       return jsonResponse({ error: 'Unauthorized' }, 401);
     }
 
+    const body = request.method === 'POST' ? ((await request.json()) as { redirectBase?: unknown }) : {};
+    const redirectBase = typeof body.redirectBase === 'string' ? body.redirectBase.trim() : '';
+
+    if (redirectBase && !isAllowedRedirectBase(redirectBase)) {
+      return jsonResponse({ error: 'Invalid redirectBase.' }, 400);
+    }
+
     const signedState = await createState(
       {
         userId: user.id,
         issuedAt: Date.now(),
+        redirectBase: redirectBase || null,
       },
       env.stateSecret
     );
@@ -191,7 +214,10 @@ function createAdminClient(env: ReturnType<typeof readEnv>) {
   });
 }
 
-async function createState(payload: { userId: string; issuedAt: number }, secret: string) {
+async function createState(
+  payload: { userId: string; issuedAt: number; redirectBase: string | null },
+  secret: string
+) {
   const encodedPayload = toBase64Url(JSON.stringify(payload));
   const signature = await signValue(encodedPayload, secret);
   return `${encodedPayload}.${signature}`;
@@ -210,13 +236,40 @@ async function parseState(state: string, secret: string) {
     throw new Error('Invalid OAuth state.');
   }
 
-  const payload = JSON.parse(fromBase64Url(encodedPayload)) as { userId: string; issuedAt: number };
+  const payload = JSON.parse(fromBase64Url(encodedPayload)) as {
+    userId: string;
+    issuedAt: number;
+    redirectBase?: string | null;
+  };
 
   if (typeof payload.issuedAt !== 'number' || payload.issuedAt < Date.now() - STATE_MAX_AGE_MS) {
     throw new Error('OAuth state expired.');
   }
 
   return payload;
+}
+
+function redirectResponse(location: string) {
+  return new Response(null, {
+    status: 302,
+    headers: {
+      ...corsHeaders,
+      Location: location,
+    },
+  });
+}
+
+function htmlOrRedirectError(message: string, redirectBase: string | null | undefined, status = 400) {
+  if (redirectBase) {
+    return redirectResponse(
+      buildRedirectUrl(redirectBase, {
+        drive: 'error',
+        error: message,
+      })
+    );
+  }
+
+  return htmlResponse(renderErrorPage(message), status);
 }
 
 async function exchangeCodeForTokens(params: {

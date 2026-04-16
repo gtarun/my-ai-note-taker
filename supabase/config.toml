@@ -4,3 +4,15 @@ verify_jwt = false
 # GET serves the Google Picker HTML without a Supabase JWT; auth is a signed `t` query param. POST validates JWT in code.
 [functions.google-drive-folder-picker]
 verify_jwt = false
+
+[functions.google-drive-access-token]
+verify_jwt = false
+
+[functions.google-drive-save-folder]
+verify_jwt = false
+
+[functions.google-sheets-ensure-layer-sheet]
+verify_jwt = false
+
+[functions.google-sheets-append-row]
+verify_jwt = false

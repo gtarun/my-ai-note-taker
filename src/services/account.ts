@@ -195,13 +195,13 @@ export function getOAuthRedirectUrl() {
   return Linking.createURL('account');
 }
 
-/** Same redirect the Edge Function registers with Google (`GOOGLE_DRIVE_REDIRECT_URI` default). Used to close the in-app auth browser when Google redirects back. */
+/** App redirect used by openAuthSessionAsync. The Edge Function receives Google on HTTPS, then redirects back here. */
 export function getGoogleDriveOAuthRedirectUrl() {
   if (!isCloudBackendConfigured()) {
     return '';
   }
 
-  return supabaseConfig.googleDriveRedirectUri;
+  return getOAuthRedirectUrl();
 }
 
 export async function completeOAuthSignIn(callbackUrl: string) {
@@ -277,6 +277,9 @@ export async function getGoogleDriveConnectUrl() {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${session.access_token}`,
+      },
+      body: {
+        redirectBase: getGoogleDriveOAuthRedirectUrl(),
       },
     }
   );
