@@ -39,14 +39,18 @@ export default function LayersScreen() {
   const [layers, setLayers] = useState<ExtractionLayer[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isEditorVisible, setIsEditorVisible] = useState(false);
+  const [isSheetPickerVisible, setIsSheetPickerVisible] = useState(false);
   const [draft, setDraft] = useState<LayerDraft>(createEmptyDraft());
   const [isSaving, setIsSaving] = useState(false);
   const [isPreparingSheet, setIsPreparingSheet] = useState(false);
+  const [sheetPickerStep, setSheetPickerStep] = useState<'browse' | 'tabs' | 'choice'>('browse');
   const [recentSpreadsheets, setRecentSpreadsheets] = useState<SpreadsheetBrowserSpreadsheet[]>([]);
   const [searchResults, setSearchResults] = useState<SpreadsheetBrowserSpreadsheet[]>([]);
   const [spreadsheetSearch, setSpreadsheetSearch] = useState('');
   const [selectedSpreadsheet, setSelectedSpreadsheet] = useState<SpreadsheetBrowserSpreadsheet | null>(null);
   const [availableTabs, setAvailableTabs] = useState<string[]>([]);
+  const [selectedTab, setSelectedTab] = useState<string | null>(null);
+  const [availableHeaders, setAvailableHeaders] = useState<string[]>([]);
   const [isLoadingRecent, setIsLoadingRecent] = useState(false);
   const [isSearchingSheets, setIsSearchingSheets] = useState(false);
   const [isLoadingTabs, setIsLoadingTabs] = useState(false);
@@ -72,20 +76,19 @@ export default function LayersScreen() {
 
   const resetEditorState = useCallback((nextDraft: LayerDraft) => {
     setDraft(nextDraft);
-    setSearchResults([]);
-    setSpreadsheetSearch('');
-    setAvailableTabs(nextDraft.sheetTitle ? [nextDraft.sheetTitle] : []);
-    setSelectedSpreadsheet(
-      nextDraft.spreadsheetId && nextDraft.spreadsheetTitle
-        ? {
-            id: nextDraft.spreadsheetId,
-            title: nextDraft.spreadsheetTitle,
-            modifiedTime: null,
-          }
-        : null
-    );
     setActiveField(null);
     setIsFieldEditorVisible(false);
+  }, []);
+
+  const resetSheetPickerState = useCallback(() => {
+    setSheetPickerStep('browse');
+    setRecentSpreadsheets([]);
+    setSearchResults([]);
+    setSpreadsheetSearch('');
+    setSelectedSpreadsheet(null);
+    setAvailableTabs([]);
+    setSelectedTab(null);
+    setAvailableHeaders([]);
   }, []);
 
   const loadRecentSpreadsheetOptions = useCallback(async () => {
@@ -111,6 +114,8 @@ export default function LayersScreen() {
           modifiedTime: spreadsheet.modifiedTime ?? null,
         });
         setAvailableTabs(data.tabs ?? []);
+        setSelectedTab(sheetTitle ?? null);
+        setAvailableHeaders(sheetTitle ? data.headers ?? [] : []);
         return data;
       } catch (error) {
         Alert.alert(
@@ -125,28 +130,61 @@ export default function LayersScreen() {
     []
   );
 
+  const openSheetPicker = useCallback((nextDraft?: LayerDraft) => {
+    const targetDraft = nextDraft ?? draft;
+    setIsSheetPickerVisible(true);
+    setSheetPickerStep(targetDraft.spreadsheetId && targetDraft.spreadsheetTitle ? 'tabs' : 'browse');
+    setSearchResults([]);
+    setSpreadsheetSearch('');
+    setAvailableTabs([]);
+    setSelectedTab(null);
+    setAvailableHeaders([]);
+
+    if (targetDraft.spreadsheetId && targetDraft.spreadsheetTitle) {
+      setSelectedSpreadsheet({
+        id: targetDraft.spreadsheetId,
+        title: targetDraft.spreadsheetTitle,
+        modifiedTime: null,
+      });
+      void loadSpreadsheetDetails(
+        {
+          id: targetDraft.spreadsheetId,
+          title: targetDraft.spreadsheetTitle,
+          modifiedTime: null,
+        },
+        targetDraft.sheetTitle ?? undefined
+      );
+    } else {
+      setSelectedSpreadsheet(null);
+      void loadRecentSpreadsheetOptions();
+    }
+  }, [draft, loadRecentSpreadsheetOptions, loadSpreadsheetDetails]);
+
+  const closeSheetPicker = useCallback(() => {
+    if (isSaving || isPreparingSheet) {
+      return;
+    }
+
+    setIsSheetPickerVisible(false);
+    resetSheetPickerState();
+  }, [isPreparingSheet, isSaving, resetSheetPickerState]);
+
   const openCreateModal = () => {
     resetEditorState(createEmptyDraft());
     setIsEditorVisible(true);
-    void loadRecentSpreadsheetOptions();
   };
 
   const openEditModal = (layer: ExtractionLayer) => {
     const nextDraft = createDraftFromLayer(layer);
     resetEditorState(nextDraft);
     setIsEditorVisible(true);
-    void loadRecentSpreadsheetOptions();
+  };
 
-    if (layer.spreadsheetId && layer.spreadsheetTitle) {
-      void loadSpreadsheetDetails(
-        {
-          id: layer.spreadsheetId,
-          title: layer.spreadsheetTitle,
-          modifiedTime: null,
-        },
-        layer.sheetTitle ?? undefined
-      );
-    }
+  const openSheetPickerFromLayerCard = (layer: ExtractionLayer) => {
+    const nextDraft = createDraftFromLayer(layer);
+    resetEditorState(nextDraft);
+    setIsEditorVisible(true);
+    openSheetPicker(nextDraft);
   };
 
   const closeEditor = () => {
@@ -155,7 +193,9 @@ export default function LayersScreen() {
     }
 
     setIsEditorVisible(false);
+    setIsSheetPickerVisible(false);
     resetEditorState(createEmptyDraft());
+    resetSheetPickerState();
   };
 
   const handleSave = async () => {
@@ -225,6 +265,10 @@ export default function LayersScreen() {
         modifiedTime: null,
       });
       setAvailableTabs((current) => Array.from(new Set([...current, connection.sheetTitle])));
+      setSelectedTab(connection.sheetTitle);
+      setIsSheetPickerVisible(false);
+      setSheetPickerStep('browse');
+      setAvailableHeaders([]);
       Alert.alert(
         'Google Sheets ready',
         `${payload.name} is now connected to ${connection.spreadsheetTitle} / ${connection.sheetTitle}.`
@@ -262,6 +306,9 @@ export default function LayersScreen() {
     if (details && !(details.tabs ?? []).length) {
       Alert.alert('No tabs found', 'This spreadsheet has no visible tabs yet.');
     }
+    if (details && (details.tabs ?? []).length) {
+      setSheetPickerStep('tabs');
+    }
   };
 
   const handleSelectTab = async (tabTitle: string) => {
@@ -274,54 +321,59 @@ export default function LayersScreen() {
       return;
     }
 
-    const headers = details.headers ?? [];
     const spreadsheetTitle = details.spreadsheetTitle ?? selectedSpreadsheet.title;
+    const headers = details.headers ?? [];
 
-    Alert.alert(
-      'Use sheet columns?',
-      headers.length
-        ? `Choose whether "${tabTitle}" should replace this layer's fields with its header row.`
-        : `No header row was found on "${tabTitle}". You can still use it as the destination and keep your current fields.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Keep current fields',
-          onPress: () => {
-            setDraft((current) =>
-              applySheetSelection(current, {
-                spreadsheetId: selectedSpreadsheet.id,
-                spreadsheetTitle,
-                sheetTitle: tabTitle,
-                headers,
-                mode: 'keep',
-              })
-            );
-          },
-        },
-        {
-          text: 'Import columns',
-          onPress: () => {
-            setDraft((current) =>
-              applySheetSelection(current, {
-                spreadsheetId: selectedSpreadsheet.id,
-                spreadsheetTitle,
-                sheetTitle: tabTitle,
-                headers,
-                mode: 'import',
-              })
-            );
+    setSelectedTab(tabTitle);
+    setAvailableHeaders(headers);
+    setSheetPickerStep('choice');
 
-            if (!headers.length) {
-              Alert.alert(
-                'No headers found',
-                'This tab has no header row yet, so your current fields were kept.'
-              );
-            }
-          },
-        },
-      ]
+    if (!headers.length) {
+      Alert.alert(
+        'No headers found',
+        'This tab has no header row yet. You can still keep your current fields or import nothing.'
+      );
+    }
+    setSelectedSpreadsheet((current) =>
+      current
+        ? {
+            ...current,
+            title: spreadsheetTitle,
+          }
+        : current
     );
   };
+
+  const applySheetChoice = useCallback(
+    (mode: 'keep' | 'import') => {
+      if (!selectedSpreadsheet || !selectedTab) {
+        return;
+      }
+
+      setDraft((current) =>
+        applySheetSelection(current, {
+          spreadsheetId: selectedSpreadsheet.id,
+          spreadsheetTitle: selectedSpreadsheet.title,
+          sheetTitle: selectedTab,
+          headers: availableHeaders,
+          mode,
+        })
+      );
+      closeSheetPicker();
+    },
+    [availableHeaders, closeSheetPicker, selectedSpreadsheet, selectedTab]
+  );
+
+  const handleChooseKeepCurrentFields = useCallback(() => {
+    applySheetChoice('keep');
+  }, [applySheetChoice]);
+
+  const handleChooseImportColumns = useCallback(() => {
+    applySheetChoice('import');
+    if (!availableHeaders.length) {
+      Alert.alert('No headers found', 'This tab has no header row yet, so your current fields were kept.');
+    }
+  }, [applySheetChoice, availableHeaders.length]);
 
   const openFieldEditor = (field?: EditableField) => {
     setActiveField(field ? { ...field } : createEditableField());
@@ -377,6 +429,7 @@ export default function LayersScreen() {
   const currentDestination = draft.spreadsheetTitle
     ? `${draft.spreadsheetTitle}${draft.sheetTitle ? ` • ${draft.sheetTitle}` : ''}`
     : 'No sheet connected yet.';
+  const sheetPickerTitle = draft.spreadsheetId ? 'Change sheet' : 'Connect sheet';
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -458,7 +511,7 @@ export default function LayersScreen() {
                 <PillButton label="Edit" onPress={() => openEditModal(layer)} variant="ghost" />
                 <PillButton
                   label={layer.spreadsheetId ? 'Change sheet' : 'Connect sheet'}
-                  onPress={() => openEditModal(layer)}
+                  onPress={() => openSheetPickerFromLayerCard(layer)}
                   variant="secondary"
                 />
                 <PillButton label="Delete" onPress={() => handleDelete(layer)} variant="ghost" />
@@ -491,111 +544,30 @@ export default function LayersScreen() {
               </View>
 
               <View style={styles.sheetSection}>
-                <View style={styles.formSectionHeader}>
-                  <Text style={styles.inputLabel}>Sheet destination</Text>
-                  <PillButton
-                    label={isPreparingSheet ? 'Preparing…' : 'Create new sheet'}
-                    onPress={handleCreateOrRefreshSheet}
-                    variant="secondary"
-                    disabled={isPreparingSheet}
-                  />
-                </View>
-
                 <View style={styles.sheetSummaryCard}>
-                  <Text style={styles.sheetSummaryLabel}>Current destination</Text>
-                  <Text style={styles.sheetSummaryTitle}>{currentDestination}</Text>
-                  {selectedSpreadsheet && !draft.sheetTitle ? (
-                    <Text style={styles.sheetSummaryBody}>Choose a tab for {selectedSpreadsheet.title}.</Text>
+                  <Text style={styles.sheetSummaryLabel}>Sheet destination</Text>
+                  <Text style={styles.sheetSummaryTitle}>
+                    {draft.spreadsheetTitle ? currentDestination : 'No sheet connected yet'}
+                  </Text>
+                  {draft.spreadsheetTitle ? (
+                    <Text style={styles.sheetSummaryBody}>
+                      {draft.sheetTitle
+                        ? 'This layer will save into the connected spreadsheet tab.'
+                        : 'Choose a tab to finish connecting this layer.'}
+                    </Text>
                   ) : (
                     <Text style={styles.sheetSummaryBody}>
-                      Choose an existing spreadsheet and tab, or create a new sheet from this layer.
+                      Connect this layer to a spreadsheet and tab before saving rows.
                     </Text>
                   )}
-                </View>
-
-                <View style={styles.sheetActionsRow}>
-                  <PillButton
-                    label={isLoadingRecent ? 'Refreshing…' : 'Refresh recent'}
-                    onPress={() => void loadRecentSpreadsheetOptions()}
-                    variant="ghost"
-                    disabled={isLoadingRecent}
-                  />
-                </View>
-
-                {recentSpreadsheets.length ? (
-                  <View style={styles.optionList}>
-                    <Text style={styles.smallSectionLabel}>Recent spreadsheets</Text>
-                    {recentSpreadsheets.map((spreadsheet) => (
-                      <Pressable
-                        key={spreadsheet.id}
-                        style={styles.optionRow}
-                        onPress={() => void handleSelectSpreadsheet(spreadsheet)}
-                      >
-                        <Text style={styles.optionTitle}>{spreadsheet.title}</Text>
-                        <Text style={styles.optionBody}>
-                          {spreadsheet.modifiedTime ? new Date(spreadsheet.modifiedTime).toLocaleDateString() : 'Recent'}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                ) : null}
-
-                <View style={styles.searchSection}>
-                  <Text style={styles.smallSectionLabel}>Search spreadsheets</Text>
-                  <View style={styles.searchRow}>
-                    <TextInput
-                      style={[styles.input, styles.searchInput]}
-                      value={spreadsheetSearch}
-                      onChangeText={setSpreadsheetSearch}
-                      placeholder="Search by spreadsheet name"
-                      placeholderTextColor={palette.mutedInk}
-                    />
+                  <View style={styles.sheetSummaryActions}>
                     <PillButton
-                      label={isSearchingSheets ? 'Searching…' : 'Search'}
-                      onPress={() => void handleSearchSheets()}
+                      label={sheetPickerTitle}
+                      onPress={openSheetPicker}
                       variant="secondary"
-                      disabled={isSearchingSheets}
                     />
                   </View>
                 </View>
-
-                {searchResults.length ? (
-                  <View style={styles.optionList}>
-                    {searchResults.map((spreadsheet) => (
-                      <Pressable
-                        key={spreadsheet.id}
-                        style={styles.optionRow}
-                        onPress={() => void handleSelectSpreadsheet(spreadsheet)}
-                      >
-                        <Text style={styles.optionTitle}>{spreadsheet.title}</Text>
-                        <Text style={styles.optionBody}>Search result</Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                ) : null}
-
-                {selectedSpreadsheet ? (
-                  <View style={styles.optionList}>
-                    <Text style={styles.smallSectionLabel}>Choose a tab for {selectedSpreadsheet.title}</Text>
-                    {isLoadingTabs ? <Text style={styles.optionBody}>Loading tabs…</Text> : null}
-                    {availableTabs.map((tab) => {
-                      const isSelected =
-                        draft.spreadsheetId === selectedSpreadsheet.id && draft.sheetTitle === tab;
-                      return (
-                        <Pressable
-                          key={tab}
-                          style={[styles.optionRow, isSelected ? styles.optionRowSelected : null]}
-                          onPress={() => void handleSelectTab(tab)}
-                        >
-                          <Text style={styles.optionTitle}>{tab}</Text>
-                          <Text style={styles.optionBody}>
-                            {isSelected ? 'Connected here' : 'Tap to keep fields or import columns'}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                ) : null}
               </View>
 
               <View style={styles.formSectionHeader}>
@@ -627,6 +599,161 @@ export default function LayersScreen() {
               <PillButton label="Cancel" onPress={closeEditor} variant="ghost" />
               <PillButton label={isSaving ? 'Saving…' : 'Save layer'} onPress={handleSave} disabled={isSaving} />
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={isSheetPickerVisible} animationType="slide" transparent onRequestClose={closeSheetPicker}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <ScrollView contentContainerStyle={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <View style={styles.modalHeaderCopy}>
+                  <Text style={styles.modalTitle}>{sheetPickerTitle}</Text>
+                  <Text style={styles.modalSubtitle}>
+                    Search for a spreadsheet, pick a tab, then choose whether to keep your current fields or import the tab headers.
+                  </Text>
+                </View>
+                <Pressable onPress={closeSheetPicker} hitSlop={10}>
+                  <Feather name="x" size={20} color={palette.ink} />
+                </Pressable>
+              </View>
+
+              {sheetPickerStep === 'browse' ? (
+                <View style={styles.sheetPickerSection}>
+                  <View style={styles.searchSection}>
+                    <Text style={styles.smallSectionLabel}>Search spreadsheets</Text>
+                    <View style={styles.searchRow}>
+                      <TextInput
+                        style={[styles.input, styles.searchInput]}
+                        value={spreadsheetSearch}
+                        onChangeText={setSpreadsheetSearch}
+                        placeholder="Search by spreadsheet name"
+                        placeholderTextColor={palette.mutedInk}
+                      />
+                      <PillButton
+                        label={isSearchingSheets ? 'Searching…' : 'Search'}
+                        onPress={() => void handleSearchSheets()}
+                        variant="secondary"
+                        disabled={isSearchingSheets}
+                      />
+                    </View>
+                  </View>
+
+                  <View style={styles.sheetPickerActions}>
+                    <PillButton
+                      label={isPreparingSheet ? 'Preparing…' : 'Create new sheet'}
+                      onPress={handleCreateOrRefreshSheet}
+                      variant="secondary"
+                      disabled={isPreparingSheet}
+                    />
+                  </View>
+
+                  {isLoadingRecent ? <Text style={styles.optionBody}>Loading recent spreadsheets…</Text> : null}
+
+                  {recentSpreadsheets.length ? (
+                    <View style={styles.optionList}>
+                      <Text style={styles.smallSectionLabel}>Recent spreadsheets</Text>
+                      {recentSpreadsheets.slice(0, 4).map((spreadsheet) => (
+                        <Pressable
+                          key={spreadsheet.id}
+                          style={styles.optionRow}
+                          onPress={() => void handleSelectSpreadsheet(spreadsheet)}
+                        >
+                          <Text style={styles.optionTitle}>{spreadsheet.title}</Text>
+                          <Text style={styles.optionBody}>
+                            {spreadsheet.modifiedTime
+                              ? new Date(spreadsheet.modifiedTime).toLocaleDateString()
+                              : 'Recent'}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  ) : null}
+
+                  {searchResults.length ? (
+                    <View style={styles.optionList}>
+                      <Text style={styles.smallSectionLabel}>Search results</Text>
+                      {searchResults.map((spreadsheet) => (
+                        <Pressable
+                          key={spreadsheet.id}
+                          style={styles.optionRow}
+                          onPress={() => void handleSelectSpreadsheet(spreadsheet)}
+                        >
+                          <Text style={styles.optionTitle}>{spreadsheet.title}</Text>
+                          <Text style={styles.optionBody}>Tap to pick tabs</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+
+              {sheetPickerStep === 'tabs' || sheetPickerStep === 'choice' ? (
+                <View style={styles.sheetPickerSection}>
+                  <View style={styles.sheetSummaryCard}>
+                    <Text style={styles.sheetSummaryLabel}>Selected spreadsheet</Text>
+                    <Text style={styles.sheetSummaryTitle}>{selectedSpreadsheet?.title ?? 'Unknown spreadsheet'}</Text>
+                    <Text style={styles.sheetSummaryBody}>
+                      {sheetPickerStep === 'choice'
+                        ? `Tab: ${selectedTab ?? 'Unknown tab'}`
+                        : 'Pick the tab you want to use.'}
+                    </Text>
+                  </View>
+
+                  <View style={styles.sheetPickerActions}>
+                    <PillButton
+                      label="Browse spreadsheets"
+                      onPress={() => {
+                        setSheetPickerStep('browse');
+                        setSelectedTab(null);
+                        setAvailableHeaders([]);
+                        setAvailableTabs([]);
+                        void loadRecentSpreadsheetOptions();
+                      }}
+                      variant="ghost"
+                    />
+                  </View>
+
+                  {isLoadingTabs ? <Text style={styles.optionBody}>Loading tabs…</Text> : null}
+
+                  {sheetPickerStep === 'tabs' ? (
+                    <View style={styles.optionList}>
+                      {availableTabs.map((tab) => {
+                        const isSelected = selectedTab === tab;
+                        return (
+                          <Pressable
+                            key={tab}
+                            style={[styles.optionRow, isSelected ? styles.optionRowSelected : null]}
+                            onPress={() => void handleSelectTab(tab)}
+                          >
+                            <Text style={styles.optionTitle}>{tab}</Text>
+                            <Text style={styles.optionBody}>
+                              {isSelected ? 'Selected' : 'Tap to keep fields or import columns'}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+
+                  {sheetPickerStep === 'choice' ? (
+                    <View style={styles.choiceCard}>
+                      <Text style={styles.choiceTitle}>Use sheet columns?</Text>
+                      <Text style={styles.choiceBody}>
+                        {availableHeaders.length
+                          ? 'Import the tab header row into this layer, or keep your current fields.'
+                          : 'This tab has no visible headers, so importing will keep your current fields.'}
+                      </Text>
+                      <View style={styles.choiceActions}>
+                        <PillButton label="Keep current fields" onPress={handleChooseKeepCurrentFields} variant="ghost" />
+                        <PillButton label="Import columns" onPress={handleChooseImportColumns} />
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -839,11 +966,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
+  },
+  modalHeaderCopy: {
+    flex: 1,
+    gap: 6,
   },
   modalTitle: {
     color: palette.ink,
     fontFamily: typography.heading.fontFamily,
     fontSize: 24,
+  },
+  modalSubtitle: {
+    color: palette.mutedInk,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 13,
+    lineHeight: 19,
   },
   formGroup: {
     gap: 8,
@@ -913,9 +1051,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
   },
-  sheetActionsRow: {
+  sheetSummaryActions: {
     flexDirection: 'row',
     justifyContent: 'flex-start',
+  },
+  sheetPickerSection: {
+    gap: 12,
   },
   searchSection: {
     gap: 8,
@@ -948,6 +1089,32 @@ const styles = StyleSheet.create({
     fontFamily: typography.body.fontFamily,
     fontSize: 12,
     lineHeight: 18,
+  },
+  sheetPickerActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+  },
+  choiceCard: {
+    gap: 10,
+    padding: 14,
+    borderRadius: radii.card,
+    backgroundColor: palette.cardStrong,
+  },
+  choiceTitle: {
+    color: palette.ink,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 15,
+  },
+  choiceBody: {
+    color: palette.mutedInk,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  choiceActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   fieldList: {
     gap: 10,

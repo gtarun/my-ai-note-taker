@@ -25,11 +25,14 @@ type FieldRow = {
 
 type SaveExtractionLayerInput = {
   id?: string;
+  requestToken?: string;
   name: string;
   fields: ExtractionLayerField[];
   spreadsheetId?: string | null;
   spreadsheetTitle?: string | null;
   sheetTitle?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export async function listExtractionLayers(): Promise<ExtractionLayer[]> {
@@ -69,6 +72,14 @@ export async function getExtractionLayer(id: string): Promise<ExtractionLayer | 
 }
 
 export async function saveExtractionLayer(input: SaveExtractionLayerInput): Promise<ExtractionLayer> {
+  const layerId = input.id?.trim();
+  const isUpdate = layerId ? isServerExtractionLayerId(layerId) : false;
+  const requestToken = input.requestToken ?? (layerId && !isUpdate ? layerId : undefined);
+
+  if (!isUpdate && !requestToken) {
+    throw new Error('requestToken is required for new extraction layers.');
+  }
+
   const localSaved = await saveExtractionLayerToLocalCache(input);
   const session = await getAuthSession();
 
@@ -76,7 +87,18 @@ export async function saveExtractionLayer(input: SaveExtractionLayerInput): Prom
     return localSaved;
   }
 
-  const cloudSaved = await saveCloudExtractionLayer(localSaved);
+  const cloudPayload = isUpdate
+    ? localSaved
+    : {
+        ...omitLayerId(localSaved),
+        requestToken,
+      };
+  const cloudSaved = await saveCloudExtractionLayer(cloudPayload);
+
+  if (cloudSaved.id !== localSaved.id) {
+    await deleteExtractionLayerFromLocalCache(localSaved.id);
+  }
+
   await saveExtractionLayerToLocalCache(cloudSaved);
   return cloudSaved;
 }
@@ -127,6 +149,9 @@ async function saveExtractionLayerToLocalCache(input: SaveExtractionLayerInput):
   const cleanName = input.name.trim();
   const cleanFields = normalizeFields(input.fields);
   const now = new Date().toISOString();
+  const existing = input.id ? await getLocalExtractionLayer(input.id) : null;
+  const createdAt = input.createdAt ?? existing?.createdAt ?? now;
+  const updatedAt = input.updatedAt ?? now;
   const layerId = input.id ?? createId();
 
   if (!cleanName) {
@@ -137,15 +162,14 @@ async function saveExtractionLayerToLocalCache(input: SaveExtractionLayerInput):
     throw new Error('Add at least one field to the layer.');
   }
 
-  const existing = input.id ? await getLocalExtractionLayer(input.id) : null;
-
   if (existing) {
     await db.runAsync(
       `UPDATE extraction_layers
-       SET name = ?, updated_at = ?, spreadsheet_id = ?, spreadsheet_title = ?, sheet_title = ?
+       SET name = ?, created_at = ?, updated_at = ?, spreadsheet_id = ?, spreadsheet_title = ?, sheet_title = ?
        WHERE id = ?`,
       cleanName,
-      now,
+      createdAt,
+      updatedAt,
       cleanNullable(input.spreadsheetId),
       cleanNullable(input.spreadsheetTitle),
       cleanNullable(input.sheetTitle),
@@ -158,8 +182,8 @@ async function saveExtractionLayerToLocalCache(input: SaveExtractionLayerInput):
       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       layerId,
       cleanName,
-      now,
-      now,
+      createdAt,
+      updatedAt,
       cleanNullable(input.spreadsheetId),
       cleanNullable(input.spreadsheetTitle),
       cleanNullable(input.sheetTitle)
@@ -179,8 +203,8 @@ async function saveExtractionLayerToLocalCache(input: SaveExtractionLayerInput):
       field.title,
       field.description,
       index,
-      now,
-      now
+      createdAt,
+      updatedAt
     );
   }
 
@@ -244,6 +268,15 @@ async function hydrateLayer(row: LayerRow): Promise<ExtractionLayer> {
 function cleanNullable(value: string | null | undefined) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+function isServerExtractionLayerId(id: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+}
+
+function omitLayerId(layer: ExtractionLayer) {
+  const { id: _id, ...rest } = layer;
+  return rest;
 }
 
 function createId() {

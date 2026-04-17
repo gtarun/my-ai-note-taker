@@ -94,16 +94,17 @@ vi.mock('../db', () => ({
       }
 
       if (source.includes('UPDATE extraction_layers') && source.includes('SET name = ?')) {
-        const row = layerRows.find((layer) => layer.id === params[5]);
+        const row = layerRows.find((layer) => layer.id === params[6]);
         if (!row) {
           return;
         }
 
         row.name = String(params[0]);
-        row.updated_at = String(params[1]);
-        row.spreadsheet_id = params[2] ? String(params[2]) : null;
-        row.spreadsheet_title = params[3] ? String(params[3]) : null;
-        row.sheet_title = params[4] ? String(params[4]) : null;
+        row.created_at = String(params[1]);
+        row.updated_at = String(params[2]);
+        row.spreadsheet_id = params[3] ? String(params[3]) : null;
+        row.spreadsheet_title = params[4] ? String(params[4]) : null;
+        row.sheet_title = params[5] ? String(params[5]) : null;
         return;
       }
 
@@ -148,6 +149,7 @@ describe('extraction layers service', () => {
     const { listExtractionLayers, saveExtractionLayer } = await import('./extractionLayers');
 
     const saved = await saveExtractionLayer({
+      requestToken: 'request-token-1',
       name: '  Lead intake  ',
       spreadsheetId: 'sheet-123',
       spreadsheetTitle: 'mu-fathom - Lead intake',
@@ -189,6 +191,7 @@ describe('extraction layers service', () => {
 
     await expect(
       saveExtractionLayer({
+        requestToken: 'request-token-2',
         name: 'Lead intake',
         fields: [
           { id: 'email', title: 'Email', description: 'Primary email' },
@@ -202,6 +205,7 @@ describe('extraction layers service', () => {
     const { getExtractionLayer, saveExtractionLayer } = await import('./extractionLayers');
 
     const created = await saveExtractionLayer({
+      requestToken: 'request-token-3',
       name: 'Lead intake',
       fields: [{ id: 'email', title: 'Email', description: 'Primary email' }],
     });
@@ -223,6 +227,7 @@ describe('extraction layers service', () => {
     const { getExtractionLayer, saveExtractionLayer } = await import('./extractionLayers');
 
     const created = await saveExtractionLayer({
+      requestToken: 'request-token-4',
       name: 'Lead intake',
       spreadsheetId: 'sheet-123',
       spreadsheetTitle: 'Leads tracker',
@@ -294,6 +299,7 @@ describe('extraction layers service', () => {
     const { deleteExtractionLayer, listExtractionLayers, saveExtractionLayer } = await import('./extractionLayers');
 
     const created = await saveExtractionLayer({
+      requestToken: 'request-token-5',
       name: 'Lead intake',
       fields: [{ id: 'email', title: 'Email', description: 'Primary email' }],
     });
@@ -302,5 +308,204 @@ describe('extraction layers service', () => {
 
     await expect(listExtractionLayers()).resolves.toEqual([]);
     expect(fieldRows).toEqual([]);
+  });
+
+  test('promotes a locally saved layer to the cloud after sign in', async () => {
+    mockGetAuthSession.mockResolvedValue(null);
+
+    const { saveExtractionLayer } = await import('./extractionLayers');
+
+    const localSaved = await saveExtractionLayer({
+      requestToken: 'request-token-6',
+      name: 'Lead intake',
+      fields: [{ id: 'email', title: 'Email', description: 'Primary email' }],
+    });
+
+    mockGetAuthSession.mockResolvedValue({ accessToken: 'token', user: { id: 'user-1' } });
+    mockSaveCloudExtractionLayer.mockResolvedValue({
+      id: 'server-layer-9',
+      name: 'Lead intake',
+      spreadsheetId: null,
+      spreadsheetTitle: null,
+      sheetTitle: null,
+      createdAt: '2026-04-17T00:00:00.000Z',
+      updatedAt: '2026-04-17T01:00:00.000Z',
+      fields: [{ id: 'email', title: 'Email', description: 'Primary email' }],
+    });
+
+    const promoted = await saveExtractionLayer({
+      id: localSaved.id,
+      name: 'Lead intake',
+      fields: [{ id: 'email', title: 'Email', description: 'Primary email' }],
+    });
+
+    expect(mockSaveCloudExtractionLayer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestToken: localSaved.id,
+      })
+    );
+    expect(promoted.id).toBe('server-layer-9');
+    expect(layerRows.map((row) => row.id)).toEqual(['server-layer-9']);
+  });
+
+  test('replaces a signed-in temp layer with the server layer id after create and retries', async () => {
+    mockGetAuthSession.mockResolvedValue({ accessToken: 'token', user: { id: 'user-1' } });
+    const serverLayerIds = new Map<string, string>();
+    mockSaveCloudExtractionLayer.mockImplementation(async (layer) => {
+      const requestToken = 'requestToken' in layer ? layer.requestToken : undefined;
+      const existingId = requestToken ? serverLayerIds.get(requestToken) : undefined;
+      const serverId = existingId ?? `server-layer-${serverLayerIds.size + 1}`;
+
+      if (requestToken && !existingId) {
+        serverLayerIds.set(requestToken, serverId);
+      }
+
+      return {
+        ...layer,
+        id: serverId,
+        createdAt: '2026-04-17T00:00:00.000Z',
+        updatedAt: '2026-04-17T00:00:00.000Z',
+      };
+    });
+
+    const { saveExtractionLayer } = await import('./extractionLayers');
+
+    const input = {
+      requestToken: 'request-token-1',
+      name: 'Lead intake',
+      fields: [{ id: 'email', title: 'Email', description: 'Primary email' }],
+    };
+
+    const saved = await saveExtractionLayer(input);
+    const retried = await saveExtractionLayer(input);
+
+    expect(saved.id).toBe('server-layer-1');
+    expect(retried.id).toBe('server-layer-1');
+    expect(mockSaveCloudExtractionLayer).toHaveBeenCalledTimes(2);
+    expect(mockSaveCloudExtractionLayer.mock.calls[0][0]).not.toHaveProperty('id');
+    expect(mockSaveCloudExtractionLayer.mock.calls[1][0]).not.toHaveProperty('id');
+    expect(mockSaveCloudExtractionLayer.mock.calls[0][0]).toMatchObject({
+      requestToken: 'request-token-1',
+    });
+    expect(mockSaveCloudExtractionLayer.mock.calls[1][0]).toMatchObject({
+      requestToken: 'request-token-1',
+    });
+    expect(layerRows.map((row) => row.id)).toEqual(['server-layer-1']);
+    expect(fieldRows.map((row) => row.layer_id)).toEqual(['server-layer-1']);
+    expect(layerRows.some((row) => row.id !== 'server-layer-1')).toBe(false);
+  });
+
+  test('creates two identical new layers as distinct records when their request tokens differ', async () => {
+    mockGetAuthSession.mockResolvedValue({ accessToken: 'token', user: { id: 'user-1' } });
+    const serverLayerIds = new Map<string, string>();
+    mockSaveCloudExtractionLayer.mockImplementation(async (layer) => {
+      const requestToken = 'requestToken' in layer ? layer.requestToken : undefined;
+      const existingId = requestToken ? serverLayerIds.get(requestToken) : undefined;
+      const serverId = existingId ?? `server-layer-${serverLayerIds.size + 1}`;
+
+      if (requestToken && !existingId) {
+        serverLayerIds.set(requestToken, serverId);
+      }
+
+      return {
+        ...layer,
+        id: serverId,
+        createdAt: '2026-04-17T00:00:00.000Z',
+        updatedAt: '2026-04-17T00:00:00.000Z',
+      };
+    });
+
+    const { saveExtractionLayer } = await import('./extractionLayers');
+
+    const first = await saveExtractionLayer({
+      requestToken: 'request-token-1',
+      name: 'Lead intake',
+      fields: [{ id: 'email', title: 'Email', description: 'Primary email' }],
+    });
+    const second = await saveExtractionLayer({
+      requestToken: 'request-token-2',
+      name: 'Lead intake',
+      fields: [{ id: 'email', title: 'Email', description: 'Primary email' }],
+    });
+
+    expect(first.id).not.toBe(second.id);
+    expect(layerRows.map((row) => row.id).sort()).toEqual(['server-layer-1', 'server-layer-2']);
+  });
+
+  test('preserves server timestamps when updating a synced layer', async () => {
+    mockGetAuthSession.mockResolvedValue({ accessToken: 'token', user: { id: 'user-1' } });
+    mockSaveCloudExtractionLayer
+      .mockResolvedValueOnce({
+        id: 'server-layer-1',
+        name: 'Lead intake',
+        spreadsheetId: null,
+        spreadsheetTitle: null,
+        sheetTitle: null,
+        createdAt: '2026-04-17T00:00:00.000Z',
+        updatedAt: '2026-04-17T00:00:00.000Z',
+        fields: [{ id: 'email', title: 'Email', description: 'Primary email' }],
+      })
+      .mockResolvedValueOnce({
+        id: 'server-layer-1',
+        name: 'Lead qualification',
+        spreadsheetId: null,
+        spreadsheetTitle: null,
+        sheetTitle: null,
+        createdAt: '2026-04-17T00:00:00.000Z',
+        updatedAt: '2026-04-17T01:00:00.000Z',
+        fields: [{ id: 'qualification', title: 'Qualification', description: 'Current qualification' }],
+      });
+
+    const { saveExtractionLayer } = await import('./extractionLayers');
+
+    const created = await saveExtractionLayer({
+      requestToken: 'request-token-6',
+      name: 'Lead intake',
+      fields: [{ id: 'email', title: 'Email', description: 'Primary email' }],
+    });
+
+    const updated = await saveExtractionLayer({
+      id: created.id,
+      name: 'Lead qualification',
+      fields: [{ id: 'qualification', title: 'Qualification', description: 'Current qualification' }],
+    });
+
+    expect(updated).toMatchObject({
+      id: 'server-layer-1',
+      createdAt: '2026-04-17T00:00:00.000Z',
+      updatedAt: '2026-04-17T01:00:00.000Z',
+    });
+    expect(layerRows).toEqual([
+      expect.objectContaining({
+        id: 'server-layer-1',
+        created_at: '2026-04-17T00:00:00.000Z',
+        updated_at: '2026-04-17T01:00:00.000Z',
+      }),
+    ]);
+  });
+
+  test('preserves the original createdAt when updating locally without explicit timestamps', async () => {
+    const { saveExtractionLayer } = await import('./extractionLayers');
+
+    const created = await saveExtractionLayer({
+      requestToken: 'request-token-7',
+      name: 'Lead intake',
+      fields: [{ id: 'email', title: 'Email', description: 'Primary email' }],
+    });
+
+    const originalCreatedAt = created.createdAt;
+
+    await saveExtractionLayer({
+      id: created.id,
+      name: 'Lead qualification',
+      fields: [{ id: 'qualification', title: 'Qualification', description: 'Current qualification' }],
+    });
+
+    expect(layerRows).toEqual([
+      expect.objectContaining({
+        id: created.id,
+        created_at: originalCreatedAt,
+      }),
+    ]);
   });
 });

@@ -75,7 +75,12 @@ export async function listCloudExtractionLayers() {
   return response.layers;
 }
 
-export async function saveCloudExtractionLayer(layer: ExtractionLayer) {
+type SaveCloudExtractionLayerInput = Omit<ExtractionLayer, 'id'> & {
+  id?: string;
+  requestToken?: string;
+};
+
+export async function saveCloudExtractionLayer(layer: SaveCloudExtractionLayerInput) {
   const response = await invokeAuthenticatedFunction<{ layer: ExtractionLayer }>(
     'user-extraction-layers-sync',
     {

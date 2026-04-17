@@ -28,6 +28,29 @@ describe('layer draft helpers', () => {
     });
   });
 
+  test('creates a new draft with a stable request token for saves', () => {
+    const draft = createEmptyDraft();
+
+    expect(draft.requestToken).toBeTruthy();
+    expect(toSaveLayerInput(draft)).toMatchObject({
+      requestToken: draft.requestToken,
+    });
+  });
+
+  test('keeps the request token when applying sheet selection', () => {
+    const draft = createEmptyDraft();
+
+    expect(
+      applySheetSelection(draft, {
+        spreadsheetId: 'sheet-123',
+        spreadsheetTitle: 'Leads tracker',
+        sheetTitle: 'Inbound',
+        headers: ['Company', 'Stage'],
+        mode: 'keep',
+      }).requestToken
+    ).toBe(draft.requestToken);
+  });
+
   test('replaces fields from imported sheet headers', () => {
     expect(applyImportedHeaders(['Full Name', 'Deal Stage'])).toEqual([
       { id: 'full_name', title: 'Full Name', description: '' },

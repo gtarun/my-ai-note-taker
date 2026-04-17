@@ -15,7 +15,7 @@ type ExtractionLayerFieldPayload = {
 };
 
 type ExtractionLayerPayload = {
-  id: string;
+  id?: string;
   name: string;
   spreadsheetId: string | null;
   spreadsheetTitle: string | null;
@@ -23,6 +23,11 @@ type ExtractionLayerPayload = {
   createdAt: string;
   updatedAt: string;
   fields: ExtractionLayerFieldPayload[];
+  requestToken?: string;
+};
+
+type SavedExtractionLayerPayload = Omit<ExtractionLayerPayload, 'id'> & {
+  id: string;
 };
 
 Deno.serve(async (request) => {
@@ -64,9 +69,9 @@ Deno.serve(async (request) => {
         return jsonResponse({ error: 'layer is required.' }, 400);
       }
 
-      await upsertUserLayer(adminClient, user.id, body.layer);
+      const layer = await upsertUserLayer(adminClient, user.id, body.layer);
       return jsonResponse({
-        layer: await readUserLayer(adminClient, user.id, body.layer.id),
+        layer,
       });
     }
 
@@ -102,52 +107,44 @@ async function upsertUserLayer(
   adminClient: ReturnType<typeof createAdminClient>,
   userId: string,
   layer: ExtractionLayerPayload
-) {
-  const { error: layerError } = await adminClient.from('user_extraction_layers').upsert(
-    {
-      id: layer.id,
-      user_id: userId,
-      name: layer.name,
-      spreadsheet_id: layer.spreadsheetId,
-      spreadsheet_title: layer.spreadsheetTitle,
-      sheet_title: layer.sheetTitle,
-      created_at: layer.createdAt,
-      updated_at: layer.updatedAt,
-    },
-    { onConflict: 'id' }
-  );
+): Promise<SavedExtractionLayerPayload> {
+  const layerId = layer.id?.trim();
 
-  if (layerError) {
-    throw new Error(layerError.message);
+  if (layerId) {
+    const ownership = await readLayerOwnership(adminClient, layerId);
+
+    if (ownership && ownership.user_id !== userId) {
+      throw new Error('Layer is owned by another user.');
+    }
+
+    if (!ownership) {
+      throw new Error('Layer not found.');
+    }
+
+    await updateUserLayer(adminClient, userId, layerId, layer);
+    return readUserLayer(adminClient, userId, layerId);
   }
 
-  const { error: deleteFieldsError } = await adminClient
-    .from('user_extraction_layer_fields')
-    .delete()
-    .eq('layer_id', layer.id);
+  const requestToken = layer.requestToken?.trim();
 
-  if (deleteFieldsError) {
-    throw new Error(deleteFieldsError.message);
+  if (!requestToken) {
+    throw new Error('requestToken is required for layer creation.');
   }
 
-  if (!layer.fields.length) {
-    return;
+  const createdLayerId = await reserveLayerId(adminClient, userId, requestToken);
+  const existing = await readLayerOwnership(adminClient, createdLayerId);
+
+  if (existing && existing.user_id !== userId) {
+    throw new Error('Layer is owned by another user.');
   }
 
-  const { error: insertFieldsError } = await adminClient.from('user_extraction_layer_fields').insert(
-    layer.fields.map((field, index) => ({
-      layer_id: layer.id,
-      field_id: field.id,
-      title: field.title,
-      description: field.description,
-      position: index,
-      updated_at: layer.updatedAt,
-    }))
-  );
-
-  if (insertFieldsError) {
-    throw new Error(insertFieldsError.message);
+  if (existing) {
+    await updateUserLayer(adminClient, userId, createdLayerId, layer);
+  } else {
+    await insertUserLayer(adminClient, userId, createdLayerId, layer);
   }
+
+  return readUserLayer(adminClient, userId, createdLayerId);
 }
 
 async function readUserLayers(adminClient: ReturnType<typeof createAdminClient>, userId: string) {
@@ -194,6 +191,126 @@ async function readUserLayer(adminClient: ReturnType<typeof createAdminClient>, 
   }
 
   return layer;
+}
+
+async function readLayerOwnership(adminClient: ReturnType<typeof createAdminClient>, layerId: string) {
+  const { data, error } = await adminClient
+    .from('user_extraction_layers')
+    .select('id, user_id')
+    .eq('id', layerId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data as { id: string; user_id: string } | null;
+}
+
+async function reserveLayerId(adminClient: ReturnType<typeof createAdminClient>, userId: string, requestToken: string) {
+  const { data, error } = await adminClient
+    .from('user_extraction_layer_save_requests')
+    .upsert(
+      {
+        user_id: userId,
+        request_token: requestToken,
+      },
+      { onConflict: 'user_id,request_token' }
+    )
+    .select('layer_id')
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data.layer_id as string;
+}
+
+async function insertUserLayer(
+  adminClient: ReturnType<typeof createAdminClient>,
+  userId: string,
+  layerId: string,
+  layer: ExtractionLayerPayload
+) {
+  const now = new Date().toISOString();
+  const { error: layerError } = await adminClient.from('user_extraction_layers').insert({
+    id: layerId,
+    user_id: userId,
+    name: layer.name,
+    spreadsheet_id: layer.spreadsheetId,
+    spreadsheet_title: layer.spreadsheetTitle,
+    sheet_title: layer.sheetTitle,
+    created_at: now,
+    updated_at: now,
+  });
+
+  if (layerError && layerError.code !== '23505') {
+    throw new Error(layerError.message);
+  }
+
+  await replaceLayerFields(adminClient, layerId, layer.fields, now);
+}
+
+async function updateUserLayer(
+  adminClient: ReturnType<typeof createAdminClient>,
+  userId: string,
+  layerId: string,
+  layer: ExtractionLayerPayload
+) {
+  const now = new Date().toISOString();
+  const { error: layerError } = await adminClient
+    .from('user_extraction_layers')
+    .update({
+      name: layer.name,
+      spreadsheet_id: layer.spreadsheetId,
+      spreadsheet_title: layer.spreadsheetTitle,
+      sheet_title: layer.sheetTitle,
+      updated_at: now,
+    })
+    .eq('id', layerId)
+    .eq('user_id', userId);
+
+  if (layerError) {
+    throw new Error(layerError.message);
+  }
+
+  await replaceLayerFields(adminClient, layerId, layer.fields, now);
+}
+
+async function replaceLayerFields(
+  adminClient: ReturnType<typeof createAdminClient>,
+  layerId: string,
+  fields: ExtractionLayerFieldPayload[],
+  updatedAt: string
+) {
+  const { error: deleteFieldsError } = await adminClient
+    .from('user_extraction_layer_fields')
+    .delete()
+    .eq('layer_id', layerId);
+
+  if (deleteFieldsError) {
+    throw new Error(deleteFieldsError.message);
+  }
+
+  if (!fields.length) {
+    return;
+  }
+
+  const { error: insertFieldsError } = await adminClient.from('user_extraction_layer_fields').insert(
+    fields.map((field, index) => ({
+      layer_id: layerId,
+      field_id: field.id,
+      title: field.title,
+      description: field.description,
+      position: index,
+      updated_at: updatedAt,
+    }))
+  );
+
+  if (insertFieldsError) {
+    throw new Error(insertFieldsError.message);
+  }
 }
 
 function readEnv() {

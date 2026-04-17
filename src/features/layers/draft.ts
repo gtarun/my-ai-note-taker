@@ -9,6 +9,7 @@ export type EditableField = {
 
 export type LayerDraft = {
   id?: string;
+  requestToken?: string;
   name: string;
   spreadsheetId: string | null;
   spreadsheetTitle: string | null;
@@ -27,6 +28,7 @@ export function createEditableField(input?: Partial<ExtractionLayerField>): Edit
 
 export function createEmptyDraft(): LayerDraft {
   return {
+    requestToken: createRequestToken(),
     name: '',
     spreadsheetId: null,
     spreadsheetTitle: null,
@@ -65,6 +67,7 @@ export function applyImportedHeaders(headers: string[]): ExtractionLayerField[] 
 export function toSaveLayerInput(draft: LayerDraft) {
   return {
     id: draft.id,
+    requestToken: draft.requestToken,
     name: draft.name,
     spreadsheetId: draft.spreadsheetId,
     spreadsheetTitle: draft.spreadsheetTitle,
@@ -106,4 +109,12 @@ function normalizeHeaderId(header: string, index: number) {
     .replace(/^_+|_+$/g, '');
 
   return normalized || `field_${index + 1}`;
+}
+
+function createRequestToken() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
