@@ -10,6 +10,11 @@ describe('account presentation', () => {
     expect(getProfileInitials({ name: '', email: '' })).toBe('');
   });
 
+  test('returns an empty string when no name or email exists', () => {
+    expect(getProfileInitials({ name: null, email: null })).toBe('');
+    expect(getProfileInitials({ name: '   ', email: '' })).toBe('');
+  });
+
   test('formats build versions with an optional build number', () => {
     expect(formatBuildVersion({ appVersion: '1.2.3', buildNumber: '45' })).toBe('v1.2.3 (45)');
     expect(formatBuildVersion({ appVersion: '1.2.3' })).toBe('v1.2.3');
