@@ -1,0 +1,17 @@
+import { describe, expect, test } from 'vitest';
+
+import { formatBuildVersion, getProfileInitials } from './presentation';
+
+describe('account presentation', () => {
+  test('builds profile initials from name before email', () => {
+    expect(getProfileInitials({ name: 'Mary-Jane Watson', email: 'mary@example.com' })).toBe('MJ');
+    expect(getProfileInitials({ name: 'Single', email: 'single@example.com' })).toBe('SI');
+    expect(getProfileInitials({ name: null, email: 'tarun.k@example.com' })).toBe('TK');
+    expect(getProfileInitials({ name: '', email: '' })).toBe('');
+  });
+
+  test('formats build versions with an optional build number', () => {
+    expect(formatBuildVersion({ appVersion: '1.2.3', buildNumber: '45' })).toBe('v1.2.3 (45)');
+    expect(formatBuildVersion({ appVersion: '1.2.3' })).toBe('v1.2.3');
+  });
+});

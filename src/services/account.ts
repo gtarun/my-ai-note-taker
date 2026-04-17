@@ -534,6 +534,7 @@ function mapSupabaseSession(accessToken: string, user: User): AuthSession {
       id: user.id,
       email: user.email ?? '',
       name: readUserName(user),
+      avatarUrl: readUserAvatarUrl(user),
       driveConnection: readDriveConnection(user),
     },
   };
@@ -543,6 +544,16 @@ function readUserName(user: User) {
   const metadata = user.user_metadata as Record<string, unknown> | undefined;
   const name = metadata?.name;
   return typeof name === 'string' && name.trim() ? name.trim() : null;
+}
+
+function readUserAvatarUrl(user: User) {
+  const metadata = user.user_metadata as Record<string, unknown> | undefined;
+
+  return (
+    readTrimmedMetadataString(metadata, 'avatar_url') ??
+    readTrimmedMetadataString(metadata, 'picture') ??
+    readTrimmedMetadataString(metadata, 'photo_url')
+  );
 }
 
 function readDriveConnection(user: User): DriveConnection {
@@ -570,4 +581,9 @@ function readDriveConnection(user: User): DriveConnection {
     saveFolderName: typeof connection.saveFolderName === 'string' ? connection.saveFolderName : null,
     needsReconnect: connection.needsReconnect === true,
   };
+}
+
+function readTrimmedMetadataString(metadata: Record<string, unknown> | undefined, key: string) {
+  const value = metadata?.[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
