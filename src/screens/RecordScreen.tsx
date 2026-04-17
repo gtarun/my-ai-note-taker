@@ -1,13 +1,6 @@
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import {
-  RecordingPresets,
-  requestRecordingPermissionsAsync,
-  setAudioModeAsync,
-  useAudioRecorder,
-  useAudioRecorderState,
-} from 'expo-audio';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -22,56 +15,42 @@ import {
 import { FadeInView } from '../components/FadeInView';
 import { ScreenBackground } from '../components/ScreenBackground';
 import { getMeetingDetailEntryMethod } from '../features/meetings/navigation';
+import {
+  getRecordingNoticeBody,
+  getRecordingStatusLabel,
+  getRecordingSupportLabel,
+} from '../features/recording/presentation';
 import { getMeetingDetailRoute } from '../navigation/routes';
-import { uploadMeetingRecordingIfConfigured } from '../services/googleDrive';
-import { createMeetingFromRecording } from '../services/meetings';
+import { recordingSession } from '../services/recordingSession';
 import { formatDuration } from '../utils/format';
 import { elevation, palette } from '../theme';
 
 export default function RecordScreen() {
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const recorderState = useAudioRecorderState(recorder);
-  const [title, setTitle] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
+  const [sessionSnapshot, setSessionSnapshot] = useState(() => recordingSession.getSnapshot());
+
+  useEffect(() => {
+    setSessionSnapshot(recordingSession.getSnapshot());
+    return recordingSession.subscribe((snapshot) => {
+      setSessionSnapshot(snapshot);
+    });
+  }, []);
+
+  const isRecording = sessionSnapshot.phase === 'recording';
+  const isSaving = sessionSnapshot.phase === 'saving';
 
   const handleRecordToggle = async () => {
-    if (recorderState.isRecording) {
+    if (isRecording) {
       try {
-        setIsSaving(true);
-        await recorder.stop();
-        await setAudioModeAsync({
-          playsInSilentMode: true,
-          interruptionMode: 'duckOthers',
-          allowsRecording: false,
-          shouldPlayInBackground: false,
-          shouldRouteThroughEarpiece: false,
-        });
-        const uri = recorder.uri ?? recorderState.url;
+        const result = await recordingSession.stopAndSave();
 
-        if (!uri) {
-          throw new Error('Recording finished but no file was returned.');
-        }
-
-        const meetingTitle = title.trim() || 'Untitled recording';
-        const { id: meetingId, audioUri } = await createMeetingFromRecording({
-          uri,
-          title: meetingTitle,
-          durationMs: recorderState.durationMillis,
-        });
-
-        const driveOutcome = await uploadMeetingRecordingIfConfigured({
-          title: meetingTitle,
-          localAudioUri: audioUri,
-        });
-
-        if (driveOutcome === 'failed') {
+        if (result.driveOutcome === 'failed') {
           Alert.alert(
             'Google Drive',
             'The recording is saved on this device, but uploading to Google Drive failed. Check your connection and folder settings on the Account screen.'
           );
         }
 
-        const detailRoute = getMeetingDetailRoute(meetingId);
+        const detailRoute = getMeetingDetailRoute(result.meetingId);
 
         if (getMeetingDetailEntryMethod() === 'push') {
           router.push(detailRoute);
@@ -80,30 +59,13 @@ export default function RecordScreen() {
         }
       } catch (error) {
         Alert.alert('Save failed', error instanceof Error ? error.message : 'Unable to save recording.');
-      } finally {
-        setIsSaving(false);
       }
 
       return;
     }
 
-    const permission = await requestRecordingPermissionsAsync();
-
-    if (!permission.granted) {
-      Alert.alert('Microphone needed', 'Enable microphone access to record a meeting.');
-      return;
-    }
-
     try {
-      await setAudioModeAsync({
-        playsInSilentMode: true,
-        interruptionMode: 'duckOthers',
-        allowsRecording: true,
-        shouldPlayInBackground: false,
-        shouldRouteThroughEarpiece: false,
-      });
-      await recorder.prepareToRecordAsync();
-      recorder.record();
+      await recordingSession.startRecording();
     } catch (error) {
       Alert.alert('Recording failed', error instanceof Error ? error.message : 'Unable to start recording.');
     }
@@ -118,9 +80,7 @@ export default function RecordScreen() {
             <Feather name="shield" size={16} color={palette.ink} />
             <Text style={styles.noticeTitle}>Week-1 safe mode</Text>
           </View>
-          <Text style={styles.noticeBody}>
-            Keep the app open while recording. This MVP is built for manual foreground recording, not stealth capture.
-          </Text>
+          <Text style={styles.noticeBody}>{getRecordingNoticeBody()}</Text>
         </FadeInView>
 
         <FadeInView style={styles.card} delay={70}>
@@ -129,37 +89,35 @@ export default function RecordScreen() {
             style={styles.input}
             placeholder="Founder sync, user interview, standup…"
             placeholderTextColor={palette.mutedInk}
-            value={title}
-            onChangeText={setTitle}
+            value={sessionSnapshot.titleDraft}
+            onChangeText={(nextTitle) => recordingSession.setTitleDraft(nextTitle)}
           />
 
           <View style={styles.timerWrap}>
             <View style={styles.liveChip}>
-              {recorderState.isRecording ? (
+              {isRecording ? (
                 <MaterialCommunityIcons name="record-circle" size={14} color={palette.danger} />
               ) : (
                 <Feather name="mic" size={13} color={palette.lineStrong} />
               )}
-              <Text style={styles.liveChipText}>
-                {recorderState.isRecording ? 'Recording live' : 'Ready to record'}
-              </Text>
+              <Text style={styles.liveChipText}>{getRecordingStatusLabel(isRecording)}</Text>
             </View>
-            <Text style={styles.timerValue}>{formatDuration(recorderState.durationMillis)}</Text>
-            <Text style={styles.timerLabel}>Phone mic, foreground only</Text>
+            <Text style={styles.timerValue}>{formatDuration(sessionSnapshot.durationMillis)}</Text>
+            <Text style={styles.timerLabel}>{getRecordingSupportLabel()}</Text>
           </View>
 
           <Pressable
-            style={[styles.recordButton, recorderState.isRecording && styles.recordButtonActive]}
+            style={[styles.recordButton, isRecording && styles.recordButtonActive]}
             onPress={handleRecordToggle}
             disabled={isSaving}
           >
             <MaterialCommunityIcons
-              name={recorderState.isRecording ? 'stop-circle-outline' : 'microphone-outline'}
+              name={isRecording ? 'stop-circle-outline' : 'microphone-outline'}
               size={20}
               color={palette.paper}
             />
             <Text style={styles.recordButtonText}>
-              {isSaving ? 'Saving…' : recorderState.isRecording ? 'Stop and save' : 'Start recording'}
+              {isSaving ? 'Saving…' : isRecording ? 'Stop and save' : 'Start recording'}
             </Text>
           </Pressable>
         </FadeInView>
