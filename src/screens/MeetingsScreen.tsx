@@ -15,17 +15,17 @@ import {
 import { FadeInView } from '../components/FadeInView';
 import { ScreenBackground } from '../components/ScreenBackground';
 import {
-  EditorialHero,
   PillButton,
   SectionHeading,
   StatusChip,
   SurfaceCard,
 } from '../components/ui';
 import {
+  getDashboardCloudStatusCopy,
   getDashboardEmptyStateCopy,
   getMeetingStatusMeta,
 } from '../features/dashboard/presentation';
-import { RECORD_TAB_ROUTE, SETTINGS_TAB_ROUTE, getMeetingDetailRoute } from '../navigation/routes';
+import { RECORD_TAB_ROUTE, getMeetingDetailRoute } from '../navigation/routes';
 import { getAuthSession } from '../services/account';
 import { createMeetingFromImport, listMeetings } from '../services/meetings';
 import type { AuthSession, MeetingRow } from '../types';
@@ -81,6 +81,7 @@ export default function HomeScreen() {
   };
 
   const importButtonLabel = isImporting ? 'Importing…' : 'Import audio';
+  const cloudStatus = getDashboardCloudStatusCopy(session);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -93,16 +94,27 @@ export default function HomeScreen() {
           ListHeaderComponent={
             <View style={styles.headerContent}>
               <FadeInView>
-                <EditorialHero
-                  eyebrow="Local-first meeting companion"
-                  title="Record it. Upload it. Process it later."
-                  body="No bots. No calendar magic. Just a clean path from audio to transcript and action items."
-                  pillLabel={`${meetings.length} saved`}
-                  chips={['Local-first', 'Manual capture', 'Post-call AI']}
-                />
+                <SurfaceCard muted style={styles.heroCard}>
+                  <View style={styles.heroTopRow}>
+                    <View style={styles.heroCopy}>
+                      <Text style={styles.heroTitle}>Meetings</Text>
+                      <Text style={styles.heroSubtitle}>
+                        Capture meetings and process them when you are ready.
+                      </Text>
+                    </View>
+                    <View pointerEvents="none" style={styles.heroIllustration}>
+                      <View style={styles.heroNodePrimary} />
+                      <View style={styles.heroNodeSecondary} />
+                      <View style={styles.heroLineHorizontal} />
+                      <View style={styles.heroLineVertical} />
+                      <View style={styles.heroWaveA} />
+                      <View style={styles.heroWaveB} />
+                    </View>
+                  </View>
+                </SurfaceCard>
               </FadeInView>
 
-              <FadeInView style={styles.primaryActions} delay={60}>
+              <FadeInView style={styles.primaryActions} delay={40}>
                 <PillButton
                   label="New recording"
                   icon={
@@ -123,28 +135,16 @@ export default function HomeScreen() {
                 />
               </FadeInView>
 
-              <FadeInView delay={90}>
-                <SurfaceCard muted style={styles.accountCard}>
-                  <Text style={styles.accountEyebrow}>Cloud status</Text>
-                  <Text style={styles.accountTitle}>
-                    {session ? `Signed in as ${session.user.email}` : 'Cloud account not connected'}
-                  </Text>
-                  <Text style={styles.accountBody}>
-                    {session
-                      ? session.user.driveConnection.status === 'connected'
-                        ? 'Google Drive is linked for optional sync and backup.'
-                        : 'Finish linking Google Drive when you are ready for optional cloud storage.'
-                      : 'This app works locally first. Connect an account only if you want cloud storage later.'}
-                  </Text>
-                  <View style={styles.accountActions}>
+              <FadeInView delay={70}>
+                <SurfaceCard muted style={styles.cloudCard}>
+                  <View style={styles.cloudRow}>
+                    <View style={styles.cloudCopy}>
+                      <Text style={styles.cloudEyebrow}>Cloud</Text>
+                      <Text style={styles.cloudTitle}>{cloudStatus.title}</Text>
+                    </View>
                     <PillButton
-                      label={session ? 'Manage account' : 'Set up account'}
+                      label={cloudStatus.actionLabel}
                       onPress={() => router.push('/account')}
-                      variant="ghost"
-                    />
-                    <PillButton
-                      label="Settings"
-                      onPress={() => router.push(SETTINGS_TAB_ROUTE)}
                       variant="ghost"
                     />
                   </View>
@@ -161,28 +161,26 @@ export default function HomeScreen() {
             const statusMeta = getMeetingStatusMeta(item.status);
 
             return (
-              <Pressable onPress={() => router.push(getMeetingDetailRoute(item.id))}>
+              <Pressable
+                onPress={() => router.push(getMeetingDetailRoute(item.id))}
+                style={({ pressed }) => (pressed ? styles.meetingRowPressed : null)}
+              >
                 <SurfaceCard style={styles.meetingCard}>
                   <View style={styles.meetingHeader}>
-                    <Text style={styles.meetingTitle}>{item.title}</Text>
+                    <Text numberOfLines={1} style={styles.meetingTitle}>
+                      {item.title}
+                    </Text>
                     <StatusChip label={statusMeta.label} tone={statusMeta.tone} />
                   </View>
                   <Text style={styles.meetingMeta}>
                     {formatTimestamp(item.createdAt)}
                     {item.durationMs ? ` • ${formatDuration(item.durationMs)}` : ''}
                   </Text>
-                  <Text style={styles.meetingSnippet} numberOfLines={2}>
+                  <Text style={styles.meetingSnippet} numberOfLines={1}>
                     {item.summaryShort ||
-                      item.transcriptText?.slice(0, 120) ||
+                      item.transcriptText?.slice(0, 88) ||
                       'Open this meeting to process it.'}
                   </Text>
-                  <View style={styles.meetingAction}>
-                    <PillButton
-                      label="Open meeting"
-                      onPress={() => router.push(getMeetingDetailRoute(item.id))}
-                      variant="ghost"
-                    />
-                  </View>
                 </SurfaceCard>
               </Pressable>
             );
@@ -219,46 +217,138 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
   },
   listContent: {
-    paddingBottom: 32,
-    gap: 14,
+    paddingBottom: 28,
+    gap: 12,
   },
   headerContent: {
+    gap: 12,
+    paddingBottom: 6,
+  },
+  heroCard: {
+    gap: 12,
+    paddingVertical: 16,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 16,
-    paddingBottom: 8,
+  },
+  heroCopy: {
+    flex: 1,
+    gap: 6,
+  },
+  heroTitle: {
+    color: palette.ink,
+    fontFamily: typography.display.fontFamily,
+    fontSize: 26,
+  },
+  heroSubtitle: {
+    color: palette.mutedInk,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 14,
+    lineHeight: 20,
+    maxWidth: 260,
+  },
+  heroIllustration: {
+    width: 92,
+    height: 72,
+    borderRadius: 20,
+    backgroundColor: palette.paper,
+    borderWidth: 1,
+    borderColor: palette.lineSoft,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  heroNodePrimary: {
+    position: 'absolute',
+    top: 16,
+    left: 14,
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: palette.accent,
+  },
+  heroNodeSecondary: {
+    position: 'absolute',
+    right: 16,
+    bottom: 14,
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: palette.accentStrong,
+  },
+  heroLineHorizontal: {
+    position: 'absolute',
+    top: 20,
+    left: 24,
+    right: 18,
+    height: 1,
+    backgroundColor: palette.line,
+  },
+  heroLineVertical: {
+    position: 'absolute',
+    top: 20,
+    bottom: 18,
+    right: 20,
+    width: 1,
+    backgroundColor: palette.lineSoft,
+  },
+  heroWaveA: {
+    position: 'absolute',
+    left: 14,
+    right: 28,
+    bottom: 24,
+    height: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: palette.accentSoft,
+  },
+  heroWaveB: {
+    position: 'absolute',
+    left: 26,
+    right: 14,
+    bottom: 14,
+    height: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: palette.accent,
   },
   primaryActions: {
     flexDirection: 'row',
     gap: 10,
   },
-  accountCard: {
-    gap: 10,
+  cloudCard: {
+    paddingVertical: 14,
   },
-  accountEyebrow: {
+  cloudRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  cloudCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  cloudEyebrow: {
     color: palette.accent,
     fontFamily: typography.label.fontFamily,
-    fontSize: 12,
+    fontSize: 11,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
-  accountTitle: {
+  cloudTitle: {
     color: palette.ink,
     fontFamily: typography.heading.fontFamily,
-    fontSize: 18,
-  },
-  accountBody: {
-    color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
-    fontSize: 14,
-    lineHeight: 21,
-  },
-  accountActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-    marginLeft: -8,
+    fontSize: 15,
   },
   meetingCard: {
-    gap: 10,
+    gap: 8,
+    paddingVertical: 14,
+  },
+  meetingRowPressed: {
+    opacity: 0.82,
   },
   meetingHeader: {
     flexDirection: 'row',
@@ -270,27 +360,23 @@ const styles = StyleSheet.create({
     flex: 1,
     color: palette.ink,
     fontFamily: typography.heading.fontFamily,
-    fontSize: 18,
+    fontSize: 16,
   },
   meetingMeta: {
     color: palette.mutedInk,
     fontFamily: typography.body.fontFamily,
-    fontSize: 13,
+    fontSize: 12,
   },
   meetingSnippet: {
     color: palette.ink,
     fontFamily: typography.body.fontFamily,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  meetingAction: {
-    alignItems: 'flex-start',
-    marginLeft: -8,
+    fontSize: 13,
+    lineHeight: 18,
   },
   emptyState: {
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 28,
+    gap: 8,
+    paddingVertical: 24,
   },
   emptyTitle: {
     color: palette.ink,
@@ -300,10 +386,10 @@ const styles = StyleSheet.create({
   emptyBody: {
     color: palette.mutedInk,
     fontFamily: typography.body.fontFamily,
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 20,
     textAlign: 'center',
-    maxWidth: 320,
+    maxWidth: 300,
   },
   emptyActions: {
     flexDirection: 'row',

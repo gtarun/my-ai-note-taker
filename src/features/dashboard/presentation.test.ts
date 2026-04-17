@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'vitest';
 
-import { getDashboardEmptyStateCopy, getMeetingStatusMeta } from './presentation';
+import {
+  getDashboardCloudStatusCopy,
+  getDashboardEmptyStateCopy,
+  getMeetingStatusMeta,
+} from './presentation';
 
 describe('dashboard presentation', () => {
   test('maps meeting status to readable labels and tones', () => {
@@ -31,7 +35,27 @@ describe('dashboard presentation', () => {
   test('returns concise empty-state copy', () => {
     expect(getDashboardEmptyStateCopy()).toEqual({
       title: 'No meetings yet',
-      body: 'Start with a recording or import an existing audio file to process it later.',
+      body: 'Start a recording or import audio to begin.',
+    });
+  });
+
+  test('returns compact signed-out cloud copy', () => {
+    expect(getDashboardCloudStatusCopy(null)).toEqual({
+      title: 'Cloud not connected',
+      actionLabel: 'Set up account',
+    });
+  });
+
+  test('returns compact signed-in cloud copy', () => {
+    expect(
+      getDashboardCloudStatusCopy({
+        user: {
+          driveConnection: { status: 'connected' },
+        },
+      } as never)
+    ).toEqual({
+      title: 'Cloud connected',
+      actionLabel: 'Open profile',
     });
   });
 });

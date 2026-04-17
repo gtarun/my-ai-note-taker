@@ -1,5 +1,5 @@
 import type { StatusChipTone } from '../../components/ui';
-import type { MeetingRow } from '../../types';
+import type { AuthSession, MeetingRow } from '../../types';
 
 export function getMeetingStatusMeta(status: MeetingRow['status']): {
   label: string;
@@ -26,6 +26,18 @@ export function getMeetingStatusMeta(status: MeetingRow['status']): {
 export function getDashboardEmptyStateCopy() {
   return {
     title: 'No meetings yet',
-    body: 'Start with a recording or import an existing audio file to process it later.',
+    body: 'Start a recording or import audio to begin.',
   };
+}
+
+export function getDashboardCloudStatusCopy(session: AuthSession | null) {
+  return session?.user.driveConnection.status === 'connected'
+    ? {
+        title: 'Cloud connected',
+        actionLabel: 'Open profile',
+      }
+    : {
+        title: 'Cloud not connected',
+        actionLabel: 'Set up account',
+      };
 }
