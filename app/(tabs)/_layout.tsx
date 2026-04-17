@@ -1,13 +1,48 @@
 import { Feather } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 
+import { ProfileAvatarButton } from '../../src/components/ProfileAvatarButton';
 import { APP_TABS } from '../../src/navigation/tabs';
+import { getAuthSession } from '../../src/services/account';
+import type { AuthSession } from '../../src/types';
 import { palette, typography } from '../../src/theme';
 
 export default function TabLayout() {
+  const [session, setSession] = useState<AuthSession | null>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getAuthSession()
+      .then((nextSession) => {
+        if (isMounted) {
+          setSession(nextSession);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setSession(null);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <Tabs
       screenOptions={{
+        headerRight: () => (
+          <ProfileAvatarButton
+            name={session?.user.name}
+            email={session?.user.email}
+            avatarUrl={session?.user.avatarUrl}
+            onPress={() => router.push('/account')}
+          />
+        ),
         headerStyle: { backgroundColor: palette.paper },
         headerTintColor: palette.ink,
         headerTitleStyle: {

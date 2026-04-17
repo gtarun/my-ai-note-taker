@@ -534,6 +534,7 @@ function mapSupabaseSession(accessToken: string, user: User): AuthSession {
       id: user.id,
       email: user.email ?? '',
       name: readUserName(user),
+      avatarUrl: readAvatarUrl(user),
       driveConnection: readDriveConnection(user),
     },
   };
@@ -543,6 +544,12 @@ function readUserName(user: User) {
   const metadata = user.user_metadata as Record<string, unknown> | undefined;
   const name = metadata?.name;
   return typeof name === 'string' && name.trim() ? name.trim() : null;
+}
+
+function readAvatarUrl(user: User) {
+  const metadata = user.user_metadata as Record<string, unknown> | undefined;
+  const avatarUrl = metadata?.avatarUrl ?? metadata?.avatar_url ?? metadata?.picture;
+  return typeof avatarUrl === 'string' && avatarUrl.trim() ? avatarUrl.trim() : null;
 }
 
 function readDriveConnection(user: User): DriveConnection {
