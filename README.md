@@ -55,11 +55,27 @@ docs/                product and architecture docs
 
 ## Getting Started
 
-### 1. Install dependencies
+### 1. Bootstrap a new machine
+
+If you are starting from a fresh Mac or another machine, the practical setup is:
 
 ```bash
+git clone <your-repo-url>
+cd mu-fathom
 npm install
 ```
+
+Then choose your native/tooling path:
+
+- `Expo Go` if you only need the remote-provider app flow
+- `Xcode` or a dev build if you need native iOS features like background recording
+- `Android Studio` + Java if you want to run Android locally
+
+Important notes:
+
+- `npm install` runs the repo `postinstall` patch automatically
+- if native folders are missing, or config/plugin changes were pulled from git, regenerate them with `npx expo prebuild --platform ios --platform android --no-install`
+- if you want iOS native builds, install CocoaPods and run `cd ios && pod install`
 
 ### 2. Pick a local run mode
 
@@ -70,7 +86,7 @@ Use the guide here:
 Short version:
 
 - use `Expo Go` if you want the fastest remote-provider test loop
-- use `Xcode` or a custom dev build if you need native iOS debugging or future local-model runtime work
+- use `Xcode` or a custom dev build if you need native iOS debugging, background recording validation, or future local-model runtime work
 
 ### 3. Start the Expo dev server
 
@@ -142,6 +158,7 @@ These are deliberate for speed:
 - Google Drive backup is optional and only uploads the saved recording file
 - imported files do not yet calculate duration metadata
 - Google Drive backup needs Google Cloud + Supabase setup before it works
+- reliable background-recording validation needs a native iOS or Android build on a real device, not just Expo Go
 
 ## Privacy Notes
 

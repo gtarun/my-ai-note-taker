@@ -1,11 +1,61 @@
 # Running Locally
 
+## Fresh Machine Bootstrap
+
+If you are picking this repo up on another machine, do this first:
+
+### 1. Clone and install
+
+```bash
+git clone <your-repo-url>
+cd mu-fathom
+npm install
+```
+
+`npm install` runs the repo `postinstall` patch automatically.
+
+### 2. Install the platform toolchains you actually need
+
+- `Expo Go only`: Node.js, npm, Expo Go on your phone
+- `iOS native/dev build`: Xcode, CocoaPods, an installed iOS simulator runtime or a real iPhone
+- `Android native/dev build`: Android Studio, Android SDK, and a working Java runtime/JDK
+
+If Java is missing, local Android builds will fail before Gradle even starts.
+
+### 3. Regenerate native folders if needed
+
+If you pulled config/plugin changes, or the native folders are missing on the new machine:
+
+```bash
+npx expo prebuild --platform ios --platform android --no-install
+```
+
+Then, for iOS:
+
+```bash
+cd ios
+pod install
+cd ..
+```
+
+### 4. Choose the right validation path
+
+- use `Expo Go` for the remote-provider app flow
+- use `Xcode` or a custom dev build for iOS native features
+- use `expo run:android` or Android Studio only if the machine has Java + Android SDK set up
+
+Important:
+
+- background recording is a native-capability feature
+- validate it on a real device with a dev build or native run, not just Expo Go
+- if Xcode says an iOS platform/runtime is not installed, install that simulator runtime from Xcode settings or use a real device
+
 ## What To Use
 
 There are two practical ways to run this app locally:
 
-- `Expo Go`: fastest way to test recording, import, remote transcription, summaries, and most UI, but not the local engine
-- `Xcode` or a custom dev build on iPhone: use this when you need native iOS debugging or the real local transcription runtime
+- `Expo Go`: fastest way to test recording, import, remote transcription, summaries, and most UI, but not the local engine or native background-recording validation
+- `Xcode` or a custom dev build on iPhone: use this when you need native iOS debugging, background recording, or the real local transcription runtime
 
 Blunt rule:
 
@@ -66,6 +116,7 @@ Use `--lan` so your phone can see the dev server on the same Wi-Fi.
 
 - the local/offline inference runtime
 - anything that depends on the native `MuFathomLocalAI` module
+- reliable validation of the new background-recording capability on iOS/Android native app configs
 
 ## Option 2: Run From Xcode
 
@@ -136,6 +187,17 @@ In Xcode:
 
 If the app launches but does not connect to JS, make sure Metro is already running.
 
+### Background recording note
+
+If you are specifically validating background recording on iPhone:
+
+1. run a native/dev build, not Expo Go
+2. start a recording on a real device
+3. lock the screen or background the app
+4. wait 15 to 30 seconds
+5. return to the app and confirm the timer advanced
+6. stop and confirm the meeting still saves
+
 ## Option 3: Build A Dev Client From CLI
 
 This is useful when you want native modules but do not want to live entirely inside Xcode.
@@ -163,6 +225,8 @@ Then keep Metro running with:
 ```bash
 npx expo start --dev-client --clear
 ```
+
+This path needs a working local Java runtime and Android SDK.
 
 ## Option 4: Use EAS Builds
 
@@ -297,10 +361,30 @@ If you need Android later, the app-root `android/` project directory is still no
 - use a real device, not web
 - restart the app after granting permission
 
+### Background recording does not continue
+
+- test with a native/dev build, not Expo Go
+- test on a real phone, not only the simulator
+- confirm the current app config includes the `expo-audio` plugin with background recording enabled
+- on iOS, confirm the generated native app includes `UIBackgroundModes = audio`
+- on Android, confirm the generated manifest includes foreground-service microphone permissions
+
 ### Xcode build opens but JS does not load
 
 - start Metro first with `npx expo start --dev-client --clear`
 - rebuild after Metro is running
+
+### Xcode says the iOS platform/runtime is not installed
+
+- open Xcode
+- install the missing iOS simulator runtime from Xcode settings
+- or run on a real device instead of the simulator
+
+### Android build fails immediately
+
+- make sure Java/JDK is installed and available on `PATH`
+- make sure Android Studio and the Android SDK are installed
+- then retry `npx expo run:android`
 
 ### EAS build confusion
 
