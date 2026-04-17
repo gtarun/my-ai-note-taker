@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "mu-fathom",
+    "name": "AI Notes",
     "slug": "ai-note-taker",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "mu-fathom records meeting audio only when you explicitly start recording.",
+        "NSMicrophoneUsageDescription": "AI Notes records meeting audio only when you explicitly start recording.",
         "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "com.gtarun.mu-fathom",
@@ -42,7 +42,13 @@
       "expo-router",
       "expo-sqlite",
       "expo-secure-store",
-      "expo-audio",
+      [
+        "expo-audio",
+        {
+          "enableBackgroundRecording": true,
+          "microphonePermission": "AI Notes records meeting audio only when you explicitly start recording."
+        }
+      ],
       "expo-web-browser"
     ],
     "extra": {

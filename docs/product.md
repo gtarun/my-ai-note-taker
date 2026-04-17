@@ -2,7 +2,7 @@
 
 ## Product Shape
 
-`mu-fathom` is a local-first AI meeting companion.
+`AI Notes by Masters' Union` is a local-first AI meeting companion.
 
 The MVP is not trying to auto-join meetings or invisibly capture everything. It is a manual tool for solo users who want fast post-meeting notes.
 

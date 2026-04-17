@@ -599,215 +599,212 @@ export default function LayersScreen() {
               <PillButton label="Cancel" onPress={closeEditor} variant="ghost" />
               <PillButton label={isSaving ? 'Saving…' : 'Save layer'} onPress={handleSave} disabled={isSaving} />
             </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={isSheetPickerVisible} animationType="slide" transparent onRequestClose={closeSheetPicker}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <ScrollView contentContainerStyle={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <View style={styles.modalHeaderCopy}>
-                  <Text style={styles.modalTitle}>{sheetPickerTitle}</Text>
-                  <Text style={styles.modalSubtitle}>
-                    Search for a spreadsheet, pick a tab, then choose whether to keep your current fields or import the tab headers.
-                  </Text>
-                </View>
-                <Pressable onPress={closeSheetPicker} hitSlop={10}>
-                  <Feather name="x" size={20} color={palette.ink} />
-                </Pressable>
-              </View>
-
-              {sheetPickerStep === 'browse' ? (
-                <View style={styles.sheetPickerSection}>
-                  <View style={styles.searchSection}>
-                    <Text style={styles.smallSectionLabel}>Search spreadsheets</Text>
-                    <View style={styles.searchRow}>
-                      <TextInput
-                        style={[styles.input, styles.searchInput]}
-                        value={spreadsheetSearch}
-                        onChangeText={setSpreadsheetSearch}
-                        placeholder="Search by spreadsheet name"
-                        placeholderTextColor={palette.mutedInk}
-                      />
-                      <PillButton
-                        label={isSearchingSheets ? 'Searching…' : 'Search'}
-                        onPress={() => void handleSearchSheets()}
-                        variant="secondary"
-                        disabled={isSearchingSheets}
-                      />
-                    </View>
-                  </View>
-
-                  <View style={styles.sheetPickerActions}>
-                    <PillButton
-                      label={isPreparingSheet ? 'Preparing…' : 'Create new sheet'}
-                      onPress={handleCreateOrRefreshSheet}
-                      variant="secondary"
-                      disabled={isPreparingSheet}
-                    />
-                  </View>
-
-                  {isLoadingRecent ? <Text style={styles.optionBody}>Loading recent spreadsheets…</Text> : null}
-
-                  {recentSpreadsheets.length ? (
-                    <View style={styles.optionList}>
-                      <Text style={styles.smallSectionLabel}>Recent spreadsheets</Text>
-                      {recentSpreadsheets.slice(0, 4).map((spreadsheet) => (
-                        <Pressable
-                          key={spreadsheet.id}
-                          style={styles.optionRow}
-                          onPress={() => void handleSelectSpreadsheet(spreadsheet)}
-                        >
-                          <Text style={styles.optionTitle}>{spreadsheet.title}</Text>
-                          <Text style={styles.optionBody}>
-                            {spreadsheet.modifiedTime
-                              ? new Date(spreadsheet.modifiedTime).toLocaleDateString()
-                              : 'Recent'}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  ) : null}
-
-                  {searchResults.length ? (
-                    <View style={styles.optionList}>
-                      <Text style={styles.smallSectionLabel}>Search results</Text>
-                      {searchResults.map((spreadsheet) => (
-                        <Pressable
-                          key={spreadsheet.id}
-                          style={styles.optionRow}
-                          onPress={() => void handleSelectSpreadsheet(spreadsheet)}
-                        >
-                          <Text style={styles.optionTitle}>{spreadsheet.title}</Text>
-                          <Text style={styles.optionBody}>Tap to pick tabs</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  ) : null}
-                </View>
-              ) : null}
-
-              {sheetPickerStep === 'tabs' || sheetPickerStep === 'choice' ? (
-                <View style={styles.sheetPickerSection}>
-                  <View style={styles.sheetSummaryCard}>
-                    <Text style={styles.sheetSummaryLabel}>Selected spreadsheet</Text>
-                    <Text style={styles.sheetSummaryTitle}>{selectedSpreadsheet?.title ?? 'Unknown spreadsheet'}</Text>
-                    <Text style={styles.sheetSummaryBody}>
-                      {sheetPickerStep === 'choice'
-                        ? `Tab: ${selectedTab ?? 'Unknown tab'}`
-                        : 'Pick the tab you want to use.'}
-                    </Text>
-                  </View>
-
-                  <View style={styles.sheetPickerActions}>
-                    <PillButton
-                      label="Browse spreadsheets"
-                      onPress={() => {
-                        setSheetPickerStep('browse');
-                        setSelectedTab(null);
-                        setAvailableHeaders([]);
-                        setAvailableTabs([]);
-                        void loadRecentSpreadsheetOptions();
-                      }}
-                      variant="ghost"
-                    />
-                  </View>
-
-                  {isLoadingTabs ? <Text style={styles.optionBody}>Loading tabs…</Text> : null}
-
-                  {sheetPickerStep === 'tabs' ? (
-                    <View style={styles.optionList}>
-                      {availableTabs.map((tab) => {
-                        const isSelected = selectedTab === tab;
-                        return (
-                          <Pressable
-                            key={tab}
-                            style={[styles.optionRow, isSelected ? styles.optionRowSelected : null]}
-                            onPress={() => void handleSelectTab(tab)}
-                          >
-                            <Text style={styles.optionTitle}>{tab}</Text>
-                            <Text style={styles.optionBody}>
-                              {isSelected ? 'Selected' : 'Tap to keep fields or import columns'}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  ) : null}
-
-                  {sheetPickerStep === 'choice' ? (
-                    <View style={styles.choiceCard}>
-                      <Text style={styles.choiceTitle}>Use sheet columns?</Text>
-                      <Text style={styles.choiceBody}>
-                        {availableHeaders.length
-                          ? 'Import the tab header row into this layer, or keep your current fields.'
-                          : 'This tab has no visible headers, so importing will keep your current fields.'}
+            {isSheetPickerVisible ? (
+              <View style={styles.inlineOverlay}>
+                <ScrollView contentContainerStyle={styles.inlineOverlayContent}>
+                  <View style={styles.modalHeader}>
+                    <View style={styles.modalHeaderCopy}>
+                      <Text style={styles.modalTitle}>{sheetPickerTitle}</Text>
+                      <Text style={styles.modalSubtitle}>
+                        Search for a spreadsheet, pick a tab, then choose whether to keep your current fields or import the tab headers.
                       </Text>
-                      <View style={styles.choiceActions}>
-                        <PillButton label="Keep current fields" onPress={handleChooseKeepCurrentFields} variant="ghost" />
-                        <PillButton label="Import columns" onPress={handleChooseImportColumns} />
+                    </View>
+                    <Pressable onPress={closeSheetPicker} hitSlop={10}>
+                      <Feather name="x" size={20} color={palette.ink} />
+                    </Pressable>
+                  </View>
+
+                  {sheetPickerStep === 'browse' ? (
+                    <View style={styles.sheetPickerSection}>
+                      <View style={styles.searchSection}>
+                        <Text style={styles.smallSectionLabel}>Search spreadsheets</Text>
+                        <View style={styles.searchRow}>
+                          <TextInput
+                            style={[styles.input, styles.searchInput]}
+                            value={spreadsheetSearch}
+                            onChangeText={setSpreadsheetSearch}
+                            placeholder="Search by spreadsheet name"
+                            placeholderTextColor={palette.mutedInk}
+                          />
+                          <PillButton
+                            label={isSearchingSheets ? 'Searching…' : 'Search'}
+                            onPress={() => void handleSearchSheets()}
+                            variant="secondary"
+                            disabled={isSearchingSheets}
+                          />
+                        </View>
                       </View>
+
+                      <View style={styles.sheetPickerActions}>
+                        <PillButton
+                          label={isPreparingSheet ? 'Preparing…' : 'Create new sheet'}
+                          onPress={handleCreateOrRefreshSheet}
+                          variant="secondary"
+                          disabled={isPreparingSheet}
+                        />
+                      </View>
+
+                      {isLoadingRecent ? <Text style={styles.optionBody}>Loading recent spreadsheets…</Text> : null}
+
+                      {recentSpreadsheets.length ? (
+                        <View style={styles.optionList}>
+                          <Text style={styles.smallSectionLabel}>Recent spreadsheets</Text>
+                          {recentSpreadsheets.slice(0, 4).map((spreadsheet) => (
+                            <Pressable
+                              key={spreadsheet.id}
+                              style={styles.optionRow}
+                              onPress={() => void handleSelectSpreadsheet(spreadsheet)}
+                            >
+                              <Text style={styles.optionTitle}>{spreadsheet.title}</Text>
+                              <Text style={styles.optionBody}>
+                                {spreadsheet.modifiedTime
+                                  ? new Date(spreadsheet.modifiedTime).toLocaleDateString()
+                                  : 'Recent'}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      ) : null}
+
+                      {searchResults.length ? (
+                        <View style={styles.optionList}>
+                          <Text style={styles.smallSectionLabel}>Search results</Text>
+                          {searchResults.map((spreadsheet) => (
+                            <Pressable
+                              key={spreadsheet.id}
+                              style={styles.optionRow}
+                              onPress={() => void handleSelectSpreadsheet(spreadsheet)}
+                            >
+                              <Text style={styles.optionTitle}>{spreadsheet.title}</Text>
+                              <Text style={styles.optionBody}>Tap to pick tabs</Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      ) : null}
                     </View>
                   ) : null}
-                </View>
-              ) : null}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
 
-      <Modal visible={isFieldEditorVisible} animationType="slide" transparent onRequestClose={closeFieldEditor}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.fieldModalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{activeField ? 'Field details' : 'New field'}</Text>
-              <Pressable onPress={closeFieldEditor} hitSlop={10}>
-                <Feather name="x" size={20} color={palette.ink} />
-              </Pressable>
-            </View>
+                  {sheetPickerStep === 'tabs' || sheetPickerStep === 'choice' ? (
+                    <View style={styles.sheetPickerSection}>
+                      <View style={styles.sheetSummaryCard}>
+                        <Text style={styles.sheetSummaryLabel}>Selected spreadsheet</Text>
+                        <Text style={styles.sheetSummaryTitle}>{selectedSpreadsheet?.title ?? 'Unknown spreadsheet'}</Text>
+                        <Text style={styles.sheetSummaryBody}>
+                          {sheetPickerStep === 'choice'
+                            ? `Tab: ${selectedTab ?? 'Unknown tab'}`
+                            : 'Pick the tab you want to use.'}
+                        </Text>
+                      </View>
 
-            {activeField ? (
-              <View style={styles.fieldModalContent}>
-                <TextInput
-                  style={styles.input}
-                  value={activeField.id}
-                  onChangeText={(value) => setActiveField((current) => (current ? { ...current, id: value } : current))}
-                  placeholder="field_id"
-                  autoCapitalize="none"
-                  placeholderTextColor={palette.mutedInk}
-                />
-                <TextInput
-                  style={styles.input}
-                  value={activeField.title}
-                  onChangeText={(value) =>
-                    setActiveField((current) => (current ? { ...current, title: value } : current))
-                  }
-                  placeholder="Field title"
-                  placeholderTextColor={palette.mutedInk}
-                />
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  value={activeField.description}
-                  onChangeText={(value) =>
-                    setActiveField((current) => (current ? { ...current, description: value } : current))
-                  }
-                  placeholder="What should the AI extract here?"
-                  placeholderTextColor={palette.mutedInk}
-                  multiline
-                />
+                      <View style={styles.sheetPickerActions}>
+                        <PillButton
+                          label="Browse spreadsheets"
+                          onPress={() => {
+                            setSheetPickerStep('browse');
+                            setSelectedTab(null);
+                            setAvailableHeaders([]);
+                            setAvailableTabs([]);
+                            void loadRecentSpreadsheetOptions();
+                          }}
+                          variant="ghost"
+                        />
+                      </View>
+
+                      {isLoadingTabs ? <Text style={styles.optionBody}>Loading tabs…</Text> : null}
+
+                      {sheetPickerStep === 'tabs' ? (
+                        <View style={styles.optionList}>
+                          {availableTabs.map((tab) => {
+                            const isSelected = selectedTab === tab;
+                            return (
+                              <Pressable
+                                key={tab}
+                                style={[styles.optionRow, isSelected ? styles.optionRowSelected : null]}
+                                onPress={() => void handleSelectTab(tab)}
+                              >
+                                <Text style={styles.optionTitle}>{tab}</Text>
+                                <Text style={styles.optionBody}>
+                                  {isSelected ? 'Selected' : 'Tap to keep fields or import columns'}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      ) : null}
+
+                      {sheetPickerStep === 'choice' ? (
+                        <View style={styles.choiceCard}>
+                          <Text style={styles.choiceTitle}>Use sheet columns?</Text>
+                          <Text style={styles.choiceBody}>
+                            {availableHeaders.length
+                              ? 'Import the tab header row into this layer, or keep your current fields.'
+                              : 'This tab has no visible headers, so importing will keep your current fields.'}
+                          </Text>
+                          <View style={styles.choiceActions}>
+                            <PillButton label="Keep current fields" onPress={handleChooseKeepCurrentFields} variant="ghost" />
+                            <PillButton label="Import columns" onPress={handleChooseImportColumns} />
+                          </View>
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : null}
+                </ScrollView>
               </View>
             ) : null}
 
-            <View style={styles.modalActions}>
-              {activeField && draft.fields.some((field) => field.key === activeField.key) ? (
-                <PillButton label="Delete" onPress={handleDeleteField} variant="ghost" />
-              ) : (
-                <PillButton label="Cancel" onPress={closeFieldEditor} variant="ghost" />
-              )}
-              <PillButton label="Save field" onPress={handleSaveField} />
-            </View>
+            {isFieldEditorVisible ? (
+              <View style={styles.inlineOverlay}>
+                <View style={styles.fieldModalCard}>
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>{activeField ? 'Field details' : 'New field'}</Text>
+                    <Pressable onPress={closeFieldEditor} hitSlop={10}>
+                      <Feather name="x" size={20} color={palette.ink} />
+                    </Pressable>
+                  </View>
+
+                  {activeField ? (
+                    <View style={styles.fieldModalContent}>
+                      <TextInput
+                        style={styles.input}
+                        value={activeField.id}
+                        onChangeText={(value) => setActiveField((current) => (current ? { ...current, id: value } : current))}
+                        placeholder="field_id"
+                        autoCapitalize="none"
+                        placeholderTextColor={palette.mutedInk}
+                      />
+                      <TextInput
+                        style={styles.input}
+                        value={activeField.title}
+                        onChangeText={(value) =>
+                          setActiveField((current) => (current ? { ...current, title: value } : current))
+                        }
+                        placeholder="Field title"
+                        placeholderTextColor={palette.mutedInk}
+                      />
+                      <TextInput
+                        style={[styles.input, styles.textArea]}
+                        value={activeField.description}
+                        onChangeText={(value) =>
+                          setActiveField((current) => (current ? { ...current, description: value } : current))
+                        }
+                        placeholder="What should the AI extract here?"
+                        placeholderTextColor={palette.mutedInk}
+                        multiline
+                      />
+                    </View>
+                  ) : null}
+
+                  <View style={styles.modalActions}>
+                    {activeField && draft.fields.some((field) => field.key === activeField.key) ? (
+                      <PillButton label="Delete" onPress={handleDeleteField} variant="ghost" />
+                    ) : (
+                      <PillButton label="Cancel" onPress={closeFieldEditor} variant="ghost" />
+                    )}
+                    <PillButton label="Save field" onPress={handleSaveField} />
+                  </View>
+                </View>
+              </View>
+            ) : null}
           </View>
         </View>
       </Modal>
@@ -954,6 +951,18 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 28,
     padding: 20,
     gap: 16,
+  },
+  inlineOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(22, 29, 37, 0.18)',
+    justifyContent: 'flex-end',
+    zIndex: 10,
+  },
+  inlineOverlayContent: {
+    padding: 20,
+    gap: 18,
+    paddingBottom: 28,
+    backgroundColor: palette.paper,
   },
   modalContent: {
     padding: 20,

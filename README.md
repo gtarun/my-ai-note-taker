@@ -1,4 +1,4 @@
-# mu-fathom
+# Ai Notes by Masters' Union
 
 Open-source, mobile-first AI meeting companion for iOS and Android.
 
