@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
-import { Tabs, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { Tabs, useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
 
 import { ProfileAvatarButton } from '../../src/components/ProfileAvatarButton';
 import { APP_TABS } from '../../src/navigation/tabs';
@@ -12,34 +12,36 @@ export default function TabLayout() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const router = useRouter();
 
-  useEffect(() => {
-    let isMounted = true;
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
 
-    getAuthSession()
-      .then((nextSession) => {
-        if (isMounted) {
-          setSession(nextSession);
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setSession(null);
-        }
-      });
+      void getAuthSession()
+        .then((nextSession) => {
+          if (!cancelled) {
+            setSession(nextSession);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setSession(null);
+          }
+        });
 
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+      return () => {
+        cancelled = true;
+      };
+    }, [])
+  );
 
   return (
     <Tabs
       screenOptions={{
         headerRight: () => (
           <ProfileAvatarButton
-            name={session?.user.name}
-            email={session?.user.email}
             avatarUrl={session?.user.avatarUrl}
+            email={session?.user.email}
+            name={session?.user.name}
             onPress={() => router.push('/account')}
           />
         ),

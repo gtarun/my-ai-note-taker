@@ -1,5 +1,4 @@
 import { Feather } from '@expo/vector-icons';
-import type { ImageSourcePropType } from 'react-native';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { getProfileInitials } from '../features/account/presentation';
@@ -16,51 +15,49 @@ export function ProfileAvatarButton({
   avatarUrl: string | null | undefined;
   onPress: () => void;
 }) {
-  const initials = getProfileInitials(name, email);
-  const imageSource: ImageSourcePropType | null = avatarUrl ? { uri: avatarUrl } : null;
+  const initials = getProfileInitials({
+    name: name ?? null,
+    email: email ?? null,
+  });
 
   return (
     <Pressable
-      accessibilityRole="button"
       accessibilityLabel="Open profile"
+      accessibilityRole="button"
       hitSlop={10}
       onPress={onPress}
-      style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.button, pressed ? styles.pressed : null]}
     >
-      <View style={styles.shell}>
-        {imageSource ? (
-          <Image source={imageSource} style={styles.image} resizeMode="cover" />
-        ) : initials ? (
-          <View style={styles.fallback}>
+      {avatarUrl ? (
+        <Image resizeMode="cover" source={{ uri: avatarUrl }} style={styles.image} />
+      ) : (
+        <View style={styles.fallback}>
+          {initials ? (
             <Text style={styles.initials}>{initials}</Text>
-          </View>
-        ) : (
-          <View style={styles.fallback}>
-            <Feather name="user" size={16} color={palette.accent} />
-          </View>
-        )}
-      </View>
+          ) : (
+            <Feather color={palette.accent} name="user" size={16} />
+          )}
+        </View>
+      )}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   button: {
-    marginRight: 8,
-  },
-  pressed: {
-    opacity: 0.72,
-  },
-  shell: {
     width: 34,
     height: 34,
     borderRadius: radii.pill,
+    marginRight: 8,
     overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: palette.accentSoft,
     borderWidth: 1,
     borderColor: palette.lineSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
+  },
+  pressed: {
+    opacity: 0.72,
   },
   image: {
     width: '100%',

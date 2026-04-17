@@ -1,10 +1,12 @@
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import * as Linking from 'expo-linking';
 import { useFocusEffect } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Image,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -15,6 +17,10 @@ import {
 
 import { FadeInView } from '../src/components/FadeInView';
 import { ScreenBackground } from '../src/components/ScreenBackground';
+import {
+  formatBuildVersion,
+  getProfileInitials,
+} from '../src/features/account/presentation';
 import {
   clearAuthSession,
   completeOAuthSignIn,
@@ -29,7 +35,7 @@ import {
   signInWithGoogle,
 } from '../src/services/account';
 import { AuthSession } from '../src/types';
-import { elevation, palette } from '../src/theme';
+import { elevation, palette, radii, typography } from '../src/theme';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -38,6 +44,28 @@ function firstQueryParam(value: string | string[] | undefined) {
     return value[0];
   }
   return value;
+}
+
+function readTrimmedString(value: unknown) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function getVersionLabel() {
+  const expoConfig = Constants.expoConfig;
+  const appVersion = readTrimmedString(expoConfig?.version) || 'dev';
+  const iosBuildNumber = readTrimmedString(expoConfig?.ios?.buildNumber);
+  const androidVersionCode = expoConfig?.android?.versionCode;
+  const nativeBuildVersion = readTrimmedString((Constants as { nativeBuildVersion?: string | null }).nativeBuildVersion);
+
+  const buildNumber =
+    iosBuildNumber ||
+    (typeof androidVersionCode === 'number' ? String(androidVersionCode) : '') ||
+    nativeBuildVersion;
+
+  return formatBuildVersion({
+    appVersion,
+    buildNumber,
+  });
 }
 
 export default function AccountScreen() {
@@ -223,45 +251,66 @@ export default function AccountScreen() {
   };
 
   const driveConnection = session?.user.driveConnection;
+  const initials = getProfileInitials({
+    name: session?.user.name ?? null,
+    email: session?.user.email ?? null,
+  });
+  const versionLabel = useMemo(() => getVersionLabel(), []);
+  const displayName = session?.user.name?.trim() || session?.user.email || 'Your profile';
+  const emailLabel = session?.user.email ?? 'Sign in with Google to sync your identity, backups, and Sheets.';
+  const driveStatusCopy =
+    driveConnection?.status === 'connected'
+      ? 'Connected and ready for backups and Google Sheets sync.'
+      : 'Not connected yet. Connect the same Google account to enable Drive backups.';
+  const driveFolderCopy =
+    driveConnection?.status === 'connected'
+      ? driveConnection.saveFolderName?.trim() || 'Not chosen yet - pick a folder for cloud copies of recordings.'
+      : 'Choose a Drive save folder after connecting your Google account.';
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScreenBackground />
       <ScrollView contentContainerStyle={styles.container}>
         <FadeInView style={styles.hero}>
-          <View style={styles.heroHeader}>
-            <MaterialCommunityIcons name="cloud-outline" size={18} color={palette.ink} />
-            <Text style={styles.heroTitle}>Google account and Drive</Text>
-          </View>
-          <Text style={styles.heroBody}>
-            Sign in with Google first, then connect the same Google account for Drive backups and Google Sheets sync.
-          </Text>
-        </FadeInView>
+          <View style={styles.profileRow}>
+            {session?.user.avatarUrl ? (
+              <Image resizeMode="cover" source={{ uri: session.user.avatarUrl }} style={styles.avatarImage} />
+            ) : (
+              <View style={styles.avatarFallback}>
+                {initials ? (
+                  <Text style={styles.avatarInitials}>{initials}</Text>
+                ) : (
+                  <Feather color={palette.accent} name="user" size={34} />
+                )}
+              </View>
+            )}
 
-        <FadeInView style={styles.card} delay={40}>
-          <View style={styles.statusPanel}>
-            <Text style={styles.statusTitle}>
-              {session ? session.user.name || session.user.email : 'Not signed in'}
-            </Text>
-            <Text style={styles.rowBody}>
-              {session
-                ? `${session.user.email}\nDrive: ${
-                    driveConnection?.status === 'connected' ? 'Connected' : 'Not connected'
-                  }`
-                : 'Use Google sign-in first. Once signed in, connect the same Google account to Drive and Sheets.'}
-            </Text>
-            {driveConnection?.accountEmail ? (
-              <Text style={styles.rowBody}>Drive account: {driveConnection.accountEmail}</Text>
-            ) : null}
-            {driveConnection?.status === 'connected' ? (
-              <Text style={styles.rowBody}>
-                Save folder:{' '}
-                {driveConnection.saveFolderName?.trim()
-                  ? driveConnection.saveFolderName
-                  : 'Not chosen yet — pick a folder for cloud copies of recordings.'}
-              </Text>
+            <View style={styles.identityBlock}>
+              <Text style={styles.eyebrow}>{session ? 'Profile hub' : 'Welcome'}</Text>
+              <Text style={styles.displayName}>{displayName}</Text>
+              <Text style={styles.email}>{emailLabel}</Text>
+            </View>
+          </View>
+
+          <View style={styles.heroBadgeRow}>
+            <View style={styles.heroBadge}>
+              <MaterialCommunityIcons
+                color={session ? palette.accent : palette.mutedInk}
+                name={session ? 'check-decagram-outline' : 'account-outline'}
+                size={16}
+              />
+              <Text style={styles.heroBadgeText}>{session ? 'Signed in with Google' : 'Sign in to personalize'}</Text>
+            </View>
+            {!isConfigured ? (
+              <Text style={styles.inlineHint}>Cloud backend is not configured on this build.</Text>
             ) : null}
           </View>
+
+          <Text style={styles.heroBody}>
+            {session
+              ? 'Manage your Google account connection, refresh account details, and keep Drive backups pointed at the right folder.'
+              : 'This profile page becomes your control center for Google sign-in, Drive backups, and Sheets sync once you connect your account.'}
+          </Text>
 
           {!session ? (
             <Pressable
@@ -270,28 +319,85 @@ export default function AccountScreen() {
               disabled={isGoogleSubmitting || !isConfigured}
             >
               <Text style={styles.primaryButtonText}>
-                {isGoogleSubmitting ? 'Opening Google…' : 'Continue with Google'}
+                {isGoogleSubmitting ? 'Opening Google...' : 'Continue with Google'}
               </Text>
             </Pressable>
           ) : (
+            <View style={styles.buttonRow}>
+              <Pressable
+                style={styles.secondaryButton}
+                onPress={handleRefresh}
+                disabled={isRefreshing}
+              >
+                <Text style={styles.secondaryButtonText}>{isRefreshing ? 'Refreshing...' : 'Refresh'}</Text>
+              </Pressable>
+              <Pressable style={styles.secondaryButton} onPress={handleSignOut}>
+                <Text style={styles.secondaryButtonText}>Sign out</Text>
+              </Pressable>
+            </View>
+          )}
+        </FadeInView>
+
+        <FadeInView style={styles.card} delay={40}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Google account</Text>
+            <Text style={styles.cardStatus}>{session ? 'Active session' : 'Signed out'}</Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Identity</Text>
+            <Text style={styles.infoValue}>
+              {session ? `${session.user.name?.trim() || session.user.email}\n${session.user.email}` : 'No Google account connected yet.'}
+            </Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Google integration</Text>
+            <Text style={styles.infoValue}>
+              {session
+                ? 'Ready to connect Drive using the same Google account.'
+                : 'Sign in first, then connect Drive and choose where recordings are backed up.'}
+            </Text>
+          </View>
+        </FadeInView>
+
+        <FadeInView style={styles.card} delay={80}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Drive backup</Text>
+            <Text style={styles.cardStatus}>
+              {driveConnection?.status === 'connected' ? 'Connected' : 'Not connected'}
+            </Text>
+          </View>
+
+          {driveConnection?.accountEmail ? (
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Drive account</Text>
+              <Text style={styles.infoValue}>{driveConnection.accountEmail}</Text>
+            </View>
+          ) : null}
+
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Status</Text>
+            <Text style={styles.infoValue}>{driveStatusCopy}</Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Save folder</Text>
+            <Text style={styles.infoValue}>{driveFolderCopy}</Text>
+          </View>
+
+          {session ? (
             <>
-              <View style={styles.buttonRow}>
-                <Pressable
-                  style={styles.primaryButtonSplit}
-                  onPress={handleConnectDrive}
-                  disabled={isConnectingDrive || !isConfigured}
-                >
-                  <Text style={styles.primaryButtonText}>
-                    {isConnectingDrive ? 'Opening Google…' : 'Connect Google Drive'}
-                  </Text>
-                </Pressable>
-                <Pressable style={styles.secondaryButton} onPress={handleRefresh} disabled={isRefreshing}>
-                  <Text style={styles.secondaryButtonText}>{isRefreshing ? 'Refreshing…' : 'Refresh'}</Text>
-                </Pressable>
-                <Pressable style={styles.secondaryButton} onPress={handleSignOut}>
-                  <Text style={styles.secondaryButtonText}>Sign out</Text>
-                </Pressable>
-              </View>
+              <Pressable
+                style={styles.primaryButton}
+                onPress={handleConnectDrive}
+                disabled={isConnectingDrive || !isConfigured}
+              >
+                <Text style={styles.primaryButtonText}>
+                  {isConnectingDrive ? 'Opening Google...' : 'Connect Google Drive'}
+                </Text>
+              </Pressable>
+
               {driveConnection?.status === 'connected' ? (
                 <Pressable
                   style={styles.folderButton}
@@ -299,13 +405,15 @@ export default function AccountScreen() {
                   disabled={isPickingDriveFolder || !isConfigured}
                 >
                   <Text style={styles.folderButtonText}>
-                    {isPickingDriveFolder ? 'Opening Google picker…' : 'Choose Drive save folder'}
+                    {isPickingDriveFolder ? 'Opening Google picker...' : 'Choose Drive save folder'}
                   </Text>
                 </Pressable>
               ) : null}
             </>
-          )}
+          ) : null}
         </FadeInView>
+
+        <Text style={styles.footer}>Build {versionLabel}</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -322,62 +430,144 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
   hero: {
-    backgroundColor: palette.cardStrong,
+    backgroundColor: palette.card,
     borderRadius: 28,
-    padding: 20,
+    padding: 22,
     borderWidth: 1,
-    borderColor: palette.line,
-    gap: 8,
+    borderColor: palette.lineSoft,
+    gap: 16,
     ...elevation.card,
   },
-  heroHeader: {
+  profileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  avatarImage: {
+    width: 88,
+    height: 88,
+    borderRadius: radii.pill,
+    backgroundColor: palette.cardMuted,
+  },
+  avatarFallback: {
+    width: 88,
+    height: 88,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: palette.accentSoft,
+    borderWidth: 1,
+    borderColor: palette.lineSoft,
+  },
+  avatarInitials: {
+    color: palette.accent,
+    fontFamily: typography.display.fontFamily,
+    fontSize: 28,
+  },
+  identityBlock: {
+    flex: 1,
+    gap: 4,
+  },
+  eyebrow: {
+    color: palette.accent,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 12,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  displayName: {
+    color: palette.ink,
+    fontFamily: typography.display.fontFamily,
+    fontSize: 28,
+    lineHeight: 32,
+  },
+  email: {
+    color: palette.mutedInk,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  heroBadgeRow: {
+    gap: 8,
+  },
+  heroBadge: {
+    alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: radii.pill,
+    backgroundColor: palette.cardMuted,
+    borderWidth: 1,
+    borderColor: palette.lineSoft,
   },
-  heroTitle: {
+  heroBadgeText: {
     color: palette.ink,
-    fontSize: 26,
-    fontWeight: '800',
+    fontFamily: typography.label.fontFamily,
+    fontSize: 13,
   },
   heroBody: {
     color: palette.mutedInk,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 15,
     lineHeight: 22,
   },
   card: {
-    backgroundColor: palette.cardStrong,
+    backgroundColor: palette.card,
     borderRadius: 24,
     padding: 18,
     borderWidth: 1,
-    borderColor: palette.line,
-    gap: 12,
+    borderColor: palette.lineSoft,
+    gap: 14,
     ...elevation.card,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
   },
   cardTitle: {
     color: palette.ink,
-    fontSize: 18,
-    fontWeight: '800',
+    fontFamily: typography.heading.fontFamily,
+    fontSize: 19,
+  },
+  cardStatus: {
+    color: palette.mutedInk,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 13,
+  },
+  infoRow: {
+    gap: 4,
+  },
+  infoLabel: {
+    color: palette.mutedInk,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 12,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  infoValue: {
+    color: palette.ink,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 15,
+    lineHeight: 22,
   },
   primaryButton: {
     backgroundColor: palette.ink,
     borderRadius: 18,
     paddingVertical: 16,
     alignItems: 'center',
-  },
-  primaryButtonSplit: {
-    flex: 1.4,
-    backgroundColor: palette.ink,
-    borderRadius: 18,
-    paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginTop: 2,
   },
   primaryButtonText: {
     color: palette.paper,
-    fontWeight: '800',
+    fontFamily: typography.label.fontFamily,
     fontSize: 16,
   },
   secondaryButton: {
+    flex: 1,
     borderRadius: 16,
     paddingVertical: 14,
     paddingHorizontal: 16,
@@ -389,33 +579,17 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: palette.ink,
-    fontWeight: '700',
+    fontFamily: typography.label.fontFamily,
   },
   buttonRow: {
     flexDirection: 'row',
     gap: 10,
   },
-  statusPanel: {
-    borderRadius: 18,
-    backgroundColor: palette.paper,
-    borderWidth: 1,
-    borderColor: palette.line,
-    padding: 14,
-    gap: 4,
-  },
-  statusTitle: {
-    color: palette.ink,
-    fontWeight: '800',
-    fontSize: 15,
-  },
-  rowBody: {
-    color: palette.mutedInk,
-    lineHeight: 20,
-  },
   inlineHint: {
     color: palette.mutedInk,
+    fontFamily: typography.body.fontFamily,
     fontSize: 13,
-    lineHeight: 20,
+    lineHeight: 19,
   },
   folderButton: {
     borderRadius: 18,
@@ -427,7 +601,16 @@ const styles = StyleSheet.create({
   },
   folderButtonText: {
     color: palette.ink,
-    fontWeight: '800',
+    fontFamily: typography.label.fontFamily,
     fontSize: 15,
+  },
+  footer: {
+    color: palette.mutedInk,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 12,
+    lineHeight: 18,
+    opacity: 0.72,
+    textAlign: 'center',
+    paddingVertical: 8,
   },
 });

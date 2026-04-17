@@ -1,18 +1,22 @@
 import { describe, expect, test } from 'vitest';
 
-import { getProfileInitials } from './presentation';
+import { formatBuildVersion, getProfileInitials } from './presentation';
 
 describe('account presentation', () => {
-  test('builds initials from the profile name', () => {
-    expect(getProfileInitials('Tarun Sharma', 'tarun@example.com')).toBe('TS');
-  });
-
-  test('falls back to the email local part when the name is missing', () => {
-    expect(getProfileInitials('', 'priya.rao@example.com')).toBe('PR');
+  test('builds profile initials from name before email', () => {
+    expect(getProfileInitials({ name: 'Mary-Jane Watson', email: 'mary@example.com' })).toBe('MJ');
+    expect(getProfileInitials({ name: 'Single', email: 'single@example.com' })).toBe('SI');
+    expect(getProfileInitials({ name: null, email: 'tarun.k@example.com' })).toBe('TK');
+    expect(getProfileInitials({ name: '', email: '' })).toBe('');
   });
 
   test('returns an empty string when no name or email exists', () => {
-    expect(getProfileInitials(null, null)).toBe('');
-    expect(getProfileInitials('   ', '')).toBe('');
+    expect(getProfileInitials({ name: null, email: null })).toBe('');
+    expect(getProfileInitials({ name: '   ', email: '' })).toBe('');
+  });
+
+  test('formats build versions with an optional build number', () => {
+    expect(formatBuildVersion({ appVersion: '1.2.3', buildNumber: '45' })).toBe('v1.2.3 (45)');
+    expect(formatBuildVersion({ appVersion: '1.2.3' })).toBe('v1.2.3');
   });
 });

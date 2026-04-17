@@ -20,7 +20,9 @@ const { invoke, getSession, getUser } = vi.hoisted(() => ({
       user: {
         id: 'user-1',
         email: 'owner@example.com',
-        user_metadata: {},
+        user_metadata: {
+          avatar_url: 'https://cdn.example.com/avatar.png',
+        } as Record<string, unknown>,
       },
     },
     error: null,
@@ -91,6 +93,7 @@ describe('google drive auth session wiring', () => {
           id: 'user-1',
           email: 'owner@example.com',
           user_metadata: {
+            avatar_url: 'https://cdn.example.com/avatar.png',
             driveConnection: {
               status: 'connected',
               accountEmail: 'owner@example.com',
@@ -99,7 +102,7 @@ describe('google drive auth session wiring', () => {
               saveFolderName: 'Recordings',
               needsReconnect: false,
             },
-          },
+          } as Record<string, unknown>,
         },
       },
       error: null,
@@ -109,11 +112,37 @@ describe('google drive auth session wiring', () => {
 
     await expect(account.getAuthSession()).resolves.toMatchObject({
       user: {
+        avatarUrl: 'https://cdn.example.com/avatar.png',
         driveConnection: expect.objectContaining({
           status: 'connected',
           accountEmail: 'owner@example.com',
           saveFolderId: 'folder-1',
         }),
+      },
+    });
+  });
+
+  test('prefers trimmed avatar metadata in the documented order', async () => {
+    getUser.mockResolvedValueOnce({
+      data: {
+        user: {
+          id: 'user-1',
+          email: 'owner@example.com',
+          user_metadata: {
+            avatar_url: '   ',
+            picture: '  https://cdn.example.com/picture.png  ',
+            photo_url: 'https://cdn.example.com/photo.png',
+          } as Record<string, unknown>,
+        },
+      },
+      error: null,
+    });
+
+    const account = await import('./account');
+
+    await expect(account.getAuthSession()).resolves.toMatchObject({
+      user: {
+        avatarUrl: 'https://cdn.example.com/picture.png',
       },
     });
   });
