@@ -255,6 +255,68 @@ describe('local inference bridge', () => {
     expect(iosItems.map((item) => item.id)).toEqual(['whisper-base']);
   });
 
+  test('keeps the iOS starter bundle aligned with the allowed transcription model set', async () => {
+    const module = await importLocalModelsTestModule('ios');
+    const catalog = [
+      {
+        id: 'whisper-base',
+        kind: 'transcription',
+        engine: 'whisper.cpp',
+        displayName: 'Whisper Base',
+        version: 'custom',
+        downloadUrl: 'https://example.com/whisper-base.bin',
+        sha256: '',
+        sizeBytes: 1,
+        platforms: ['ios'],
+        minFreeSpaceBytes: 1,
+        recommended: true,
+        experimental: false,
+        description: 'Allowed on iOS.',
+      },
+      {
+        id: 'whisper-small',
+        kind: 'transcription',
+        engine: 'whisper.cpp',
+        displayName: 'Whisper Small',
+        version: 'custom',
+        downloadUrl: 'https://example.com/whisper-small.bin',
+        sha256: '',
+        sizeBytes: 1,
+        platforms: ['ios'],
+        minFreeSpaceBytes: 1,
+        recommended: false,
+        experimental: false,
+        description: 'Should stay hidden on iOS in this phase.',
+      },
+      {
+        id: 'gemma-3n-e2b-preview',
+        kind: 'summary',
+        engine: 'mediapipe-llm',
+        displayName: 'Gemma 3n E2B preview',
+        version: 'custom',
+        downloadUrl: '',
+        sha256: '',
+        sizeBytes: 1,
+        platforms: ['ios'],
+        minFreeSpaceBytes: 1,
+        recommended: true,
+        experimental: false,
+        description: 'Not part of the transcription starter bundle.',
+      },
+    ] as const;
+
+    const iosItems = module.getCatalogItemsForDevice(catalog, {
+      platform: 'ios',
+      localProcessingAvailable: true,
+      supportsSummary: false,
+      supportsTranscription: true,
+      requiresCustomBuild: true,
+      reason: 'iOS local transcription is available in this build.',
+    });
+
+    expect(iosItems.map((item) => item.id)).toEqual(['whisper-base']);
+  });
+
   test('rejects unsupported iOS transcription model downloads even if a custom catalog exposes them', async () => {
     const module = await importLocalModelsTestModule('ios');
 

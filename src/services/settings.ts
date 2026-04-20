@@ -92,6 +92,24 @@ export async function saveAppSettings(settings: AppSettings) {
   });
 }
 
+export async function applyOfflineSetupAutoConfig(params: {
+  bundleId: string;
+  modelIds: string[];
+  preferredTranscriptionModelId: string | null;
+}) {
+  const settings = await getAppSettings();
+
+  if (!settings.providers.local.transcriptionModel && params.preferredTranscriptionModelId) {
+    settings.providers.local.transcriptionModel = params.preferredTranscriptionModelId;
+  }
+
+  if (settings.selectedTranscriptionProvider === 'openai' && params.preferredTranscriptionModelId) {
+    settings.selectedTranscriptionProvider = 'local';
+  }
+
+  await saveAppSettings(settings);
+}
+
 export function sanitizeAppSettings(settings: AppSettings): AppSettings {
   const providers = Object.fromEntries(
     providerDefinitions.map((definition) => [

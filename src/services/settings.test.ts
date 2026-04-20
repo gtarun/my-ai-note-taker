@@ -48,6 +48,19 @@ const appPreferencesState = {
   has_seen_onboarding: 0,
 };
 
+const providerSettingsState = Object.fromEntries(
+  Object.entries(defaultProviderConfigs).map(([providerId, config]) => [
+    providerId,
+    {
+      provider_id: providerId,
+      api_key: config.apiKey,
+      base_url: config.baseUrl,
+      transcription_model: config.transcriptionModel,
+      summary_model: config.summaryModel,
+    },
+  ])
+);
+
 vi.mock('../db', () => ({
   getDatabase: () => ({
     getFirstAsync: vi.fn(async (source: string) => {
@@ -59,7 +72,7 @@ vi.mock('../db', () => ({
     }),
     getAllAsync: vi.fn(async (source: string) => {
       if (source.includes('FROM provider_settings')) {
-        return [];
+        return Object.values(providerSettingsState);
       }
 
       return [];
@@ -85,6 +98,17 @@ vi.mock('../db', () => ({
         appPreferencesState.model_catalog_url = String(params[3] ?? '');
         appPreferencesState.has_seen_onboarding = 0;
       }
+
+      if (source.includes('INSERT OR REPLACE INTO provider_settings')) {
+        const providerId = String(params[0]);
+        providerSettingsState[providerId as keyof typeof providerSettingsState] = {
+          provider_id: providerId,
+          api_key: String(params[1] ?? ''),
+          base_url: String(params[2] ?? ''),
+          transcription_model: String(params[3] ?? ''),
+          summary_model: String(params[4] ?? ''),
+        };
+      }
     }),
   }),
 }));
@@ -104,7 +128,7 @@ vi.mock('./cloudUserData', async () => {
   };
 });
 
-import { getAppSettings, saveAppSettings, sanitizeAppSettings } from './settings';
+import { applyOfflineSetupAutoConfig, getAppSettings, saveAppSettings, sanitizeAppSettings } from './settings';
 import { getHasSeenOnboarding, markOnboardingSeen } from './onboarding';
 import { defaultProviderConfigs } from './providers';
 import type { AppSettings } from '../types';
@@ -116,6 +140,15 @@ describe('settings persistence', () => {
     appPreferencesState.delete_uploaded_audio = 0;
     appPreferencesState.model_catalog_url = '';
     appPreferencesState.has_seen_onboarding = 0;
+    for (const [providerId, config] of Object.entries(defaultProviderConfigs)) {
+      providerSettingsState[providerId as keyof typeof providerSettingsState] = {
+        provider_id: providerId,
+        api_key: config.apiKey,
+        base_url: config.baseUrl,
+        transcription_model: config.transcriptionModel,
+        summary_model: config.summaryModel,
+      };
+    }
     mockGetAuthSession.mockReset();
     mockFetchCloudUserDataSnapshot.mockReset();
     mockSaveCloudSettings.mockReset();
@@ -194,5 +227,22 @@ describe('settings persistence', () => {
 
     expect(sanitized.selectedTranscriptionProvider).toBe('local');
     expect(sanitized.selectedSummaryProvider).toBe('openai');
+  });
+
+  test('fills empty local transcription config after a ready session', async () => {
+    await applyOfflineSetupAutoConfig({
+      bundleId: 'starter',
+      modelIds: ['whisper-base'],
+      preferredTranscriptionModelId: 'whisper-base',
+    });
+
+    await expect(getAppSettings()).resolves.toMatchObject({
+      selectedTranscriptionProvider: 'local',
+      providers: {
+        local: expect.objectContaining({
+          transcriptionModel: 'whisper-base',
+        }),
+      },
+    });
   });
 });

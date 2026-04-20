@@ -24,6 +24,29 @@ const sessionRowState = {
   is_dismissed: 0,
 };
 
+const mockApplyOfflineSetupAutoConfig = vi.hoisted(() => vi.fn(async () => undefined));
+
+vi.mock('react-native', () => ({
+  Platform: {
+    OS: 'ios',
+  },
+}));
+
+vi.mock('expo-file-system/legacy', () => ({
+  documentDirectory: 'file:///documents/',
+  getFreeDiskStorageAsync: vi.fn(async () => 10 * 1024 * 1024 * 1024),
+  getInfoAsync: vi.fn(async () => ({ exists: false })),
+  makeDirectoryAsync: vi.fn(async () => undefined),
+  createDownloadResumable: vi.fn(),
+  deleteAsync: vi.fn(async () => undefined),
+}));
+
+vi.mock('../utils/sha256', () => ({
+  Sha256: {
+    hash: vi.fn(),
+  },
+}));
+
 const defaultSession = {
   bundleId: '',
   bundleLabel: '',
@@ -94,7 +117,19 @@ vi.mock('../db', () => ({
   }),
 }));
 
-import { getOfflineSetupSession, saveOfflineSetupSession } from './offlineSetupSession';
+vi.mock('./settings', () => ({
+  applyOfflineSetupAutoConfig: mockApplyOfflineSetupAutoConfig,
+}));
+
+import {
+  getOfflineSetupSession,
+  markOfflineSetupFailed,
+  markOfflineSetupPausedOffline,
+  markOfflineSetupReady,
+  resolveOfflineSetupBundles,
+  saveOfflineSetupSession,
+  startOfflineSetup,
+} from './offlineSetupSession';
 
 describe('offline setup session storage', () => {
   beforeEach(() => {
@@ -194,6 +229,116 @@ describe('offline setup session storage', () => {
       updatedAt: null,
       autoConfiguredAt: null,
       isDismissed: false,
+    });
+  });
+
+  test('builds a starter bundle for iOS from the supported transcription model only', async () => {
+    expect(
+      resolveOfflineSetupBundles({
+        platform: 'ios',
+        catalog: [
+          {
+            id: 'whisper-base',
+            kind: 'transcription',
+            engine: 'whisper.cpp',
+            displayName: 'Whisper Base',
+            version: 'ggml',
+            downloadUrl: 'https://example.com/whisper-base.bin',
+            sha256: '',
+            sizeBytes: 152,
+            platforms: ['ios'],
+            minFreeSpaceBytes: 1,
+            recommended: true,
+            experimental: false,
+            description: 'base',
+          },
+        ],
+      })
+    ).toEqual([
+      expect.objectContaining({
+        id: 'starter',
+        modelIds: ['whisper-base'],
+        totalBytes: 152,
+        isRecommended: true,
+      }),
+    ]);
+  });
+
+  test('starts offline setup from the selected bundle', async () => {
+    await startOfflineSetup({
+      id: 'starter',
+      label: 'Starter',
+      modelIds: ['whisper-base'],
+      totalBytes: 152,
+      estimatedSeconds: 60,
+      isRecommended: true,
+      description: 'Fastest way to get to a first local result.',
+    });
+
+    expect(sessionRowState).toMatchObject({
+      bundle_id: 'starter',
+      bundle_label: 'Starter',
+      model_ids_json: '["whisper-base"]',
+      status: 'downloading',
+      bytes_downloaded: 0,
+      total_bytes: 152,
+      progress: 0,
+      estimated_seconds_remaining: 60,
+      last_error: null,
+      is_dismissed: 0,
+    });
+  });
+
+  test('marks offline setup as paused when the device goes offline', async () => {
+    await markOfflineSetupPausedOffline('Paused until Wi-Fi returns.');
+
+    expect(sessionRowState).toMatchObject({
+      status: 'paused_offline',
+      last_error: 'Paused until Wi-Fi returns.',
+    });
+  });
+
+  test('marks offline setup as failed without losing the current bundle context', async () => {
+    sessionRowState.bundle_id = 'starter';
+    sessionRowState.bundle_label = 'Starter';
+    sessionRowState.model_ids_json = '["whisper-base"]';
+    sessionRowState.total_bytes = 152;
+
+    await markOfflineSetupFailed('Download checksum mismatch.');
+
+    expect(sessionRowState).toMatchObject({
+      bundle_id: 'starter',
+      bundle_label: 'Starter',
+      model_ids_json: '["whisper-base"]',
+      total_bytes: 152,
+      status: 'failed',
+      last_error: 'Download checksum mismatch.',
+    });
+  });
+
+  test('marks offline setup ready and auto-configures local transcription', async () => {
+    sessionRowState.bundle_id = 'starter';
+    sessionRowState.bundle_label = 'Starter';
+    sessionRowState.model_ids_json = '["whisper-base"]';
+    sessionRowState.total_bytes = 152;
+
+    await markOfflineSetupReady({
+      preferredTranscriptionModelId: 'whisper-base',
+    });
+
+    expect(mockApplyOfflineSetupAutoConfig).toHaveBeenCalledWith({
+      bundleId: 'starter',
+      modelIds: ['whisper-base'],
+      preferredTranscriptionModelId: 'whisper-base',
+    });
+    expect(sessionRowState).toMatchObject({
+      status: 'ready',
+      bytes_downloaded: 152,
+      total_bytes: 152,
+      progress: 1,
+      estimated_seconds_remaining: 0,
+      last_error: null,
+      auto_configured_at: expect.any(String),
     });
   });
 });

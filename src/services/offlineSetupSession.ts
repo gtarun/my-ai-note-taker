@@ -1,5 +1,7 @@
 import { getDatabase } from '../db';
-import type { OfflineSetupSession } from '../types';
+import type { ModelCatalogItem, OfflineSetupBundleId, OfflineSetupSession } from '../types';
+import { isSupportedIosTranscriptionModel } from './localModels';
+import { applyOfflineSetupAutoConfig } from './settings';
 
 const DEFAULT_SESSION: OfflineSetupSession = {
   bundleId: '',
@@ -27,6 +29,16 @@ const OFFLINE_SETUP_STATUSES: OfflineSetupSession['status'][] = [
   'failed',
   'ready',
 ];
+
+export type OfflineSetupBundle = {
+  id: OfflineSetupBundleId;
+  label: string;
+  modelIds: string[];
+  totalBytes: number;
+  estimatedSeconds: number;
+  isRecommended: boolean;
+  description: string;
+};
 
 function parseModelIds(value: unknown) {
   if (typeof value !== 'string') {
@@ -56,6 +68,55 @@ function normalizeOfflineSetupStatus(value: unknown): OfflineSetupSession['statu
 
 function normalizeNetworkPolicy(value: unknown): OfflineSetupSession['networkPolicy'] {
   return value === 'wifi_or_cellular' ? 'wifi_or_cellular' : 'wifi_or_cellular';
+}
+
+function estimateBundleSeconds(totalBytes: number) {
+  return Math.max(60, Math.round(totalBytes / (25 * 1024 * 1024)));
+}
+
+function buildBundle(label: OfflineSetupBundle['label'], modelItems: ModelCatalogItem[], isRecommended: boolean): OfflineSetupBundle {
+  const totalBytes = modelItems.reduce((sum, item) => sum + item.sizeBytes, 0);
+
+  return {
+    id: label.toLowerCase() as OfflineSetupBundleId,
+    label,
+    modelIds: modelItems.map((item) => item.id),
+    totalBytes,
+    estimatedSeconds: estimateBundleSeconds(totalBytes),
+    isRecommended,
+    description:
+      label === 'Starter'
+        ? 'Fastest way to get to a first local result.'
+        : 'Larger offline bundle for broader local coverage.',
+  };
+}
+
+export function resolveOfflineSetupBundles({
+  platform,
+  catalog,
+}: {
+  platform: 'ios' | 'android';
+  catalog: ModelCatalogItem[];
+}): OfflineSetupBundle[] {
+  const visible = catalog.filter((item) => item.platforms.includes(platform));
+  const starterModels =
+    platform === 'ios'
+      ? visible.filter((item) => item.kind === 'transcription' && isSupportedIosTranscriptionModel(item.id))
+      : visible.filter((item) => item.recommended);
+  const fullModels =
+    platform === 'android' ? visible.filter((item) => item.recommended || !item.experimental) : [];
+
+  const bundles: OfflineSetupBundle[] = [];
+
+  if (starterModels.length) {
+    bundles.push(buildBundle('Starter', starterModels, true));
+  }
+
+  if (fullModels.length > starterModels.length) {
+    bundles.push(buildBundle('Full', fullModels, false));
+  }
+
+  return bundles;
 }
 
 export async function getOfflineSetupSession(): Promise<OfflineSetupSession> {
@@ -121,4 +182,71 @@ export async function saveOfflineSetupSession(session: OfflineSetupSession) {
     session.autoConfiguredAt,
     session.isDismissed ? 1 : 0
   );
+}
+
+export async function startOfflineSetup(bundle: OfflineSetupBundle) {
+  const startedAt = new Date().toISOString();
+  const current = await getOfflineSetupSession();
+
+  await saveOfflineSetupSession({
+    ...current,
+    bundleId: bundle.id,
+    bundleLabel: bundle.label,
+    modelIds: bundle.modelIds,
+    status: 'downloading',
+    bytesDownloaded: 0,
+    totalBytes: bundle.totalBytes,
+    progress: 0,
+    estimatedSecondsRemaining: bundle.estimatedSeconds,
+    networkPolicy: current.networkPolicy,
+    lastError: null,
+    startedAt,
+    updatedAt: startedAt,
+    autoConfiguredAt: null,
+    isDismissed: false,
+  });
+}
+
+export async function markOfflineSetupPausedOffline(message: string) {
+  const current = await getOfflineSetupSession();
+
+  await saveOfflineSetupSession({
+    ...current,
+    status: 'paused_offline',
+    lastError: message,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+export async function markOfflineSetupFailed(message: string) {
+  const current = await getOfflineSetupSession();
+
+  await saveOfflineSetupSession({
+    ...current,
+    status: 'failed',
+    lastError: message,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+export async function markOfflineSetupReady(params: { preferredTranscriptionModelId: string | null }) {
+  const current = await getOfflineSetupSession();
+
+  await applyOfflineSetupAutoConfig({
+    bundleId: current.bundleId,
+    modelIds: current.modelIds,
+    preferredTranscriptionModelId: params.preferredTranscriptionModelId,
+  });
+
+  const now = new Date().toISOString();
+  await saveOfflineSetupSession({
+    ...current,
+    status: 'ready',
+    bytesDownloaded: current.totalBytes,
+    progress: 1,
+    estimatedSecondsRemaining: 0,
+    lastError: null,
+    autoConfiguredAt: now,
+    updatedAt: now,
+  });
 }
