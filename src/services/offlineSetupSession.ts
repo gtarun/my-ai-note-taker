@@ -73,6 +73,10 @@ function normalizeNetworkPolicy(value: unknown): OfflineSetupSession['networkPol
   return value === 'wifi_or_cellular' ? 'wifi_or_cellular' : 'wifi_or_cellular';
 }
 
+function normalizeBundleId(value: unknown): OfflineSetupBundleId {
+  return value === 'starter' || value === 'full' ? value : '';
+}
+
 function estimateBundleSeconds(totalBytes: number) {
   return Math.max(60, Math.round(totalBytes / (25 * 1024 * 1024)));
 }
@@ -138,7 +142,7 @@ export async function getOfflineSetupSession(): Promise<OfflineSetupSession> {
   }
 
   return {
-    bundleId: String(row.bundle_id ?? ''),
+    bundleId: normalizeBundleId(row.bundle_id),
     bundleLabel: String(row.bundle_label ?? ''),
     modelIds: parseModelIds(row.model_ids_json),
     status: normalizeOfflineSetupStatus(row.status),

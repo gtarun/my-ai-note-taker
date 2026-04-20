@@ -1,4 +1,4 @@
-import { describe, expect, expectTypeOf, test, vi } from 'vitest';
+import { beforeEach, describe, expect, expectTypeOf, test, vi } from 'vitest';
 
 import type {
   OfflineSetupBundleId,
@@ -6,7 +6,25 @@ import type {
   OfflineSetupStatus,
 } from '../types';
 
-const sessionRowState = {
+type OfflineSetupSessionRowState = {
+  id: number;
+  bundle_id: string;
+  bundle_label: string;
+  model_ids_json: string;
+  status: string;
+  bytes_downloaded: number;
+  total_bytes: number;
+  progress: number;
+  estimated_seconds_remaining: number | null;
+  network_policy: string;
+  last_error: string | null;
+  started_at: string | null;
+  updated_at: string | null;
+  auto_configured_at: string | null;
+  is_dismissed: number;
+};
+
+const sessionRowState: OfflineSetupSessionRowState = {
   id: 1,
   bundle_id: '',
   bundle_label: '',

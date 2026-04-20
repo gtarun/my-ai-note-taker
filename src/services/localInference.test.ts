@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
+import type { ModelCatalogItem } from '../types';
+
 afterEach(() => {
   vi.resetModules();
   vi.unmock('react-native');
@@ -257,7 +259,7 @@ describe('local inference bridge', () => {
 
   test('keeps the iOS starter bundle aligned with the allowed transcription model set', async () => {
     const module = await importLocalModelsTestModule('ios');
-    const catalog = [
+    const catalog: ModelCatalogItem[] = [
       {
         id: 'whisper-base',
         kind: 'transcription',
@@ -303,7 +305,7 @@ describe('local inference bridge', () => {
         experimental: false,
         description: 'Not part of the transcription starter bundle.',
       },
-    ] as const;
+    ];
 
     const iosItems = module.getCatalogItemsForDevice(catalog, {
       platform: 'ios',
