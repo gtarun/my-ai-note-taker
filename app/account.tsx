@@ -1,4 +1,5 @@
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Application from 'expo-application';
 import Constants from 'expo-constants';
 import * as Linking from 'expo-linking';
 import { useFocusEffect } from 'expo-router';
@@ -56,10 +57,12 @@ function getBuildInfo() {
   const iosBuildNumber = readTrimmedString(expoConfig?.ios?.buildNumber);
   const androidVersionCode = expoConfig?.android?.versionCode;
   const nativeBuildVersion = readTrimmedString((Constants as { nativeBuildVersion?: string | null }).nativeBuildVersion);
+  const applicationBuildVersion = readTrimmedString(Application.nativeBuildVersion);
 
   const buildNumber =
     iosBuildNumber ||
     (typeof androidVersionCode === 'number' ? String(androidVersionCode) : '') ||
+    applicationBuildVersion ||
     nativeBuildVersion;
 
   const footerParts = getBuildFooterParts({
@@ -419,10 +422,7 @@ export default function AccountScreen() {
           ) : null}
         </FadeInView>
 
-        <Text style={styles.footer}>
-          Version {buildInfo.appVersionLabel}
-          {buildInfo.buildNumberLabel ? `  •  ${buildInfo.buildNumberLabel}` : ''}
-        </Text>
+        <Text style={styles.footer}>Version {buildInfo.versionLabel}</Text>
       </ScrollView>
     </SafeAreaView>
   );
