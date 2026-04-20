@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest';
 import {
   getDashboardCloudStatusCopy,
   getDashboardEmptyStateCopy,
+  getOfflineSetupCardCopy,
   getMeetingStatusMeta,
 } from './presentation';
 
@@ -56,6 +57,21 @@ describe('dashboard presentation', () => {
     ).toEqual({
       title: 'Cloud connected',
       actionLabel: 'Open profile',
+    });
+  });
+
+  test('returns dashboard copy for paused offline setup', () => {
+    expect(
+      getOfflineSetupCardCopy({
+        status: 'paused_offline',
+        bundleLabel: 'Starter',
+        progressPercent: 42,
+      })
+    ).toEqual({
+      title: 'Offline setup paused',
+      body: 'Connection was interrupted while Starter was downloading.',
+      actionLabel: 'Resume',
+      tone: 'tertiary',
     });
   });
 });

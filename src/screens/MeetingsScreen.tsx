@@ -23,12 +23,18 @@ import {
 import {
   getDashboardCloudStatusCopy,
   getDashboardEmptyStateCopy,
+  getOfflineSetupCardCopy,
   getMeetingStatusMeta,
 } from '../features/dashboard/presentation';
-import { RECORD_TAB_ROUTE, getMeetingDetailRoute } from '../navigation/routes';
+import {
+  RECORD_TAB_ROUTE,
+  SETTINGS_TAB_ROUTE,
+  getMeetingDetailRoute,
+} from '../navigation/routes';
 import { getAuthSession } from '../services/account';
 import { createMeetingFromImport, listMeetings } from '../services/meetings';
-import type { AuthSession, MeetingRow } from '../types';
+import { getOfflineSetupSession } from '../services/offlineSetupSession';
+import type { AuthSession, MeetingRow, OfflineSetupSession } from '../types';
 import { palette, typography } from '../theme';
 import { formatDuration, formatTimestamp } from '../utils/format';
 
@@ -37,11 +43,16 @@ const emptyCopy = getDashboardEmptyStateCopy();
 export default function HomeScreen() {
   const [meetings, setMeetings] = useState<MeetingRow[]>([]);
   const [session, setSession] = useState<AuthSession | null>(null);
+  const [offlineSetup, setOfflineSetup] = useState<OfflineSetupSession | null>(null);
   const [isImporting, setIsImporting] = useState(false);
 
   const loadMeetings = useCallback(async () => {
-    const data = await listMeetings();
+    const [data, setupSession] = await Promise.all([
+      listMeetings(),
+      getOfflineSetupSession(),
+    ]);
     setMeetings(data);
+    setOfflineSetup(setupSession);
 
     try {
       const storedSession = await getAuthSession();
@@ -82,6 +93,15 @@ export default function HomeScreen() {
 
   const importButtonLabel = isImporting ? 'Importing…' : 'Import audio';
   const cloudStatus = getDashboardCloudStatusCopy(session);
+  const offlineSetupCard =
+    offlineSetup && !offlineSetup.isDismissed && offlineSetup.status !== 'idle'
+      ? getOfflineSetupCardCopy({
+          status: offlineSetup.status,
+          bundleLabel: offlineSetup.bundleLabel || 'Starter',
+          progressPercent: Math.round(offlineSetup.progress * 100),
+        })
+      : null;
+  const offlineSetupProgress = Math.round((offlineSetup?.progress ?? 0) * 100);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -134,6 +154,45 @@ export default function HomeScreen() {
                   disabled={isImporting}
                 />
               </FadeInView>
+
+              {offlineSetup && offlineSetupCard ? (
+                <FadeInView delay={55}>
+                  <SurfaceCard muted style={styles.offlineSetupCard}>
+                    <View style={styles.offlineSetupHeader}>
+                      <View style={styles.cloudCopy}>
+                        <Text style={styles.cloudEyebrow}>Offline mode</Text>
+                        <Text style={styles.cloudTitle}>{offlineSetupCard.title}</Text>
+                        <Text style={styles.offlineSetupBody}>{offlineSetupCard.body}</Text>
+                      </View>
+                      <StatusChip
+                        label={
+                          offlineSetupCard.tone === 'danger'
+                            ? 'Needs attention'
+                            : offlineSetupCard.actionLabel
+                        }
+                        tone={offlineSetupCard.tone}
+                      />
+                    </View>
+
+                    {offlineSetup.status === 'downloading' ? (
+                      <View style={styles.offlineSetupProgressTrack}>
+                        <View
+                          style={[
+                            styles.offlineSetupProgressFill,
+                            { width: `${offlineSetupProgress}%` },
+                          ]}
+                        />
+                      </View>
+                    ) : null}
+
+                    <PillButton
+                      label={offlineSetupCard.actionLabel}
+                      onPress={() => router.push(SETTINGS_TAB_ROUTE)}
+                      variant="ghost"
+                    />
+                  </SurfaceCard>
+                </FadeInView>
+              ) : null}
 
               <FadeInView delay={70}>
                 <SurfaceCard muted style={styles.cloudCard}>
@@ -320,6 +379,36 @@ const styles = StyleSheet.create({
   },
   cloudCard: {
     paddingVertical: 14,
+  },
+  offlineSetupCard: {
+    gap: 12,
+    paddingVertical: 16,
+    borderColor: palette.accentSoft,
+    backgroundColor: '#f8fbff',
+  },
+  offlineSetupHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  offlineSetupBody: {
+    color: palette.mutedInk,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  offlineSetupProgressTrack: {
+    height: 8,
+    overflow: 'hidden',
+    borderRadius: 999,
+    backgroundColor: palette.accentSoft,
+  },
+  offlineSetupProgressFill: {
+    height: '100%',
+    minWidth: 8,
+    borderRadius: 999,
+    backgroundColor: palette.accent,
   },
   cloudRow: {
     flexDirection: 'row',
