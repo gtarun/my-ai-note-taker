@@ -8,6 +8,7 @@ import {
   displayModelLabel,
   formatBytes,
   getConfiguredProviderIds,
+  getSettingsProcessingMode,
   pickInitialProvider,
 } from './presentation';
 
@@ -89,5 +90,10 @@ describe('settings presentation', () => {
       { label: 'Transcription', value: 'OpenAI' },
       { label: 'Local transcription', value: '1 installed' },
     ]);
+  });
+
+  test('derives processing mode from the raw selected transcription provider', () => {
+    expect(getSettingsProcessingMode('local')).toBe('offline');
+    expect(getSettingsProcessingMode('openai')).toBe('cloud');
   });
 });

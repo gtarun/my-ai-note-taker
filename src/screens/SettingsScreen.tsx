@@ -31,6 +31,7 @@ import {
   displayModelLabel,
   formatBytes,
   getConfiguredProviderIds,
+  getSettingsProcessingMode,
   pickInitialProvider,
 } from '../features/settings/presentation';
 import { IOS_LOCAL_TRANSCRIPTION_MODEL_ID, getLocalDeviceSupport } from '../services/localInference';
@@ -63,8 +64,6 @@ import type {
   ProviderId,
 } from '../types';
 import { palette, radii, typography } from '../theme';
-
-type ProcessingMode = 'cloud' | 'offline';
 
 function getLocalTranscriptionModelId(modelId: string, whisperBaseInstalled: boolean) {
   const trimmed = modelId.trim();
@@ -188,8 +187,7 @@ export default function SettingsScreen() {
 
   const sanitizedForm = sanitizeAppSettings(form);
   const configuredProviderIds = getConfiguredProviderIds(sanitizedForm.providers);
-  const processingMode: ProcessingMode =
-    sanitizedForm.selectedTranscriptionProvider === 'local' ? 'offline' : 'cloud';
+  const processingMode = getSettingsProcessingMode(form.selectedTranscriptionProvider);
   const cloudTranscriptionProviderIds = providerDefinitions
     .filter((definition) => definition.supportsTranscription && definition.id !== 'local')
     .map((definition) => definition.id);
@@ -198,18 +196,20 @@ export default function SettingsScreen() {
     .map((definition) => definition.id);
   const editingProvider = providerMap[editingProviderId];
   const editingConfig = form.providers[editingProviderId];
-  const transcriptionProvider = providerMap[sanitizedForm.selectedTranscriptionProvider];
+  const selectedTranscriptionProviderId =
+    processingMode === 'offline' ? 'local' : sanitizedForm.selectedTranscriptionProvider;
+  const transcriptionProvider = providerMap[selectedTranscriptionProviderId];
   const summaryProvider = providerMap[sanitizedForm.selectedSummaryProvider];
   const transcriptionModelId =
-    sanitizedForm.selectedTranscriptionProvider === 'local'
+    selectedTranscriptionProviderId === 'local'
       ? getLocalTranscriptionModelId(
-          sanitizedForm.providers.local.transcriptionModel,
+          form.providers.local.transcriptionModel,
           localTranscriptionModelIsInstalled
         )
-      : sanitizedForm.providers[sanitizedForm.selectedTranscriptionProvider].transcriptionModel;
+      : sanitizedForm.providers[selectedTranscriptionProviderId].transcriptionModel;
   const summaryModelId = sanitizedForm.providers[sanitizedForm.selectedSummaryProvider].summaryModel;
   const transcriptionModelLabel =
-    sanitizedForm.selectedTranscriptionProvider === 'local'
+    selectedTranscriptionProviderId === 'local'
       ? displayModelLabel(installedTranscriptionModels, transcriptionModelId || 'No model selected yet')
       : transcriptionModelId || 'No model selected yet';
   const summaryModelLabel = summaryModelId || 'No model selected yet';
@@ -234,7 +234,7 @@ export default function SettingsScreen() {
     setForm((current) => (current ? { ...current, [key]: value } : current));
   };
 
-  const setProcessingMode = (nextMode: ProcessingMode) => {
+  const setProcessingMode = (nextMode: typeof processingMode) => {
     setForm((current) => {
       if (!current) {
         return current;
@@ -589,7 +589,7 @@ export default function SettingsScreen() {
                   providerId={providerId}
                   configured={configuredProviderIds.includes(providerId)}
                   active={
-                    providerId === sanitizedForm.selectedTranscriptionProvider ||
+                    providerId === selectedTranscriptionProviderId ||
                     providerId === sanitizedForm.selectedSummaryProvider
                   }
                   onConfigure={() => setEditingProviderId(providerId)}

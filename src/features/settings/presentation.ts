@@ -1,6 +1,12 @@
 import { isProviderConfigured, providerDefinitions } from '../../services/providers';
 import type { AppSettings, InstalledModelRow, ProviderConfig, ProviderId } from '../../types';
 
+export type SettingsProcessingMode = 'cloud' | 'offline';
+
+export function getSettingsProcessingMode(selectedTranscriptionProvider: ProviderId): SettingsProcessingMode {
+  return selectedTranscriptionProvider === 'local' ? 'offline' : 'cloud';
+}
+
 export function getConfiguredProviderIds(
   providers: Record<ProviderId, ProviderConfig>,
   mode?: 'transcription' | 'summary'
