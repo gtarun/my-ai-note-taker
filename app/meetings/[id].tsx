@@ -9,7 +9,6 @@ import {
   Modal,
   Pressable,
   SafeAreaView,
-  ScrollView,
   Share,
   StyleSheet,
   Text,
@@ -18,6 +17,7 @@ import {
 } from 'react-native';
 
 import { FadeInView } from '../../src/components/FadeInView';
+import { KeyboardAwareScrollView } from '../../src/components/KeyboardAwareScrollView';
 import { ScreenBackground } from '../../src/components/ScreenBackground';
 import {
   MEETING_DETAIL_TITLE_ACTION_SLOT_MIN_WIDTH,
@@ -291,7 +291,7 @@ export default function MeetingDetailScreen() {
     <SafeAreaView style={styles.safeArea}>
       <Stack.Screen options={screenOptions} />
       <ScreenBackground />
-      <ScrollView contentContainerStyle={styles.container}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.container}>
         <FadeInView style={styles.headerCard}>
           <View style={styles.titleRow}>
             <TextInput
@@ -511,7 +511,7 @@ export default function MeetingDetailScreen() {
             <Text style={styles.dangerButtonText}>{isDeleting ? 'Deleting…' : 'Delete meeting'}</Text>
           </Pressable>
         </FadeInView>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <Modal visible={isLayerPickerVisible} animationType="slide" transparent onRequestClose={() => setIsLayerPickerVisible(false)}>
         <View style={styles.modalBackdrop}>
@@ -526,7 +526,7 @@ export default function MeetingDetailScreen() {
               Pick a layer for structured extraction, or continue without one to run the normal transcript + summary flow.
             </Text>
 
-            <ScrollView contentContainerStyle={styles.layerPickerOptions}>
+            <KeyboardAwareScrollView contentContainerStyle={styles.layerPickerOptions}>
               <Pressable
                 style={styles.layerOption}
                 onPress={() => {
@@ -554,7 +554,7 @@ export default function MeetingDetailScreen() {
                   </Text>
                 </Pressable>
               ))}
-            </ScrollView>
+            </KeyboardAwareScrollView>
 
             <View style={styles.layerPickerActions}>
               <Pressable

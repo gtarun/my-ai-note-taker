@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 
 import { FadeInView } from '../components/FadeInView';
+import { KeyboardAwareScrollView } from '../components/KeyboardAwareScrollView';
 import { ScreenBackground } from '../components/ScreenBackground';
 import { PillButton, SectionHeading, SurfaceCard } from '../components/ui';
 import {
@@ -524,7 +525,7 @@ export default function LayersScreen() {
       <Modal visible={isEditorVisible} animationType="slide" transparent onRequestClose={closeEditor}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <ScrollView contentContainerStyle={styles.modalContent}>
+            <KeyboardAwareScrollView contentContainerStyle={styles.modalContent}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>{draft.id ? 'Edit layer' : 'New layer'}</Text>
                 <Pressable onPress={closeEditor} hitSlop={10}>
@@ -593,7 +594,7 @@ export default function LayersScreen() {
                   <Text style={styles.emptyFieldsBody}>Add a field to describe what the AI should extract.</Text>
                 </View>
               )}
-            </ScrollView>
+            </KeyboardAwareScrollView>
 
             <View style={styles.modalActions}>
               <PillButton label="Cancel" onPress={closeEditor} variant="ghost" />
@@ -601,7 +602,7 @@ export default function LayersScreen() {
             </View>
             {isSheetPickerVisible ? (
               <View style={styles.inlineOverlay}>
-                <ScrollView contentContainerStyle={styles.inlineOverlayContent}>
+                <KeyboardAwareScrollView contentContainerStyle={styles.inlineOverlayContent}>
                   <View style={styles.modalHeader}>
                     <View style={styles.modalHeaderCopy}>
                       <Text style={styles.modalTitle}>{sheetPickerTitle}</Text>
@@ -748,13 +749,13 @@ export default function LayersScreen() {
                       ) : null}
                     </View>
                   ) : null}
-                </ScrollView>
+                </KeyboardAwareScrollView>
               </View>
             ) : null}
 
             {isFieldEditorVisible ? (
               <View style={styles.inlineOverlay}>
-                <View style={styles.fieldModalCard}>
+                <KeyboardAwareScrollView contentContainerStyle={styles.fieldModalCard}>
                   <View style={styles.modalHeader}>
                     <Text style={styles.modalTitle}>{activeField ? 'Field details' : 'New field'}</Text>
                     <Pressable onPress={closeFieldEditor} hitSlop={10}>
@@ -767,7 +768,9 @@ export default function LayersScreen() {
                       <TextInput
                         style={styles.input}
                         value={activeField.id}
-                        onChangeText={(value) => setActiveField((current) => (current ? { ...current, id: value } : current))}
+                        onChangeText={(value) =>
+                          setActiveField((current) => (current ? { ...current, id: value } : current))
+                        }
                         placeholder="field_id"
                         autoCapitalize="none"
                         placeholderTextColor={palette.mutedInk}
@@ -802,7 +805,7 @@ export default function LayersScreen() {
                     )}
                     <PillButton label="Save field" onPress={handleSaveField} />
                   </View>
-                </View>
+                </KeyboardAwareScrollView>
               </View>
             ) : null}
           </View>

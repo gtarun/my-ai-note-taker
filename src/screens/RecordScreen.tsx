@@ -5,7 +5,6 @@ import {
   Alert,
   Pressable,
   SafeAreaView,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -13,6 +12,7 @@ import {
 } from 'react-native';
 
 import { FadeInView } from '../components/FadeInView';
+import { KeyboardAwareScrollView } from '../components/KeyboardAwareScrollView';
 import { ScreenBackground } from '../components/ScreenBackground';
 import { getMeetingDetailEntryMethod } from '../features/meetings/navigation';
 import {
@@ -74,7 +74,7 @@ export default function RecordScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScreenBackground />
-      <ScrollView contentContainerStyle={styles.container}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.container}>
         <FadeInView style={styles.notice}>
           <View style={styles.noticeHeader}>
             <Feather name="shield" size={16} color={palette.ink} />
@@ -128,7 +128,7 @@ export default function RecordScreen() {
             Make sure everyone in the meeting knows it’s being recorded. You own that responsibility.
           </Text>
         </FadeInView>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }

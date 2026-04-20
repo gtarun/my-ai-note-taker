@@ -18,7 +18,6 @@ import {
 import { FadeInView } from '../src/components/FadeInView';
 import { ScreenBackground } from '../src/components/ScreenBackground';
 import {
-  formatBuildVersion,
   getBuildFooterParts,
   getProfileInitials,
 } from '../src/features/account/presentation';
@@ -63,10 +62,6 @@ function getBuildInfo() {
     (typeof androidVersionCode === 'number' ? String(androidVersionCode) : '') ||
     nativeBuildVersion;
 
-  const versionLabel = formatBuildVersion({
-    appVersion,
-    buildNumber,
-  });
   const footerParts = getBuildFooterParts({
     appVersion,
     buildNumber,
@@ -75,7 +70,6 @@ function getBuildInfo() {
   return {
     appVersion,
     buildNumber: typeof buildNumber === 'string' ? buildNumber.trim() : '',
-    versionLabel,
     ...footerParts,
   };
 }

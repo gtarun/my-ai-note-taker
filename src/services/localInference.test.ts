@@ -340,4 +340,71 @@ describe('local inference bridge', () => {
       })
     ).rejects.toThrow('Only whisper-base is supported for local transcription on iOS in this phase.');
   });
+
+  test('rejects duplicate downloads for the same paid local model while one is active', async () => {
+    let resolveDownload: (value: { uri: string }) => void = () => undefined;
+    const downloadPromise = new Promise<{ uri: string }>((resolve) => {
+      resolveDownload = resolve;
+    });
+    const createDownloadResumable = vi.fn(() => ({
+      downloadAsync: vi.fn(() => downloadPromise),
+    }));
+
+    vi.doMock('react-native', () => ({
+      Platform: {
+        OS: 'android',
+      },
+    }));
+
+    vi.doMock('expo-file-system/legacy', () => ({
+      documentDirectory: 'file:///documents/',
+      getFreeDiskStorageAsync: vi.fn(async () => 10 * 1024 * 1024 * 1024),
+      getInfoAsync: vi.fn(async () => ({ exists: true, size: 1 })),
+      makeDirectoryAsync: vi.fn(async () => undefined),
+      createDownloadResumable,
+      deleteAsync: vi.fn(async () => undefined),
+    }));
+
+    vi.doMock('../db', () => ({
+      getDatabase: () => ({
+        runAsync: vi.fn(async () => undefined),
+      }),
+    }));
+
+    vi.doMock('../utils/sha256', () => ({
+      Sha256: {
+        hash: vi.fn(),
+      },
+    }));
+
+    const module = await import('./localModels');
+    const item: ModelCatalogItem = {
+      id: 'whisper-base',
+      kind: 'transcription',
+      engine: 'whisper.cpp',
+      displayName: 'Whisper Base',
+      version: 'ggml',
+      downloadUrl: 'https://example.com/whisper-base.bin',
+      sha256: '',
+      sizeBytes: 1,
+      platforms: ['android'],
+      minFreeSpaceBytes: 1,
+      recommended: true,
+      experimental: false,
+      description: 'Paid local model download.',
+    };
+
+    const firstDownload = module.downloadModel(item);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await expect(module.downloadModel(item)).rejects.toThrow('Whisper Base is already downloading.');
+
+    resolveDownload({ uri: 'file:///documents/models/whisper-base.bin' });
+    await expect(firstDownload).resolves.toMatchObject({
+      id: 'whisper-base',
+      status: 'installed',
+    });
+    expect(createDownloadResumable).toHaveBeenCalledTimes(1);
+  });
 });

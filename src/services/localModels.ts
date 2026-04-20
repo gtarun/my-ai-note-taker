@@ -16,6 +16,7 @@ import { Sha256 } from '../utils/sha256';
 const MODEL_DIR = `${FileSystem.documentDirectory}models`;
 const SHA256_CHUNK_BYTES = 256 * 1024;
 const HUGGING_FACE_BASE_URL = 'https://huggingface.co';
+const activeModelDownloadIds = new Set<string>();
 export const IOS_SUPPORTED_TRANSCRIPTION_MODEL_IDS = new Set(['whisper-base']);
 
 const BUILT_IN_MODEL_CATALOG: ModelCatalogItem[] = [
@@ -225,6 +226,23 @@ export function isSupportedIosTranscriptionModel(modelId: string) {
 }
 
 export async function downloadModel(
+  catalogItem: ModelCatalogItem,
+  options?: { onProgress?: (progress: number) => void }
+) {
+  if (activeModelDownloadIds.has(catalogItem.id)) {
+    throw new Error(`${catalogItem.displayName} is already downloading.`);
+  }
+
+  activeModelDownloadIds.add(catalogItem.id);
+
+  try {
+    return await downloadModelOnce(catalogItem, options);
+  } finally {
+    activeModelDownloadIds.delete(catalogItem.id);
+  }
+}
+
+async function downloadModelOnce(
   catalogItem: ModelCatalogItem,
   options?: { onProgress?: (progress: number) => void }
 ) {

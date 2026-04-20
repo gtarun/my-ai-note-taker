@@ -1,5 +1,6 @@
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { router } from 'expo-router';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Alert,
   Linking,
@@ -8,7 +9,6 @@ import {
   PressableProps,
   Platform,
   SafeAreaView,
-  ScrollView,
   StyleSheet,
   Switch,
   Text,
@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 
 import { FadeInView } from '../components/FadeInView';
+import { KeyboardAwareScrollView } from '../components/KeyboardAwareScrollView';
 import { ScreenBackground } from '../components/ScreenBackground';
 import {
   PillButton,
@@ -63,6 +64,8 @@ import type {
 } from '../types';
 import { palette, radii, typography } from '../theme';
 
+type ProcessingMode = 'cloud' | 'offline';
+
 function getLocalTranscriptionModelId(modelId: string, whisperBaseInstalled: boolean) {
   const trimmed = modelId.trim();
 
@@ -91,6 +94,8 @@ export default function SettingsScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isRefreshingCatalog, setIsRefreshingCatalog] = useState(false);
   const [offlineSetup, setOfflineSetup] = useState<OfflineSetupSession | null>(null);
+  const [showAdvancedEndpoint, setShowAdvancedEndpoint] = useState(false);
+  const activeDownloadIdsRef = useRef(new Set<string>());
 
   useEffect(() => {
     void hydrateScreen();
@@ -183,8 +188,14 @@ export default function SettingsScreen() {
 
   const sanitizedForm = sanitizeAppSettings(form);
   const configuredProviderIds = getConfiguredProviderIds(sanitizedForm.providers);
-  const transcriptionProviderIds = getConfiguredProviderIds(sanitizedForm.providers, 'transcription');
-  const summaryProviderIds = getConfiguredProviderIds(sanitizedForm.providers, 'summary');
+  const processingMode: ProcessingMode =
+    sanitizedForm.selectedTranscriptionProvider === 'local' ? 'offline' : 'cloud';
+  const cloudTranscriptionProviderIds = providerDefinitions
+    .filter((definition) => definition.supportsTranscription && definition.id !== 'local')
+    .map((definition) => definition.id);
+  const cloudSummaryProviderIds = providerDefinitions
+    .filter((definition) => definition.supportsSummary && definition.id !== 'local')
+    .map((definition) => definition.id);
   const editingProvider = providerMap[editingProviderId];
   const editingConfig = form.providers[editingProviderId];
   const transcriptionProvider = providerMap[sanitizedForm.selectedTranscriptionProvider];
@@ -212,9 +223,44 @@ export default function SettingsScreen() {
     transcriptionProviderLabel: transcriptionProvider.label,
     installedTranscriptionCount: installedTranscriptionModels.length,
   });
+  const configuredRows = configuredProviderIds.length
+    ? configuredProviderIds
+    : ([sanitizedForm.selectedTranscriptionProvider, sanitizedForm.selectedSummaryProvider].filter(
+        (providerId, index, providerIds): providerId is ProviderId =>
+          providerIds.indexOf(providerId) === index
+      ));
 
   const updateForm = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     setForm((current) => (current ? { ...current, [key]: value } : current));
+  };
+
+  const setProcessingMode = (nextMode: ProcessingMode) => {
+    setForm((current) => {
+      if (!current) {
+        return current;
+      }
+
+      if (nextMode === 'offline') {
+        return {
+          ...current,
+          selectedTranscriptionProvider: 'local',
+          selectedSummaryProvider:
+            current.selectedSummaryProvider === 'local' ? 'openai' : current.selectedSummaryProvider,
+        };
+      }
+
+      return {
+        ...current,
+        selectedTranscriptionProvider:
+          current.selectedTranscriptionProvider === 'local'
+            ? getFallbackCloudProviderId(current, 'transcription')
+            : current.selectedTranscriptionProvider,
+        selectedSummaryProvider:
+          current.selectedSummaryProvider === 'local'
+            ? getFallbackCloudProviderId(current, 'summary')
+            : current.selectedSummaryProvider,
+      };
+    });
   };
 
   const updateProvider = <K extends keyof ProviderConfig>(
@@ -306,6 +352,12 @@ export default function SettingsScreen() {
     const bundle = buildOfflineSetupBundleFromModel(item);
 
     try {
+      if (activeDownloadIdsRef.current.has(item.id)) {
+        Alert.alert('Download in progress', `${item.displayName} is already downloading.`);
+        return;
+      }
+
+      activeDownloadIdsRef.current.add(item.id);
       await startOfflineSetup(bundle);
       setOfflineSetup(await getOfflineSetupSession());
 
@@ -364,6 +416,8 @@ export default function SettingsScreen() {
       }
       setOfflineSetup(await getOfflineSetupSession());
       Alert.alert('Download failed', message);
+    } finally {
+      activeDownloadIdsRef.current.delete(item.id);
     }
   };
 
@@ -421,10 +475,14 @@ export default function SettingsScreen() {
     }
   };
 
+  const openOnboarding = () => {
+    router.push('/onboarding');
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScreenBackground />
-      <ScrollView contentContainerStyle={styles.container}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.container}>
         <FadeInView>
           <SectionHeading
             title="Current setup"
@@ -434,6 +492,21 @@ export default function SettingsScreen() {
 
         <FadeInView delay={30}>
           <SurfaceCard muted style={styles.summaryCard}>
+            <View style={styles.modeSwitcher}>
+              <ModeButton
+                label="Cloud"
+                description="API providers"
+                selected={processingMode === 'cloud'}
+                onPress={() => setProcessingMode('cloud')}
+              />
+              <ModeButton
+                label="Offline"
+                description="Local-first"
+                selected={processingMode === 'offline'}
+                onPress={() => setProcessingMode('offline')}
+              />
+            </View>
+
             <View style={styles.summaryRows}>
               {overviewItems.map((item) => (
                 <View key={item.label} style={styles.summaryRow}>
@@ -449,59 +522,100 @@ export default function SettingsScreen() {
                 onPress={handleSave}
                 disabled={isSaving}
               />
+              <PillButton
+                label="Replay onboarding"
+                onPress={openOnboarding}
+                variant="ghost"
+                icon={<Feather name="rotate-ccw" size={16} color={palette.ink} />}
+              />
             </View>
           </SurfaceCard>
         </FadeInView>
 
-        <AssignmentSection
-          delay={45}
-          title="Transcription provider"
-          subtitle="Choose which configured provider turns audio into text."
-          icon={<Feather name="mic" size={18} color={palette.ink} />}
-          mode="transcription"
-          selectedProviderId={sanitizedForm.selectedTranscriptionProvider}
-          providerIds={transcriptionProviderIds}
-          providers={sanitizedForm.providers}
-          onSelect={(providerId) => updateForm('selectedTranscriptionProvider', providerId)}
-          localModelOptions={localTranscriptionOptions}
-        />
+        <FadeInView delay={55}>
+          <SurfaceCard style={styles.processingCard}>
+            {processingMode === 'cloud' ? (
+              <>
+                <SectionHeading
+                  title="Cloud processing"
+                  subtitle="Choose providers from dropdowns. Configure only the providers you plan to use."
+                />
+                <ProviderDropdown
+                  label="Transcription provider"
+                  value={sanitizedForm.selectedTranscriptionProvider}
+                  providerIds={cloudTranscriptionProviderIds}
+                  onSelect={(providerId) => updateForm('selectedTranscriptionProvider', providerId)}
+                />
+                <ProviderDropdown
+                  label="Summary provider"
+                  value={sanitizedForm.selectedSummaryProvider}
+                  providerIds={cloudSummaryProviderIds}
+                  onSelect={(providerId) => updateForm('selectedSummaryProvider', providerId)}
+                />
+              </>
+            ) : (
+              <>
+                <SectionHeading
+                  title="Offline mode"
+                  subtitle="Use local transcription when the native runtime and a compatible model are installed."
+                />
+                <SurfaceCard muted style={styles.localRuntimeCard}>
+                  <Text style={styles.utilityLabel}>On-device runtime</Text>
+                  <Text style={styles.rowBody}>
+                    {deviceSupport?.localProcessingAvailable
+                      ? 'Ready for local transcription in this build.'
+                      : deviceSupport?.reason ?? 'Checking local runtime availability.'}
+                  </Text>
+                  <ModelDropdown
+                    label="Active transcription model"
+                    value={form.providers.local.transcriptionModel}
+                    options={localTranscriptionOptions}
+                    onSelect={(value) => updateProvider('local', 'transcriptionModel', value)}
+                    emptyText={
+                      Platform.OS === 'ios'
+                        ? 'Download whisper-base below before selecting Offline mode.'
+                        : 'Download a local transcription model below before selecting Offline mode.'
+                    }
+                  />
+                </SurfaceCard>
+              </>
+            )}
 
-        <AssignmentSection
-          delay={75}
-          title="Summary provider"
-          subtitle="Choose which configured provider writes summaries, action items, and decisions."
-          icon={<Feather name="file-text" size={18} color={palette.ink} />}
-          mode="summary"
-          selectedProviderId={sanitizedForm.selectedSummaryProvider}
-          providerIds={summaryProviderIds}
-          providers={sanitizedForm.providers}
-          onSelect={(providerId) => updateForm('selectedSummaryProvider', providerId)}
-          localModelOptions={[]}
-        />
+            <View style={styles.configuredProviderList}>
+              <Text style={styles.utilityLabel}>Configured providers</Text>
+              {configuredRows.map((providerId) => (
+                <ConfiguredProviderRow
+                  key={providerId}
+                  providerId={providerId}
+                  configured={configuredProviderIds.includes(providerId)}
+                  active={
+                    providerId === sanitizedForm.selectedTranscriptionProvider ||
+                    providerId === sanitizedForm.selectedSummaryProvider
+                  }
+                  onConfigure={() => setEditingProviderId(providerId)}
+                />
+              ))}
+            </View>
+          </SurfaceCard>
+        </FadeInView>
 
         <FadeInView delay={105}>
           <SurfaceCard style={styles.providersSection}>
             <SectionHeading
-              title="Configured providers"
-              subtitle="Configure each provider once, then reuse it above for transcription or summary."
+              title="Provider settings"
+              subtitle="Choose a provider to edit credentials and model defaults."
             />
             <View style={styles.providerStats}>
               <StatusChip label={`${configuredProviderIds.length} configured`} tone="secondary" />
               <StatusChip label={`${providerDefinitions.length} available`} tone="tertiary" />
             </View>
 
-            <View style={styles.providerChipGrid}>
-              {providerDefinitions.map((definition) => (
-                <ProviderPickerChip
-                  key={definition.id}
-                  providerId={definition.id}
-                  label={definition.label}
-                  selected={editingProviderId === definition.id}
-                  configured={configuredProviderIds.includes(definition.id)}
-                  onPress={() => setEditingProviderId(definition.id)}
-                />
-              ))}
-            </View>
+            <ProviderDropdown
+              label="Provider to configure"
+              value={editingProviderId}
+              providerIds={providerDefinitions.map((definition) => definition.id)}
+              onSelect={setEditingProviderId}
+            />
 
             <SurfaceCard muted style={styles.selectedProviderCard}>
               <View style={styles.providerHeader}>
@@ -568,36 +682,53 @@ export default function SettingsScreen() {
                     />
                   </FieldGroup>
 
-                  <FieldGroup>
-                    <Label text={editingProviderId === 'custom' ? 'Base URL' : 'Base URL override'} />
-                    <TextInput
-                      style={styles.input}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      placeholder={editingProvider.baseUrlPlaceholder}
-                      placeholderTextColor={palette.mutedInk}
-                      value={editingConfig.baseUrl}
-                      onChangeText={(value) => updateProvider(editingProviderId, 'baseUrl', value)}
-                    />
-                  </FieldGroup>
-
                   {editingProvider.supportsTranscription ? (
-                    <ModelField
+                    <ModelDropdown
                       label="Default transcription model"
                       value={editingConfig.transcriptionModel}
-                      options={editingProvider.transcriptionModels}
-                      onChange={(value) => updateProvider(editingProviderId, 'transcriptionModel', value)}
+                      options={toModelOptions(editingProvider.transcriptionModels)}
+                      onSelect={(value) => updateProvider(editingProviderId, 'transcriptionModel', value)}
+                      emptyText="This provider does not publish preset transcription models yet."
                     />
                   ) : null}
 
                   {editingProvider.supportsSummary ? (
-                    <ModelField
+                    <ModelDropdown
                       label="Default summary model"
                       value={editingConfig.summaryModel}
-                      options={editingProvider.summaryModels}
-                      onChange={(value) => updateProvider(editingProviderId, 'summaryModel', value)}
+                      options={toModelOptions(editingProvider.summaryModels)}
+                      onSelect={(value) => updateProvider(editingProviderId, 'summaryModel', value)}
+                      emptyText="This provider does not publish preset summary models yet."
                     />
                   ) : null}
+
+                  {editingProviderId === 'custom' || showAdvancedEndpoint ? (
+                    <FieldGroup>
+                      <Label text={editingProviderId === 'custom' ? 'Base URL' : 'Advanced base URL'} />
+                      <TextInput
+                        style={styles.input}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        placeholder={editingProvider.baseUrlPlaceholder}
+                        placeholderTextColor={palette.mutedInk}
+                        value={editingConfig.baseUrl}
+                        onChangeText={(value) => updateProvider(editingProviderId, 'baseUrl', value)}
+                      />
+                    </FieldGroup>
+                  ) : (
+                    <PillButton
+                      label="Show advanced endpoint"
+                      onPress={() => setShowAdvancedEndpoint(true)}
+                      variant="ghost"
+                      icon={<Feather name="sliders" size={16} color={palette.ink} />}
+                    />
+                  )}
+
+                  <PillButton
+                    label={isSaving ? 'Saving…' : 'Save provider settings'}
+                    onPress={handleSave}
+                    disabled={isSaving}
+                  />
 
                   <PillButton
                     label="Clear saved provider"
@@ -610,75 +741,77 @@ export default function SettingsScreen() {
           </SurfaceCard>
         </FadeInView>
 
-        <FadeInView delay={150}>
-          <SurfaceCard style={styles.localModelsSection}>
-            <SectionHeading
-              title="Local models"
-              subtitle="Manage on-device models for offline or private transcription."
-            />
+        {processingMode === 'offline' ? (
+          <FadeInView delay={150}>
+            <SurfaceCard style={styles.localModelsSection}>
+              <SectionHeading
+                title="Local models"
+                subtitle="Manage on-device models for offline or private transcription."
+              />
 
-            <SurfaceCard muted style={styles.runtimeCard}>
-              <View style={styles.providerHeader}>
-                <View style={styles.providerCopy}>
-                  <Text style={styles.runtimeTitle}>Runtime status</Text>
-                  <Text style={styles.rowBody}>
-                    {deviceSupport?.reason ??
-                      'Checking device support for the native local transcription runtime and model execution path.'}
-                  </Text>
+              <SurfaceCard muted style={styles.runtimeCard}>
+                <View style={styles.providerHeader}>
+                  <View style={styles.providerCopy}>
+                    <Text style={styles.runtimeTitle}>Runtime status</Text>
+                    <Text style={styles.rowBody}>
+                      {deviceSupport?.reason ??
+                        'Checking device support for the native local transcription runtime and model execution path.'}
+                    </Text>
+                  </View>
+                  <StatusChip
+                    label={deviceSupport?.localProcessingAvailable ? 'Ready' : 'Not ready'}
+                    tone={deviceSupport?.localProcessingAvailable ? 'secondary' : 'tertiary'}
+                  />
                 </View>
-                <StatusChip
-                  label={deviceSupport?.localProcessingAvailable ? 'Ready' : 'Not ready'}
-                  tone={deviceSupport?.localProcessingAvailable ? 'secondary' : 'tertiary'}
+              </SurfaceCard>
+
+              <FieldGroup>
+                <Label text="Optional custom model catalog URL" />
+                <TextInput
+                  style={styles.input}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  placeholder="https://your-hosted-catalog.example/catalog.json"
+                  placeholderTextColor={palette.mutedInk}
+                  value={form.modelCatalogUrl}
+                  onChangeText={(value) => updateForm('modelCatalogUrl', value)}
+                />
+              </FieldGroup>
+
+              <View style={styles.actionsRow}>
+                <PillButton
+                  label={isRefreshingCatalog ? 'Refreshing…' : 'Refresh catalog'}
+                  onPress={() => refreshCatalog(form.modelCatalogUrl, true)}
+                  variant="secondary"
+                  disabled={isRefreshingCatalog}
+                  icon={<Feather name="refresh-cw" size={16} color={palette.ink} />}
                 />
               </View>
+
+              <Text style={styles.rowBody}>
+                A curated starter catalog is built in now. Add your own catalog URL only if you want a self-hosted
+                or custom model list later.
+              </Text>
+
+              <ModelCatalogSection
+                title="Transcription models"
+                items={visibleCatalog.filter((item) => item.kind === 'transcription')}
+                installedModels={installedTranscriptionModels}
+                activeModelId={getLocalTranscriptionModelId(
+                  form.providers.local.transcriptionModel,
+                  localTranscriptionModelIsInstalled
+                )}
+                downloadProgress={downloadProgress}
+                offlineSetupStatusByModel={offlineSetupStatusByModel}
+                onDownload={handleDownloadModel}
+                onDelete={handleDeleteModel}
+                onOpenSource={handleOpenModelSource}
+                onSelectActive={(modelId) => updateProvider('local', 'transcriptionModel', modelId)}
+                allowDownload={deviceSupport ? deviceSupport.platform !== 'web' : false}
+              />
             </SurfaceCard>
-
-            <FieldGroup>
-              <Label text="Optional custom model catalog URL" />
-              <TextInput
-                style={styles.input}
-                autoCapitalize="none"
-                autoCorrect={false}
-                placeholder="https://your-hosted-catalog.example/catalog.json"
-                placeholderTextColor={palette.mutedInk}
-                value={form.modelCatalogUrl}
-                onChangeText={(value) => updateForm('modelCatalogUrl', value)}
-              />
-            </FieldGroup>
-
-            <View style={styles.actionsRow}>
-              <PillButton
-                label={isRefreshingCatalog ? 'Refreshing…' : 'Refresh catalog'}
-                onPress={() => refreshCatalog(form.modelCatalogUrl, true)}
-                variant="secondary"
-                disabled={isRefreshingCatalog}
-                icon={<Feather name="refresh-cw" size={16} color={palette.ink} />}
-              />
-            </View>
-
-            <Text style={styles.rowBody}>
-              A curated starter catalog is built in now. Add your own catalog URL only if you want a self-hosted
-              or custom model list later.
-            </Text>
-
-            <ModelCatalogSection
-              title="Transcription models"
-              items={visibleCatalog.filter((item) => item.kind === 'transcription')}
-              installedModels={installedTranscriptionModels}
-              activeModelId={getLocalTranscriptionModelId(
-                form.providers.local.transcriptionModel,
-                localTranscriptionModelIsInstalled
-              )}
-              downloadProgress={downloadProgress}
-              offlineSetupStatusByModel={offlineSetupStatusByModel}
-              onDownload={handleDownloadModel}
-              onDelete={handleDeleteModel}
-              onOpenSource={handleOpenModelSource}
-              onSelectActive={(modelId) => updateProvider('local', 'transcriptionModel', modelId)}
-              allowDownload={deviceSupport ? deviceSupport.platform !== 'web' : false}
-            />
-          </SurfaceCard>
-        </FadeInView>
+          </FadeInView>
+        ) : null}
 
         <FadeInView delay={180}>
           <SurfaceCard muted style={styles.advancedSection}>
@@ -701,7 +834,7 @@ export default function SettingsScreen() {
             </View>
           </SurfaceCard>
         </FadeInView>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 
@@ -736,83 +869,137 @@ function buildOfflineSetupBundleFromModel(item: ModelCatalogItem): OfflineSetupB
   };
 }
 
-function AssignmentSection({
-  title,
-  subtitle,
-  icon,
-  mode,
-  selectedProviderId,
-  providerIds,
-  providers,
-  onSelect,
-  delay,
-  localModelOptions,
+function getFallbackCloudProviderId(settings: AppSettings, mode: 'transcription' | 'summary'): ProviderId {
+  const configured = getConfiguredProviderIds(settings.providers, mode).filter((providerId) => providerId !== 'local');
+  return configured[0] ?? 'openai';
+}
+
+function toModelOptions(models: string[]) {
+  return models.map((model) => ({
+    label: model,
+    value: model,
+  }));
+}
+
+function ModeButton({
+  label,
+  description,
+  selected,
+  onPress,
 }: {
-  title: string;
-  subtitle: string;
-  icon: ReactNode;
-  mode: 'transcription' | 'summary';
-  selectedProviderId: ProviderId;
-  providerIds: ProviderId[];
-  providers: Record<ProviderId, ProviderConfig>;
-  onSelect: (providerId: ProviderId) => void;
-  delay: number;
-  localModelOptions: Array<{ label: string; value: string }>;
+  label: string;
+  description: string;
+  selected: boolean;
+  onPress: PressableProps['onPress'];
 }) {
-  const selectedProvider = providerMap[selectedProviderId];
-  const modelId =
-    mode === 'transcription'
-      ? providers[selectedProviderId].transcriptionModel
-      : providers[selectedProviderId].summaryModel;
-  const modelLabel =
-    selectedProviderId === 'local'
-      ? ((localModelOptions.find((option) => option.value === modelId)?.label ?? modelId) ||
-        'No model selected yet')
-      : modelId || 'No model selected yet';
+  return (
+    <Pressable style={[styles.modeButton, selected ? styles.modeButtonSelected : null]} onPress={onPress}>
+      <Text style={[styles.modeButtonLabel, selected ? styles.modeButtonLabelSelected : null]}>{label}</Text>
+      <Text style={[styles.modeButtonDescription, selected ? styles.modeButtonDescriptionSelected : null]}>
+        {description}
+      </Text>
+    </Pressable>
+  );
+}
+
+function ProviderDropdown({
+  label,
+  value,
+  providerIds,
+  onSelect,
+}: {
+  label: string;
+  value: ProviderId;
+  providerIds: ProviderId[];
+  onSelect: (value: ProviderId) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedProvider = providerMap[value] ?? providerMap.openai;
 
   return (
-    <FadeInView delay={delay}>
-      <SurfaceCard style={styles.assignmentSection}>
-        <View style={styles.sectionTitleRow}>
-          {icon}
-          <SectionHeading title={title} subtitle={subtitle} />
+    <FieldGroup>
+      <Label text={label} />
+      <Pressable style={styles.selectButton} onPress={() => setIsOpen(true)}>
+        <View style={styles.selectCopy}>
+          <Text style={styles.selectValue}>{selectedProvider.label}</Text>
+          <Text style={styles.selectHint}>{selectedProvider.description}</Text>
         </View>
+        <Feather name="chevron-down" size={18} color={palette.ink} />
+      </Pressable>
 
-        {providerIds.length ? (
-          <>
-            <View style={styles.chipRow}>
-              {providerIds.map((providerId) => (
-                <ChoiceChip
-                  key={providerId}
-                  label={providerMap[providerId].label}
-                  selected={selectedProviderId === providerId}
-                  onPress={() => onSelect(providerId)}
-                />
-              ))}
+      <Modal transparent animationType="fade" visible={isOpen} onRequestClose={() => setIsOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setIsOpen(false)}>
+          <Pressable style={styles.modalCard} onPress={() => undefined}>
+            <Text style={styles.modalTitle}>{label}</Text>
+            <Text style={styles.modalBody}>Pick one provider for this part of processing.</Text>
+
+            <View style={styles.optionList}>
+              {providerIds.map((providerId) => {
+                const selected = providerId === value;
+                const provider = providerMap[providerId];
+
+                return (
+                  <Pressable
+                    key={providerId}
+                    style={[styles.optionButton, selected && styles.optionButtonSelected]}
+                    onPress={() => {
+                      onSelect(providerId);
+                      setIsOpen(false);
+                    }}
+                  >
+                    <View style={styles.optionCopy}>
+                      <Text style={[styles.optionLabel, selected && styles.optionLabelSelected]}>
+                        {provider.label}
+                      </Text>
+                      <Text style={[styles.optionDescription, selected && styles.optionLabelSelected]}>
+                        {provider.description}
+                      </Text>
+                    </View>
+                    {selected ? <Feather name="check" size={16} color={palette.paper} /> : null}
+                  </Pressable>
+                );
+              })}
             </View>
 
-            <SurfaceCard muted style={styles.assignmentCard}>
-              <View style={styles.providerTitleRow}>
-                <ProviderIcon providerId={selectedProviderId} />
-                <Text style={styles.selectedProviderTitle}>{selectedProvider.label}</Text>
-              </View>
-              <Text style={styles.assignmentMeta}>
-                {mode === 'transcription' ? 'Transcription model' : 'Summary model'}
-              </Text>
-              <Text style={styles.assignmentValue}>{modelLabel}</Text>
-            </SurfaceCard>
-          </>
-        ) : (
-          <SurfaceCard muted style={styles.emptyState}>
-            <Text style={styles.emptyStateTitle}>No configured provider yet</Text>
-            <Text style={styles.rowBody}>
-              Configure a provider below and add its API key once. Local transcription will appear here after you
-              choose an installed model.
-            </Text>
-          </SurfaceCard>
-        )}
-      </SurfaceCard>
-    </FadeInView>
+            <Pressable style={styles.modalCloseButton} onPress={() => setIsOpen(false)}>
+              <Text style={styles.modalCloseText}>Close</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </FieldGroup>
+  );
+}
+
+function ConfiguredProviderRow({
+  providerId,
+  configured,
+  active,
+  onConfigure,
+}: {
+  providerId: ProviderId;
+  configured: boolean;
+  active: boolean;
+  onConfigure: PressableProps['onPress'];
+}) {
+  const provider = providerMap[providerId];
+
+  return (
+    <View style={styles.configuredProviderRow}>
+      <View style={styles.providerTitleRow}>
+        <ProviderIcon providerId={providerId} />
+        <View style={styles.providerCopy}>
+          <Text style={styles.configuredProviderTitle}>{provider.label}</Text>
+          <Text style={styles.configuredProviderMeta}>
+            {configured ? 'Credentials saved' : 'Needs setup'}
+            {active ? ' • Active' : ''}
+          </Text>
+        </View>
+      </View>
+      <Pressable style={styles.gearButton} onPress={onConfigure} hitSlop={8}>
+        <Feather name="settings" size={17} color={palette.ink} />
+      </Pressable>
+    </View>
   );
 }
 
@@ -844,6 +1031,10 @@ function ModelCatalogSection({
   return (
     <View style={styles.catalogSection}>
       <SectionHeading title={title} />
+      <Text style={styles.modelHint}>
+        Downloads can be large and may use your data plan. Start one model at a time and keep this screen open to
+        watch progress.
+      </Text>
 
       {items.length ? (
         items.map((item) => {
@@ -883,6 +1074,12 @@ function ModelCatalogSection({
               </View>
 
               <Text style={styles.rowBody}>{item.description}</Text>
+
+              {typeof progress === 'number' ? (
+                <View style={styles.modelProgressTrack}>
+                  <View style={[styles.modelProgressFill, { width: `${Math.round(progress * 100)}%` }]} />
+                </View>
+              ) : null}
 
               <View style={styles.modelActionRow}>
                 {installed?.status === 'installed' ? (
@@ -1024,86 +1221,12 @@ function ModelDropdown({
   );
 }
 
-function ModelField({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: string[];
-  onChange: (value: string) => void;
-}) {
-  return (
-    <FieldGroup>
-      <Label text={label} />
-      <TextInput
-        style={styles.input}
-        autoCapitalize="none"
-        autoCorrect={false}
-        placeholder="Enter model name"
-        placeholderTextColor={palette.mutedInk}
-        value={value}
-        onChangeText={onChange}
-      />
-      {options.length ? (
-        <View style={styles.presetRow}>
-          {options.map((option) => (
-            <ChoiceChip key={option} label={option} selected={value === option} onPress={() => onChange(option)} />
-          ))}
-        </View>
-      ) : null}
-    </FieldGroup>
-  );
-}
-
 function FieldGroup({ children }: { children: ReactNode }) {
   return <View style={styles.fieldGroup}>{children}</View>;
 }
 
 function Label({ text }: { text: string }) {
   return <Text style={styles.label}>{text}</Text>;
-}
-
-function ProviderPickerChip({
-  providerId,
-  label,
-  selected,
-  configured,
-  onPress,
-}: {
-  providerId: ProviderId;
-  label: string;
-  selected?: boolean;
-  configured?: boolean;
-  onPress: PressableProps['onPress'];
-}) {
-  return (
-    <Pressable style={[styles.providerPickerChip, selected && styles.providerPickerChipSelected]} onPress={onPress}>
-      <View style={styles.providerPickerTopRow}>
-        <ProviderIcon providerId={providerId} />
-        {configured ? <View style={styles.configuredDot} /> : null}
-      </View>
-      <Text style={[styles.providerPickerLabel, selected && styles.providerPickerLabelSelected]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function ChoiceChip({
-  label,
-  selected,
-  onPress,
-}: {
-  label: string;
-  selected?: boolean;
-  onPress: PressableProps['onPress'];
-}) {
-  return (
-    <Pressable style={[styles.chip, selected && styles.chipSelected]} onPress={onPress}>
-      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
-    </Pressable>
-  );
 }
 
 function ProviderIcon({ providerId }: { providerId: ProviderId }) {
@@ -1183,14 +1306,45 @@ const styles = StyleSheet.create({
   },
   summaryActions: {
     alignItems: 'flex-start',
-  },
-  assignmentSection: {
-    gap: 14,
-  },
-  sectionTitleRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexWrap: 'wrap',
     gap: 10,
+  },
+  modeSwitcher: {
+    flexDirection: 'row',
+    gap: 8,
+    padding: 4,
+    borderRadius: 22,
+    backgroundColor: palette.cardUtility,
+  },
+  modeButton: {
+    flex: 1,
+    gap: 2,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  modeButtonSelected: {
+    backgroundColor: palette.ink,
+  },
+  modeButtonLabel: {
+    color: palette.ink,
+    fontFamily: typography.heading.fontFamily,
+    fontSize: 14,
+  },
+  modeButtonLabelSelected: {
+    color: palette.paper,
+  },
+  modeButtonDescription: {
+    color: palette.mutedInk,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 12,
+  },
+  modeButtonDescriptionSelected: {
+    color: palette.cardMuted,
+  },
+  processingCard: {
+    gap: 14,
   },
   providersSection: {
     gap: 14,
@@ -1200,43 +1354,40 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
   },
-  providerChipGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
+  configuredProviderList: {
+    gap: 8,
   },
-  providerPickerChip: {
-    width: '31%',
-    minWidth: 96,
-    borderRadius: 18,
+  configuredProviderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
     borderWidth: 1,
     borderColor: palette.lineSoft,
+    borderRadius: 18,
     backgroundColor: palette.cardUtility,
-    padding: 12,
-    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
-  providerPickerChipSelected: {
-    backgroundColor: palette.card,
-    borderColor: palette.accent,
-  },
-  providerPickerTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  configuredDot: {
-    width: 10,
-    height: 10,
-    borderRadius: radii.pill,
-    backgroundColor: palette.accent,
-  },
-  providerPickerLabel: {
+  configuredProviderTitle: {
     color: palette.ink,
     fontFamily: typography.label.fontFamily,
-    fontSize: 13,
+    fontSize: 14,
   },
-  providerPickerLabelSelected: {
-    color: palette.ink,
+  configuredProviderMeta: {
+    color: palette.mutedInk,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 12,
+  },
+  gearButton: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: palette.card,
+    borderWidth: 1,
+    borderColor: palette.lineSoft,
   },
   selectedProviderCard: {
     gap: 14,
@@ -1319,6 +1470,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
   },
+  modelProgressTrack: {
+    height: 8,
+    overflow: 'hidden',
+    borderRadius: radii.pill,
+    backgroundColor: palette.accentSoft,
+  },
+  modelProgressFill: {
+    height: '100%',
+    minWidth: 8,
+    borderRadius: radii.pill,
+    backgroundColor: palette.accent,
+  },
   label: {
     color: palette.ink,
     fontFamily: typography.label.fontFamily,
@@ -1337,60 +1500,6 @@ const styles = StyleSheet.create({
     color: palette.ink,
     fontFamily: typography.body.fontFamily,
     fontSize: 15,
-  },
-  presetRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: palette.lineSoft,
-    backgroundColor: palette.cardUtility,
-  },
-  chipSelected: {
-    backgroundColor: palette.ink,
-    borderColor: palette.ink,
-  },
-  chipText: {
-    color: palette.ink,
-    fontFamily: typography.label.fontFamily,
-    fontSize: 13,
-  },
-  chipTextSelected: {
-    color: palette.paper,
-  },
-  assignmentCard: {
-    gap: 6,
-  },
-  assignmentMeta: {
-    color: palette.accent,
-    fontFamily: typography.label.fontFamily,
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  assignmentValue: {
-    color: palette.ink,
-    fontFamily: typography.bodyStrong.fontFamily,
-    fontSize: 15,
-    lineHeight: 21,
-  },
-  emptyState: {
-    gap: 6,
-  },
-  emptyStateTitle: {
-    color: palette.ink,
-    fontFamily: typography.heading.fontFamily,
-    fontSize: 16,
   },
   selectButton: {
     backgroundColor: palette.cardUtility,
@@ -1482,6 +1591,10 @@ const styles = StyleSheet.create({
   optionList: {
     gap: 8,
   },
+  optionCopy: {
+    flex: 1,
+    gap: 3,
+  },
   optionButton: {
     backgroundColor: palette.cardUtility,
     borderRadius: 16,
@@ -1505,6 +1618,12 @@ const styles = StyleSheet.create({
   },
   optionLabelSelected: {
     color: palette.paper,
+  },
+  optionDescription: {
+    color: palette.mutedInk,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 12,
+    lineHeight: 17,
   },
   modalCloseButton: {
     alignSelf: 'flex-end',
