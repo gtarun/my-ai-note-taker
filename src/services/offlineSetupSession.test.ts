@@ -147,6 +147,7 @@ import {
   resolveOfflineSetupBundles,
   saveOfflineSetupSession,
   startOfflineSetup,
+  updateOfflineSetupProgress,
 } from './offlineSetupSession';
 
 describe('offline setup session storage', () => {
@@ -370,6 +371,35 @@ describe('offline setup session storage', () => {
       last_error: null,
       is_dismissed: 0,
     });
+  });
+
+  test('reports shared offline setup progress instead of screen-local state', async () => {
+    await startOfflineSetup({
+      id: 'starter',
+      label: 'Starter',
+      modelIds: ['whisper-base'],
+      totalBytes: 152,
+      estimatedSeconds: 60,
+      isRecommended: true,
+      description: 'Fastest way to get to a first local result.',
+    });
+
+    await updateOfflineSetupProgress({
+      bytesDownloaded: 76,
+      totalBytes: 152,
+      progress: 0.5,
+      estimatedSecondsRemaining: 30,
+    });
+
+    await expect(getOfflineSetupSession()).resolves.toEqual(
+      expect.objectContaining({
+        status: 'downloading',
+        progress: 0.5,
+        bytesDownloaded: 76,
+        totalBytes: 152,
+        estimatedSecondsRemaining: 30,
+      })
+    );
   });
 
   test('marks offline setup as paused when the device goes offline', async () => {

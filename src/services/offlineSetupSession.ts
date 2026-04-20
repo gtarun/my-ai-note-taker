@@ -81,6 +81,14 @@ function estimateBundleSeconds(totalBytes: number) {
   return Math.max(60, Math.round(totalBytes / (25 * 1024 * 1024)));
 }
 
+function clampProgress(progress: number) {
+  if (!Number.isFinite(progress)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(1, progress));
+}
+
 function buildBundle(
   id: OfflineSetupBundleId,
   label: OfflineSetupBundle['label'],
@@ -216,6 +224,27 @@ export async function startOfflineSetup(bundle: OfflineSetupBundle) {
     updatedAt: startedAt,
     autoConfiguredAt: null,
     isDismissed: false,
+  });
+}
+
+export async function updateOfflineSetupProgress(params: {
+  bytesDownloaded: number;
+  totalBytes: number;
+  progress: number;
+  estimatedSecondsRemaining?: number | null;
+}) {
+  const current = await getOfflineSetupSession();
+  const now = new Date().toISOString();
+
+  await saveOfflineSetupSession({
+    ...current,
+    status: 'downloading',
+    bytesDownloaded: Math.max(0, Math.round(params.bytesDownloaded)),
+    totalBytes: Math.max(0, Math.round(params.totalBytes)),
+    progress: clampProgress(params.progress),
+    estimatedSecondsRemaining: params.estimatedSecondsRemaining ?? current.estimatedSecondsRemaining,
+    lastError: null,
+    updatedAt: now,
   });
 }
 

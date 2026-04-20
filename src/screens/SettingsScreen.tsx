@@ -43,11 +43,21 @@ import {
 } from '../services/localModels';
 import { defaultProviderConfigs, providerDefinitions, providerMap } from '../services/providers';
 import { getAppSettings, sanitizeAppSettings, saveAppSettings } from '../services/settings';
+import {
+  getOfflineSetupSession,
+  markOfflineSetupFailed,
+  markOfflineSetupPausedOffline,
+  markOfflineSetupReady,
+  startOfflineSetup,
+  updateOfflineSetupProgress,
+  type OfflineSetupBundle,
+} from '../services/offlineSetupSession';
 import type {
   AppSettings,
   InstalledModelRow,
   LocalDeviceSupport,
   ModelCatalogItem,
+  OfflineSetupSession,
   ProviderConfig,
   ProviderId,
 } from '../types';
@@ -80,7 +90,7 @@ export default function SettingsScreen() {
   const [editingProviderId, setEditingProviderId] = useState<ProviderId>('openai');
   const [isSaving, setIsSaving] = useState(false);
   const [isRefreshingCatalog, setIsRefreshingCatalog] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
+  const [offlineSetup, setOfflineSetup] = useState<OfflineSetupSession | null>(null);
 
   useEffect(() => {
     void hydrateScreen();
@@ -109,6 +119,29 @@ export default function SettingsScreen() {
     () => getCatalogItemsForDevice(catalog, deviceSupport),
     [catalog, deviceSupport]
   );
+  const downloadProgress = useMemo(() => {
+    if (!offlineSetup || offlineSetup.status !== 'downloading') {
+      return {};
+    }
+
+    return offlineSetup.modelIds.reduce<Record<string, number>>((progressByModel, modelId) => {
+      progressByModel[modelId] = offlineSetup.progress;
+      return progressByModel;
+    }, {});
+  }, [offlineSetup]);
+  const offlineSetupStatusByModel = useMemo(() => {
+    if (!offlineSetup || offlineSetup.status === 'idle') {
+      return {};
+    }
+
+    return offlineSetup.modelIds.reduce<Partial<Record<string, OfflineSetupSession['status']>>>(
+      (statusByModel, modelId) => {
+        statusByModel[modelId] = offlineSetup.status;
+        return statusByModel;
+      },
+      {}
+    );
+  }, [offlineSetup]);
 
   useEffect(() => {
     if (!form || Platform.OS !== 'ios' || !hasLoadedInstalledModels) {
@@ -270,22 +303,42 @@ export default function SettingsScreen() {
   };
 
   const handleDownloadModel = async (item: ModelCatalogItem) => {
+    const bundle = buildOfflineSetupBundleFromModel(item);
+
     try {
+      await startOfflineSetup(bundle);
+      setOfflineSetup(await getOfflineSetupSession());
+
       await downloadModel(item, {
-        onProgress: (progress) =>
-          setDownloadProgress((current) => ({
-            ...current,
-            [item.id]: progress,
-          })),
+        onProgress: (progress) => {
+          const bytesDownloaded = Math.round(item.sizeBytes * progress);
+          setOfflineSetup((current) =>
+            current && current.modelIds.includes(item.id)
+              ? {
+                  ...current,
+                  status: 'downloading',
+                  bytesDownloaded,
+                  totalBytes: item.sizeBytes,
+                  progress,
+                  lastError: null,
+                  updatedAt: new Date().toISOString(),
+                }
+              : current
+          );
+          void updateOfflineSetupProgress({
+            bytesDownloaded,
+            totalBytes: item.sizeBytes,
+            progress,
+          }).catch(() => undefined);
+        },
       });
 
       const nextInstalledModels = await getInstalledModels();
       setInstalledModels(nextInstalledModels);
-      setDownloadProgress((current) => {
-        const next = { ...current };
-        delete next[item.id];
-        return next;
+      await markOfflineSetupReady({
+        preferredTranscriptionModelId: item.kind === 'transcription' ? item.id : null,
       });
+      setOfflineSetup(await getOfflineSetupSession());
 
       setForm((current) => {
         if (!current) {
@@ -303,12 +356,14 @@ export default function SettingsScreen() {
 
       Alert.alert('Model ready', `${item.displayName} was downloaded and registered locally.`);
     } catch (error) {
-      setDownloadProgress((current) => {
-        const next = { ...current };
-        delete next[item.id];
-        return next;
-      });
-      Alert.alert('Download failed', error instanceof Error ? error.message : 'Unable to download this model.');
+      const message = error instanceof Error ? error.message : 'Unable to download this model.';
+      if (/network|internet|offline|connection|timed out/i.test(message)) {
+        await markOfflineSetupPausedOffline(message);
+      } else {
+        await markOfflineSetupFailed(message);
+      }
+      setOfflineSetup(await getOfflineSetupSession());
+      Alert.alert('Download failed', message);
     }
   };
 
@@ -615,6 +670,7 @@ export default function SettingsScreen() {
                 localTranscriptionModelIsInstalled
               )}
               downloadProgress={downloadProgress}
+              offlineSetupStatusByModel={offlineSetupStatusByModel}
               onDownload={handleDownloadModel}
               onDelete={handleDeleteModel}
               onOpenSource={handleOpenModelSource}
@@ -655,12 +711,29 @@ export default function SettingsScreen() {
     setForm(next);
     setEditingProviderId(pickInitialProvider(next));
 
-    const [support, models] = await Promise.all([getLocalDeviceSupport(), getInstalledModels()]);
+    const [support, models, setupSession] = await Promise.all([
+      getLocalDeviceSupport(),
+      getInstalledModels(),
+      getOfflineSetupSession(),
+    ]);
     setDeviceSupport(support);
     setInstalledModels(models);
+    setOfflineSetup(setupSession);
     setHasLoadedInstalledModels(true);
     await refreshCatalog(next.modelCatalogUrl);
   }
+}
+
+function buildOfflineSetupBundleFromModel(item: ModelCatalogItem): OfflineSetupBundle {
+  return {
+    id: item.recommended ? 'starter' : 'full',
+    label: item.displayName,
+    modelIds: [item.id],
+    totalBytes: item.sizeBytes,
+    estimatedSeconds: Math.max(60, Math.round(item.sizeBytes / (25 * 1024 * 1024))),
+    isRecommended: item.recommended,
+    description: item.description,
+  };
 }
 
 function AssignmentSection({
@@ -749,6 +822,7 @@ function ModelCatalogSection({
   installedModels,
   activeModelId,
   downloadProgress,
+  offlineSetupStatusByModel,
   onDownload,
   onDelete,
   onOpenSource,
@@ -760,6 +834,7 @@ function ModelCatalogSection({
   installedModels: InstalledModelRow[];
   activeModelId: string;
   downloadProgress: Record<string, number>;
+  offlineSetupStatusByModel: Partial<Record<string, OfflineSetupSession['status']>>;
   onDownload: (item: ModelCatalogItem) => void;
   onDelete: (item: InstalledModelRow) => void;
   onOpenSource: (item: ModelCatalogItem) => void;
@@ -774,6 +849,15 @@ function ModelCatalogSection({
         items.map((item) => {
           const installed = installedModels.find((model) => model.id === item.id);
           const progress = downloadProgress[item.id];
+          const setupStatus = offlineSetupStatusByModel[item.id];
+          const downloadLabel =
+            setupStatus === 'paused_offline' || setupStatus === 'paused_user'
+              ? 'Resume'
+              : setupStatus === 'failed'
+                ? 'Try again'
+                : typeof progress === 'number'
+                  ? `Downloading ${Math.round(progress * 100)}%`
+                  : 'Download';
           const canDirectDownload = Boolean(item.downloadUrl.trim());
           const canOpenSource = Boolean(item.sourceUrl?.trim());
 
@@ -820,10 +904,10 @@ function ModelCatalogSection({
                   <>
                     {canDirectDownload ? (
                       <PillButton
-                        label={typeof progress === 'number' ? `Downloading ${Math.round(progress * 100)}%` : 'Download'}
+                        label={downloadLabel}
                         onPress={() => onDownload(item)}
                         variant="secondary"
-                        disabled={!allowDownload}
+                        disabled={!allowDownload || setupStatus === 'downloading'}
                         icon={<Feather name="download" size={16} color={palette.ink} />}
                       />
                     ) : null}
