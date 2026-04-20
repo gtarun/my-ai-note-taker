@@ -9,12 +9,15 @@ import {
   Modal,
   Pressable,
   SafeAreaView,
+  ScrollView,
   Share,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FadeInView } from '../../src/components/FadeInView';
 import { KeyboardAwareScrollView } from '../../src/components/KeyboardAwareScrollView';
@@ -25,6 +28,8 @@ import {
   getMeetingDetailActionItemsCopyText,
   getMeetingDetailDecisionsCopyText,
   getMeetingDetailExtractionCopyText,
+  getMeetingDetailLayerChooserPresentation,
+  getMeetingDetailLayerPickerHeightRatio,
   getMeetingDetailPrimaryActionLabel,
   getMeetingDetailSummaryCopyText,
   getMeetingDetailTitleDraftState,
@@ -62,6 +67,8 @@ export default function MeetingDetailScreen() {
   const [copiedSection, setCopiedSection] = useState<CopyableMeetingSection | null>(null);
   const player = useAudioPlayer(meeting?.audioUri ?? null);
   const playerStatus = useAudioPlayerStatus(player);
+  const insets = useSafeAreaInsets();
+  const windowHeight = useWindowDimensions().height;
   const canReturnToPreviousScreen = router.canGoBack();
   const headerPresentation = getMeetingDetailHeaderPresentation(canReturnToPreviousScreen);
   const screenOptions = getMeetingDetailScreenOptions(headerPresentation, () => {
@@ -283,6 +290,14 @@ export default function MeetingDetailScreen() {
   const extractionCopyText = getMeetingDetailExtractionCopyText(
     extractionRows.map((row) => ({ title: row.title, value: row.value }))
   );
+  const layerChooserPresentation = getMeetingDetailLayerChooserPresentation(
+    extraction?.layerName ?? null,
+    availableLayers.length
+  );
+  const layerPickerHeight = Math.min(
+    windowHeight - insets.top - 12,
+    windowHeight * getMeetingDetailLayerPickerHeightRatio(availableLayers.length)
+  );
   const extractionHasChanges =
     extraction?.fields.some((field) => (extraction.values[field.id] ?? '') !== (extractionDraftValues[field.id] ?? '')) ??
     false;
@@ -350,6 +365,39 @@ export default function MeetingDetailScreen() {
           <Pressable style={styles.secondaryButton} onPress={handleShare}>
             <Feather name="share-2" size={17} color={palette.ink} />
             <Text style={styles.secondaryButtonText}>Share</Text>
+          </Pressable>
+        </FadeInView>
+
+        <FadeInView style={styles.layerLauncherCard} delay={105}>
+          <View style={styles.layerLauncherHeader}>
+            <View style={styles.layerLauncherCopy}>
+              <Text style={styles.layerLauncherTitle}>{layerChooserPresentation.title}</Text>
+              <Text style={styles.layerLauncherBody}>{layerChooserPresentation.body}</Text>
+            </View>
+            <View style={styles.layerLauncherBadge}>
+              <Text style={styles.layerLauncherBadgeText}>
+                {availableLayers.length} {availableLayers.length === 1 ? 'layer' : 'layers'}
+              </Text>
+            </View>
+          </View>
+
+          <Pressable
+            style={styles.layerLauncherButton}
+            onPress={() => {
+              if (availableLayers.length === 0) {
+                router.push(LAYERS_ROUTE);
+                return;
+              }
+
+              setIsLayerPickerVisible(true);
+            }}
+          >
+            <Feather
+              name={availableLayers.length === 0 ? 'layers' : 'list'}
+              size={17}
+              color={palette.ink}
+            />
+            <Text style={styles.secondaryButtonText}>{layerChooserPresentation.actionLabel}</Text>
           </Pressable>
         </FadeInView>
 
@@ -515,7 +563,16 @@ export default function MeetingDetailScreen() {
 
       <Modal visible={isLayerPickerVisible} animationType="slide" transparent onRequestClose={() => setIsLayerPickerVisible(false)}>
         <View style={styles.modalBackdrop}>
-          <View style={styles.layerPickerCard}>
+          <View
+            style={[
+              styles.layerPickerCard,
+              {
+                height: layerPickerHeight,
+                paddingBottom: Math.max(20, insets.bottom + 8),
+              },
+            ]}
+          >
+            <View style={styles.layerPickerGrabber} />
             <View style={styles.layerPickerHeader}>
               <Text style={styles.layerPickerTitle}>Choose an extraction layer</Text>
               <Pressable onPress={() => setIsLayerPickerVisible(false)} hitSlop={10}>
@@ -526,7 +583,13 @@ export default function MeetingDetailScreen() {
               Pick a layer for structured extraction, or continue without one to run the normal transcript + summary flow.
             </Text>
 
-            <KeyboardAwareScrollView contentContainerStyle={styles.layerPickerOptions}>
+            <ScrollView
+              style={styles.layerPickerScroll}
+              contentContainerStyle={styles.layerPickerOptions}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              contentInsetAdjustmentBehavior="never"
+            >
               <Pressable
                 style={styles.layerOption}
                 onPress={() => {
@@ -554,7 +617,7 @@ export default function MeetingDetailScreen() {
                   </Text>
                 </Pressable>
               ))}
-            </KeyboardAwareScrollView>
+            </ScrollView>
 
             <View style={styles.layerPickerActions}>
               <Pressable
@@ -799,6 +862,61 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
   },
+  layerLauncherCard: {
+    backgroundColor: palette.cardStrong,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: palette.line,
+    padding: 16,
+    gap: 14,
+    ...elevation.card,
+  },
+  layerLauncherHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  layerLauncherCopy: {
+    flex: 1,
+    gap: 6,
+  },
+  layerLauncherTitle: {
+    color: palette.ink,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  layerLauncherBody: {
+    color: palette.mutedInk,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  layerLauncherBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: palette.card,
+    borderWidth: 1,
+    borderColor: palette.line,
+  },
+  layerLauncherBadgeText: {
+    color: palette.mutedInk,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  layerLauncherButton: {
+    minHeight: 46,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: palette.card,
+    gap: 8,
+    alignSelf: 'flex-start',
+  },
   primaryButton: {
     width: '100%',
     minHeight: 54,
@@ -1009,14 +1127,24 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(22, 29, 37, 0.32)',
     justifyContent: 'flex-end',
+    paddingTop: 12,
   },
   layerPickerCard: {
-    maxHeight: '80%',
+    width: '100%',
     backgroundColor: palette.paper,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     padding: 20,
     gap: 14,
+    overflow: 'hidden',
+    flexShrink: 1,
+  },
+  layerPickerGrabber: {
+    alignSelf: 'center',
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: palette.line,
   },
   layerPickerHeader: {
     flexDirection: 'row',
@@ -1033,9 +1161,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
   },
+  layerPickerScroll: {
+    flexGrow: 1,
+    minHeight: 0,
+  },
   layerPickerOptions: {
     gap: 10,
     paddingBottom: 8,
+    flexGrow: 1,
   },
   layerOption: {
     padding: 14,

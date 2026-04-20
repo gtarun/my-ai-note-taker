@@ -10,11 +10,12 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FadeInView } from '../components/FadeInView';
-import { KeyboardAwareScrollView } from '../components/KeyboardAwareScrollView';
 import { ScreenBackground } from '../components/ScreenBackground';
 import { PillButton, SectionHeading, SurfaceCard } from '../components/ui';
 import {
@@ -26,6 +27,7 @@ import {
   type EditableField,
   type LayerDraft,
 } from '../features/layers/draft';
+import { getLayerEditorSheetHeightRatio } from '../features/layers/presentation';
 import { deleteExtractionLayer, listExtractionLayers, saveExtractionLayer } from '../services/extractionLayers';
 import {
   browseRecentSpreadsheets,
@@ -57,6 +59,8 @@ export default function LayersScreen() {
   const [isLoadingTabs, setIsLoadingTabs] = useState(false);
   const [isFieldEditorVisible, setIsFieldEditorVisible] = useState(false);
   const [activeField, setActiveField] = useState<EditableField | null>(null);
+  const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
 
   const loadLayers = useCallback(async () => {
     const nextLayers = await listExtractionLayers();
@@ -431,6 +435,12 @@ export default function LayersScreen() {
     ? `${draft.spreadsheetTitle}${draft.sheetTitle ? ` • ${draft.sheetTitle}` : ''}`
     : 'No sheet connected yet.';
   const sheetPickerTitle = draft.spreadsheetId ? 'Change sheet' : 'Connect sheet';
+  const hasNestedOverlay = isSheetPickerVisible || isFieldEditorVisible;
+  const editorSheetHeight = Math.min(
+    windowHeight - insets.top - 12,
+    windowHeight * getLayerEditorSheetHeightRatio(hasNestedOverlay)
+  );
+  const inlineOverlaySheetHeight = Math.min(windowHeight - insets.top - 12, windowHeight * 0.94);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -524,8 +534,23 @@ export default function LayersScreen() {
 
       <Modal visible={isEditorVisible} animationType="slide" transparent onRequestClose={closeEditor}>
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <KeyboardAwareScrollView contentContainerStyle={styles.modalContent}>
+          <View
+            style={[
+              styles.modalCard,
+              {
+                height: editorSheetHeight,
+                paddingBottom: Math.max(20, insets.bottom + 8),
+              },
+            ]}
+          >
+            <View style={styles.modalGrabber} />
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={styles.modalContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              contentInsetAdjustmentBehavior="never"
+            >
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>{draft.id ? 'Edit layer' : 'New layer'}</Text>
                 <Pressable onPress={closeEditor} hitSlop={10}>
@@ -594,7 +619,7 @@ export default function LayersScreen() {
                   <Text style={styles.emptyFieldsBody}>Add a field to describe what the AI should extract.</Text>
                 </View>
               )}
-            </KeyboardAwareScrollView>
+            </ScrollView>
 
             <View style={styles.modalActions}>
               <PillButton label="Cancel" onPress={closeEditor} variant="ghost" />
@@ -602,7 +627,23 @@ export default function LayersScreen() {
             </View>
             {isSheetPickerVisible ? (
               <View style={styles.inlineOverlay}>
-                <KeyboardAwareScrollView contentContainerStyle={styles.inlineOverlayContent}>
+                <View
+                  style={[
+                    styles.inlineOverlaySheet,
+                    {
+                      height: inlineOverlaySheetHeight,
+                      paddingBottom: Math.max(20, insets.bottom + 8),
+                    },
+                  ]}
+                >
+                  <View style={styles.modalGrabber} />
+                  <ScrollView
+                    style={styles.inlineOverlayScroll}
+                    contentContainerStyle={styles.inlineOverlayContent}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                    contentInsetAdjustmentBehavior="never"
+                  >
                   <View style={styles.modalHeader}>
                     <View style={styles.modalHeaderCopy}>
                       <Text style={styles.modalTitle}>{sheetPickerTitle}</Text>
@@ -749,13 +790,30 @@ export default function LayersScreen() {
                       ) : null}
                     </View>
                   ) : null}
-                </KeyboardAwareScrollView>
+                  </ScrollView>
+                </View>
               </View>
             ) : null}
 
             {isFieldEditorVisible ? (
               <View style={styles.inlineOverlay}>
-                <KeyboardAwareScrollView contentContainerStyle={styles.fieldModalCard}>
+                <View
+                  style={[
+                    styles.inlineOverlaySheet,
+                    {
+                      height: inlineOverlaySheetHeight,
+                      paddingBottom: Math.max(20, insets.bottom + 8),
+                    },
+                  ]}
+                >
+                  <View style={styles.modalGrabber} />
+                  <ScrollView
+                    style={styles.inlineOverlayScroll}
+                    contentContainerStyle={styles.fieldModalCard}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                    contentInsetAdjustmentBehavior="never"
+                  >
                   <View style={styles.modalHeader}>
                     <Text style={styles.modalTitle}>{activeField ? 'Field details' : 'New field'}</Text>
                     <Pressable onPress={closeFieldEditor} hitSlop={10}>
@@ -805,7 +863,8 @@ export default function LayersScreen() {
                     )}
                     <PillButton label="Save field" onPress={handleSaveField} />
                   </View>
-                </KeyboardAwareScrollView>
+                  </ScrollView>
+                </View>
               </View>
             ) : null}
           </View>
@@ -940,13 +999,23 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(22, 29, 37, 0.32)',
     justifyContent: 'flex-end',
+    paddingTop: 12,
   },
   modalCard: {
-    maxHeight: '92%',
+    width: '100%',
     backgroundColor: palette.paper,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     overflow: 'hidden',
+    flexShrink: 1,
+  },
+  modalGrabber: {
+    alignSelf: 'center',
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: palette.line,
+    marginTop: 12,
   },
   fieldModalCard: {
     backgroundColor: palette.paper,
@@ -961,15 +1030,32 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     zIndex: 10,
   },
+  inlineOverlaySheet: {
+    width: '100%',
+    backgroundColor: palette.paper,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden',
+    flexShrink: 1,
+  },
+  inlineOverlayScroll: {
+    flexGrow: 1,
+    minHeight: 0,
+  },
   inlineOverlayContent: {
     padding: 20,
     gap: 18,
     paddingBottom: 28,
     backgroundColor: palette.paper,
   },
+  modalScroll: {
+    flexGrow: 1,
+    minHeight: 0,
+  },
   modalContent: {
     padding: 20,
     gap: 18,
+    paddingBottom: 12,
   },
   fieldModalContent: {
     gap: 12,

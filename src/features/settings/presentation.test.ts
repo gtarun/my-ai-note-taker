@@ -4,6 +4,10 @@ import { defaultProviderConfigs } from '../../services/providers';
 import type { InstalledModelRow, ProviderConfig, ProviderId } from '../../types';
 import {
   buildActiveProviderSummary,
+  buildConfiguredProviderMeta,
+  buildProviderEditorSelection,
+  buildProcessingModeDetails,
+  buildProviderPickerOptionCopy,
   buildSettingsOverviewItems,
   displayModelLabel,
   formatBytes,
@@ -95,5 +99,43 @@ describe('settings presentation', () => {
   test('derives processing mode from the raw selected transcription provider', () => {
     expect(getSettingsProcessingMode('local')).toBe('offline');
     expect(getSettingsProcessingMode('openai')).toBe('cloud');
+  });
+
+  test('explains what changes between cloud and offline processing modes', () => {
+    expect(buildProcessingModeDetails({ processingMode: 'cloud', summaryProviderLabel: 'OpenAI' })).toEqual({
+      title: 'Cloud transcription and summaries',
+      body: 'Transcription and summaries both run through your selected API providers.',
+    });
+
+    expect(buildProcessingModeDetails({ processingMode: 'offline', summaryProviderLabel: 'OpenAI' })).toEqual({
+      title: 'Offline transcription on this device',
+      body: 'Transcription runs on-device with a downloaded local model. Summaries still use OpenAI in the cloud.',
+    });
+  });
+
+  test('builds provider picker copy with an explicit provider title and status line', () => {
+    expect(
+      buildProviderPickerOptionCopy({
+        providerLabel: 'OpenAI',
+        providerDescription: 'Best default. Supports both transcription and summary.',
+        configured: false,
+      })
+    ).toEqual({
+      title: 'OpenAI',
+      statusLine: 'Needs setup',
+      description: 'Best default. Supports both transcription and summary.',
+    });
+  });
+
+  test('builds configured provider meta text predictably', () => {
+    expect(buildConfiguredProviderMeta({ configured: false, active: true })).toBe('Needs setup • Active');
+    expect(buildConfiguredProviderMeta({ configured: true, active: false })).toBe('Credentials saved');
+  });
+
+  test('routes gear actions to the inline provider editor instead of a popup', () => {
+    expect(buildProviderEditorSelection('local')).toEqual({
+      editingProviderId: 'local',
+      revealInlinePanel: true,
+    });
   });
 });

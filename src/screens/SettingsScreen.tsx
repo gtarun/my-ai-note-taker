@@ -5,10 +5,12 @@ import {
   Alert,
   Linking,
   Modal,
+  type LayoutChangeEvent,
   Pressable,
   PressableProps,
   Platform,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Switch,
   Text,
@@ -27,6 +29,10 @@ import {
 } from '../components/ui';
 import {
   buildActiveProviderSummary,
+  buildConfiguredProviderMeta,
+  buildProviderEditorSelection,
+  buildProcessingModeDetails,
+  buildProviderPickerOptionCopy,
   buildSettingsOverviewItems,
   displayModelLabel,
   formatBytes,
@@ -94,9 +100,10 @@ export default function SettingsScreen() {
   const [isRefreshingCatalog, setIsRefreshingCatalog] = useState(false);
   const [offlineSetup, setOfflineSetup] = useState<OfflineSetupSession | null>(null);
   const [showAdvancedEndpoint, setShowAdvancedEndpoint] = useState(false);
-  const [isProviderEditorVisible, setIsProviderEditorVisible] = useState(false);
   const [activeDownloadIds, setActiveDownloadIds] = useState<Set<string>>(() => new Set());
+  const [providerSettingsSectionY, setProviderSettingsSectionY] = useState(0);
   const activeDownloadIdsRef = useRef(new Set<string>());
+  const settingsScrollViewRef = useRef<ScrollView | null>(null);
 
   useEffect(() => {
     void hydrateScreen();
@@ -224,6 +231,10 @@ export default function SettingsScreen() {
     summaryProviderLabel: summaryProvider.label,
     transcriptionModelLabel,
     summaryModelLabel,
+  });
+  const processingModeDetails = buildProcessingModeDetails({
+    processingMode,
+    summaryProviderLabel: summaryProvider.label,
   });
   const overviewItems = buildSettingsOverviewItems({
     transcriptionProviderLabel: transcriptionProvider.label,
@@ -488,8 +499,23 @@ export default function SettingsScreen() {
   };
 
   const openProviderEditor = (providerId: ProviderId) => {
-    setEditingProviderId(providerId);
-    setIsProviderEditorVisible(true);
+    const next = buildProviderEditorSelection(providerId);
+    setEditingProviderId(next.editingProviderId);
+
+    if (!next.revealInlinePanel) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      settingsScrollViewRef.current?.scrollTo({
+        y: Math.max(providerSettingsSectionY - 24, 0),
+        animated: true,
+      });
+    });
+  };
+
+  const handleProviderSettingsSectionLayout = (event: LayoutChangeEvent) => {
+    setProviderSettingsSectionY(event.nativeEvent.layout.y);
   };
 
   const renderProviderSettingsPanel = () => (
@@ -605,7 +631,7 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScreenBackground />
-      <KeyboardAwareScrollView contentContainerStyle={styles.container}>
+      <KeyboardAwareScrollView scrollRef={settingsScrollViewRef} contentContainerStyle={styles.container}>
         <FadeInView>
           <SectionHeading
             title="Current setup"
@@ -618,13 +644,13 @@ export default function SettingsScreen() {
             <View style={styles.modeSwitcher}>
               <ModeButton
                 label="Cloud"
-                description="API providers"
+                description="Transcript + summary via API"
                 selected={processingMode === 'cloud'}
                 onPress={() => setProcessingMode('cloud')}
               />
               <ModeButton
                 label="Offline"
-                description="Local-first"
+                description="Transcript on this device"
                 selected={processingMode === 'offline'}
                 onPress={() => setProcessingMode('offline')}
               />
@@ -638,6 +664,10 @@ export default function SettingsScreen() {
                 </View>
               ))}
             </View>
+            <SurfaceCard muted style={styles.modeSummaryCard}>
+              <Text style={styles.modeSummaryTitle}>{processingModeDetails.title}</Text>
+              <Text style={styles.summaryBody}>{processingModeDetails.body}</Text>
+            </SurfaceCard>
             <Text style={styles.summaryBody}>{activeProviderSummary}</Text>
             <View style={styles.summaryActions}>
               <PillButton
@@ -682,7 +712,7 @@ export default function SettingsScreen() {
               <>
                 <SectionHeading
                   title="Offline mode"
-                  subtitle="Use local transcription when the native runtime and a compatible model are installed."
+                  subtitle="Use local transcription when the native runtime and a compatible model are installed. Summaries still use your selected cloud provider."
                 />
                 <SurfaceCard muted style={styles.localRuntimeCard}>
                   <Text style={styles.utilityLabel}>On-device runtime</Text>
@@ -702,6 +732,12 @@ export default function SettingsScreen() {
                         : 'Download a local transcription model below before selecting Offline mode.'
                     }
                   />
+                </SurfaceCard>
+                <SurfaceCard muted style={styles.modeContextCard}>
+                  <Text style={styles.utilityLabel}>What stays cloud</Text>
+                  <Text style={styles.rowBody}>
+                    Summaries and structured extraction still use {summaryProvider.label}. Offline mode currently changes transcription only.
+                  </Text>
                 </SurfaceCard>
               </>
             )}
@@ -725,26 +761,28 @@ export default function SettingsScreen() {
         </FadeInView>
 
         <FadeInView delay={105}>
-          <SurfaceCard style={styles.providersSection}>
-            <SectionHeading
-              title="Provider settings"
-              subtitle="Choose a provider to edit credentials and model defaults."
-            />
-            <View style={styles.providerStats}>
-              <StatusChip label={`${configuredProviderIds.length} configured`} tone="secondary" />
-              <StatusChip label={`${providerDefinitions.length} available`} tone="tertiary" />
-            </View>
+          <View onLayout={handleProviderSettingsSectionLayout}>
+            <SurfaceCard style={styles.providersSection}>
+              <SectionHeading
+                title="Provider settings"
+                subtitle="Choose a provider to edit credentials and model defaults."
+              />
+              <View style={styles.providerStats}>
+                <StatusChip label={`${configuredProviderIds.length} configured`} tone="secondary" />
+                <StatusChip label={`${providerDefinitions.length} available`} tone="tertiary" />
+              </View>
 
-            <ProviderDropdown
-              label="Provider to configure"
-              value={editingProviderId}
-              providerIds={providerDefinitions.map((definition) => definition.id)}
-              configuredProviderIds={configuredProviderIds}
-              onSelect={setEditingProviderId}
-            />
+              <ProviderDropdown
+                label="Provider to configure"
+                value={editingProviderId}
+                providerIds={providerDefinitions.map((definition) => definition.id)}
+                configuredProviderIds={configuredProviderIds}
+                onSelect={setEditingProviderId}
+              />
 
-            {renderProviderSettingsPanel()}
-          </SurfaceCard>
+              {renderProviderSettingsPanel()}
+            </SurfaceCard>
+          </View>
         </FadeInView>
 
         {processingMode === 'offline' ? (
@@ -842,31 +880,6 @@ export default function SettingsScreen() {
           </SurfaceCard>
         </FadeInView>
       </KeyboardAwareScrollView>
-
-      <Modal
-        transparent
-        animationType="slide"
-        visible={isProviderEditorVisible}
-        onRequestClose={() => setIsProviderEditorVisible(false)}
-      >
-        <View style={styles.modalSheetBackdrop}>
-          <View style={styles.providerEditorSheet}>
-            <View style={styles.modalHeader}>
-              <View style={styles.providerCopy}>
-                <Text style={styles.modalTitle}>Provider settings</Text>
-                <Text style={styles.modalBody}>Update credentials and model defaults for {editingProvider.label}.</Text>
-              </View>
-              <Pressable onPress={() => setIsProviderEditorVisible(false)} hitSlop={10}>
-                <Feather name="x" size={20} color={palette.ink} />
-              </Pressable>
-            </View>
-
-            <KeyboardAwareScrollView contentContainerStyle={styles.providerEditorContent}>
-              {renderProviderSettingsPanel()}
-            </KeyboardAwareScrollView>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 
@@ -992,15 +1005,19 @@ function ProviderDropdown({
 
       <Modal transparent animationType="fade" visible={isOpen} onRequestClose={() => setIsOpen(false)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setIsOpen(false)}>
-          <Pressable style={styles.modalCard} onPress={() => undefined}>
+          <Pressable style={[styles.modalCard, styles.providerPickerModalCard]} onPress={() => undefined}>
             <Text style={styles.modalTitle}>{label}</Text>
             <Text style={styles.modalBody}>Pick one provider for this part of processing.</Text>
 
-            <View style={styles.optionList}>
+            <ScrollView style={styles.optionListScroll} contentContainerStyle={styles.optionList}>
               {providerIds.map((providerId) => {
                 const selected = providerId === value;
                 const provider = providerMap[providerId];
-                const providerStatus = configuredProviderIds.includes(providerId) ? 'Configured' : 'Needs setup';
+                const optionCopy = buildProviderPickerOptionCopy({
+                  providerLabel: provider.label,
+                  providerDescription: provider.description,
+                  configured: configuredProviderIds.includes(providerId),
+                });
 
                 return (
                   <Pressable
@@ -1011,19 +1028,25 @@ function ProviderDropdown({
                       setIsOpen(false);
                     }}
                   >
+                    <ProviderIcon providerId={providerId} />
                     <View style={styles.optionCopy}>
-                      <Text style={[styles.optionLabel, selected && styles.optionLabelSelected]}>
-                        {provider.label}
-                      </Text>
+                      <View style={styles.optionHeader}>
+                        <Text style={[styles.optionLabel, selected && styles.optionLabelSelected]}>
+                          {optionCopy.title}
+                        </Text>
+                        <Text style={[styles.optionMeta, selected && styles.optionLabelSelected]}>
+                          {optionCopy.statusLine}
+                        </Text>
+                      </View>
                       <Text style={[styles.optionDescription, selected && styles.optionLabelSelected]}>
-                        {providerStatus} • {provider.description}
+                        {optionCopy.description}
                       </Text>
                     </View>
                     {selected ? <Feather name="check" size={16} color={palette.paper} /> : null}
                   </Pressable>
                 );
               })}
-            </View>
+            </ScrollView>
 
             <Pressable style={styles.modalCloseButton} onPress={() => setIsOpen(false)}>
               <Text style={styles.modalCloseText}>Close</Text>
@@ -1047,23 +1070,21 @@ function ConfiguredProviderRow({
   onConfigure: PressableProps['onPress'];
 }) {
   const provider = providerMap[providerId];
+  const meta = buildConfiguredProviderMeta({ configured, active });
 
   return (
-    <View style={styles.configuredProviderRow}>
+    <Pressable style={styles.configuredProviderRow} onPress={onConfigure}>
       <View style={styles.providerTitleRow}>
         <ProviderIcon providerId={providerId} />
         <View style={styles.providerCopy}>
           <Text style={styles.configuredProviderTitle}>{provider.label}</Text>
-          <Text style={styles.configuredProviderMeta}>
-            {configured ? 'Credentials saved' : 'Needs setup'}
-            {active ? ' • Active' : ''}
-          </Text>
+          <Text style={styles.configuredProviderMeta}>{meta}</Text>
         </View>
       </View>
-      <Pressable style={styles.gearButton} onPress={onConfigure} hitSlop={8}>
+      <View style={styles.gearButton}>
         <Feather name="settings" size={17} color={palette.ink} />
-      </Pressable>
-    </View>
+      </View>
+    </Pressable>
   );
 }
 
@@ -1373,6 +1394,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
   },
+  modeSummaryCard: {
+    gap: 6,
+  },
+  modeSummaryTitle: {
+    color: palette.ink,
+    fontFamily: typography.heading.fontFamily,
+    fontSize: 16,
+  },
   summaryActions: {
     alignItems: 'flex-start',
     flexDirection: 'row',
@@ -1471,10 +1500,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flex: 1,
+    minWidth: 0,
   },
   providerCopy: {
     flex: 1,
     gap: 4,
+    minWidth: 0,
   },
   selectedProviderTitle: {
     color: palette.ink,
@@ -1482,6 +1514,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   localRuntimeCard: {
+    gap: 6,
+  },
+  modeContextCard: {
     gap: 6,
   },
   localModelsSection: {
@@ -1652,6 +1687,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.lineSoft,
   },
+  providerPickerModalCard: {
+    maxHeight: '82%',
+  },
   providerEditorSheet: {
     maxHeight: '88%',
     backgroundColor: palette.paper,
@@ -1686,9 +1724,16 @@ const styles = StyleSheet.create({
   optionList: {
     gap: 8,
   },
+  optionListScroll: {
+    maxHeight: 460,
+  },
   optionCopy: {
     flex: 1,
     gap: 3,
+    minWidth: 0,
+  },
+  optionHeader: {
+    gap: 2,
   },
   optionButton: {
     backgroundColor: palette.cardUtility,
@@ -1709,10 +1754,17 @@ const styles = StyleSheet.create({
   optionLabel: {
     color: palette.ink,
     fontFamily: typography.label.fontFamily,
-    flex: 1,
+    fontSize: 14,
   },
   optionLabelSelected: {
     color: palette.paper,
+  },
+  optionMeta: {
+    color: palette.accent,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   optionDescription: {
     color: palette.mutedInk,

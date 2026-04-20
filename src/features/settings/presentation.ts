@@ -66,6 +66,26 @@ export function buildActiveProviderSummary({
   return `Transcript uses ${transcriptionProviderLabel} (${transcriptionModelLabel}). Summary uses ${summaryProviderLabel} (${summaryModelLabel}).`;
 }
 
+export function buildProcessingModeDetails({
+  processingMode,
+  summaryProviderLabel,
+}: {
+  processingMode: SettingsProcessingMode;
+  summaryProviderLabel: string;
+}) {
+  if (processingMode === 'offline') {
+    return {
+      title: 'Offline transcription on this device',
+      body: `Transcription runs on-device with a downloaded local model. Summaries still use ${summaryProviderLabel} in the cloud.`,
+    };
+  }
+
+  return {
+    title: 'Cloud transcription and summaries',
+    body: 'Transcription and summaries both run through your selected API providers.',
+  };
+}
+
 export function buildSettingsOverviewItems({
   transcriptionProviderLabel,
   installedTranscriptionCount,
@@ -80,4 +100,37 @@ export function buildSettingsOverviewItems({
       value: installedTranscriptionCount > 0 ? `${installedTranscriptionCount} installed` : 'None installed',
     },
   ];
+}
+
+export function buildProviderPickerOptionCopy({
+  providerLabel,
+  providerDescription,
+  configured,
+}: {
+  providerLabel: string;
+  providerDescription: string;
+  configured: boolean;
+}) {
+  return {
+    title: providerLabel,
+    statusLine: configured ? 'Configured' : 'Needs setup',
+    description: providerDescription,
+  };
+}
+
+export function buildConfiguredProviderMeta({
+  configured,
+  active,
+}: {
+  configured: boolean;
+  active: boolean;
+}) {
+  return `${configured ? 'Credentials saved' : 'Needs setup'}${active ? ' • Active' : ''}`;
+}
+
+export function buildProviderEditorSelection(providerId: ProviderId) {
+  return {
+    editingProviderId: providerId,
+    revealInlinePanel: true,
+  } as const;
 }

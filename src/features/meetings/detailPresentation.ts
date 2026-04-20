@@ -25,6 +25,45 @@ export function getMeetingDetailPrimaryActionLabel(isBusy: boolean) {
   return isBusy ? 'Processing…' : 'Analyze recording';
 }
 
+export function getMeetingDetailLayerChooserPresentation(
+  layerName: string | null,
+  availableLayerCount: number
+) {
+  if (layerName) {
+    return {
+      title: 'Extraction layer',
+      body: `Current layer: ${layerName}. Change it before re-running analysis if you want a different schema.`,
+      actionLabel: 'Change layer',
+    };
+  }
+
+  if (availableLayerCount > 0) {
+    return {
+      title: 'Extraction layer',
+      body: 'No layer selected yet. Pick one before analysis if you want structured fields in the result.',
+      actionLabel: 'Choose layer',
+    };
+  }
+
+  return {
+    title: 'Extraction layer',
+    body: 'No layers created yet. Create one first if you want structured extraction in addition to transcript and summary.',
+    actionLabel: 'Manage layers',
+  };
+}
+
+export function getMeetingDetailLayerPickerHeightRatio(availableLayerCount: number) {
+  if (availableLayerCount >= 6) {
+    return 0.92;
+  }
+
+  if (availableLayerCount >= 3) {
+    return 0.82;
+  }
+
+  return 0.7;
+}
+
 export function getPlaybackActionLabel(isPlaying: boolean) {
   return isPlaying ? 'Pause recording' : 'Play recording';
 }

@@ -17,6 +17,9 @@ type RecordingInput = {
   durationMs: number;
 };
 
+const AUDIO_READABILITY_ATTEMPTS = 3;
+const AUDIO_READABILITY_RETRY_MS = 150;
+
 export async function listMeetings(): Promise<MeetingRow[]> {
   const db = getDatabase();
   const rows = await db.getAllAsync<Record<string, unknown>>(
@@ -86,6 +89,7 @@ export async function processMeeting(id: string, options: { layerId?: string | n
   }
 
   try {
+    await ensureAudioFileReadable(meeting.audioUri);
     await clearMeetingProcessingArtifacts(id);
     await updateMeetingStatus(
       id,
@@ -406,6 +410,42 @@ async function copyAudioIntoAppStorage(sourceUri: string, extension: string) {
   return destination;
 }
 
+async function ensureAudioFileReadable(audioUri: string) {
+  for (let attempt = 1; attempt <= AUDIO_READABILITY_ATTEMPTS; attempt += 1) {
+    try {
+      const info = (await FileSystem.getInfoAsync(audioUri)) as Awaited<
+        ReturnType<typeof FileSystem.getInfoAsync>
+      > & {
+        size?: number;
+      };
+
+      if (!info.exists) {
+        throw new Error('The saved recording file was not found.');
+      }
+
+      if (typeof info.size === 'number' && info.size <= 0) {
+        throw new Error('The saved recording file is still empty.');
+      }
+
+      await FileSystem.readAsStringAsync(audioUri, {
+        encoding: FileSystem.EncodingType.Base64,
+        position: 0,
+        length: 64,
+      });
+
+      return;
+    } catch (error) {
+      if (attempt === AUDIO_READABILITY_ATTEMPTS) {
+        throw new Error(
+          'This recording is saved in the app, but the audio file is not readable yet. Please try again in a moment.'
+        );
+      }
+
+      await wait(AUDIO_READABILITY_RETRY_MS);
+    }
+  }
+}
+
 function createId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -417,4 +457,10 @@ function getExtensionFromPath(value: string) {
 
 function stripExtension(value: string) {
   return value.replace(/\.[a-zA-Z0-9]+$/, '');
+}
+
+function wait(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }

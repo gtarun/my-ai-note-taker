@@ -1,19 +1,22 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, type RefObject } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  type ScrollView as ScrollViewInstance,
   type ScrollViewProps,
   StyleSheet,
 } from 'react-native';
 
 type KeyboardAwareScrollViewProps = ScrollViewProps & {
   children: ReactNode;
+  scrollRef?: RefObject<ScrollViewInstance | null>;
 };
 
 export function KeyboardAwareScrollView({
   children,
   keyboardShouldPersistTaps = 'handled',
+  scrollRef,
   ...props
 }: KeyboardAwareScrollViewProps) {
   return (
@@ -23,6 +26,7 @@ export function KeyboardAwareScrollView({
       style={styles.wrapper}
     >
       <ScrollView
+        ref={scrollRef}
         keyboardShouldPersistTaps={keyboardShouldPersistTaps}
         contentInsetAdjustmentBehavior="automatic"
         {...props}

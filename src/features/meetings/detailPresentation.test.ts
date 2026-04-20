@@ -5,6 +5,8 @@ import {
   MEETING_DETAIL_TITLE_ACTION_SLOT_MIN_WIDTH,
   MEETING_DETAIL_SECTION_ORDER,
   getExtractionSyncLabel,
+  getMeetingDetailLayerChooserPresentation,
+  getMeetingDetailLayerPickerHeightRatio,
   getMeetingDetailExtractionCopyText,
   getMeetingDetailActionItemsCopyText,
   getMeetingDetailDecisionsCopyText,
@@ -115,5 +117,32 @@ describe('meeting detail presentation', () => {
     expect(getExtractionSyncLabel('syncing')).toBe('Syncing…');
     expect(getExtractionSyncLabel('synced')).toBe('Synced');
     expect(getExtractionSyncLabel('sync_failed')).toBe('Sync failed');
+  });
+
+  test('explains how to reopen and change the extraction layer chooser', () => {
+    expect(getMeetingDetailLayerChooserPresentation(null, 2)).toEqual({
+      title: 'Extraction layer',
+      body: 'No layer selected yet. Pick one before analysis if you want structured fields in the result.',
+      actionLabel: 'Choose layer',
+    });
+
+    expect(getMeetingDetailLayerChooserPresentation('Customer intake', 2)).toEqual({
+      title: 'Extraction layer',
+      body: 'Current layer: Customer intake. Change it before re-running analysis if you want a different schema.',
+      actionLabel: 'Change layer',
+    });
+
+    expect(getMeetingDetailLayerChooserPresentation(null, 0)).toEqual({
+      title: 'Extraction layer',
+      body: 'No layers created yet. Create one first if you want structured extraction in addition to transcript and summary.',
+      actionLabel: 'Manage layers',
+    });
+  });
+
+  test('uses a taller adaptive sheet when there are more extraction layer options', () => {
+    expect(getMeetingDetailLayerPickerHeightRatio(0)).toBe(0.7);
+    expect(getMeetingDetailLayerPickerHeightRatio(2)).toBe(0.7);
+    expect(getMeetingDetailLayerPickerHeightRatio(4)).toBe(0.82);
+    expect(getMeetingDetailLayerPickerHeightRatio(8)).toBe(0.92);
   });
 });

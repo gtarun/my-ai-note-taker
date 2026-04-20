@@ -34,6 +34,10 @@ const summarizeTranscript = vi.fn(async () => ({
   decisions: [],
   followUps: [],
 }));
+const fileSystemCopyAsync = vi.fn(async () => undefined);
+const fileSystemGetInfoAsync = vi.fn(async () => ({ exists: false }));
+const fileSystemReadAsStringAsync = vi.fn(async () => '');
+const fileSystemDeleteAsync = vi.fn(async () => undefined);
 const extractStructuredData = vi.fn(async () => ({
   full_name: 'Priya',
   qualification: 'B.Com',
@@ -55,9 +59,13 @@ vi.mock('react-native', () => ({
 
 vi.mock('expo-file-system/legacy', () => ({
   documentDirectory: 'file:///documents/',
-  copyAsync: vi.fn(async () => undefined),
-  getInfoAsync: vi.fn(async () => ({ exists: false })),
-  deleteAsync: vi.fn(async () => undefined),
+  EncodingType: {
+    Base64: 'base64',
+  },
+  copyAsync: fileSystemCopyAsync,
+  getInfoAsync: fileSystemGetInfoAsync,
+  readAsStringAsync: fileSystemReadAsStringAsync,
+  deleteAsync: fileSystemDeleteAsync,
 }));
 
 beforeEach(() => {
@@ -66,6 +74,12 @@ beforeEach(() => {
   summarizeTranscript.mockClear();
   extractStructuredData.mockClear();
   appendExtractionLayerRow.mockClear();
+  fileSystemCopyAsync.mockClear();
+  fileSystemGetInfoAsync.mockReset();
+  fileSystemGetInfoAsync.mockImplementation(async () => ({ exists: false }));
+  fileSystemReadAsStringAsync.mockReset();
+  fileSystemReadAsStringAsync.mockImplementation(async () => '');
+  fileSystemDeleteAsync.mockClear();
   meetingState.clear();
   meetingState.set('meeting-1', {
     id: 'meeting-1',
@@ -299,6 +313,8 @@ vi.mock('./googleSheets', () => ({
 
 describe('meeting processing with extraction layers', () => {
   test('keeps the existing transcript + summary flow when no layer is selected', async () => {
+    fileSystemGetInfoAsync.mockImplementation(async () => ({ exists: true, size: 128 }));
+    fileSystemReadAsStringAsync.mockImplementation(async () => 'YQ==');
     const { getMeeting, processMeeting } = await import('./meetings');
 
     await processMeeting('meeting-1');
@@ -312,6 +328,8 @@ describe('meeting processing with extraction layers', () => {
   });
 
   test('stores extracted values when a layer is selected', async () => {
+    fileSystemGetInfoAsync.mockImplementation(async () => ({ exists: true, size: 128 }));
+    fileSystemReadAsStringAsync.mockImplementation(async () => 'YQ==');
     const { getMeeting, processMeeting } = await import('./meetings');
 
     await processMeeting('meeting-1', { layerId: 'layer-1' });
@@ -341,6 +359,8 @@ describe('meeting processing with extraction layers', () => {
   });
 
   test('keeps transcript + summary ready even when extraction fails', async () => {
+    fileSystemGetInfoAsync.mockImplementation(async () => ({ exists: true, size: 128 }));
+    fileSystemReadAsStringAsync.mockImplementation(async () => 'YQ==');
     extractStructuredData.mockImplementationOnce(async () => {
       throw new Error('Model returned invalid JSON.');
     });
@@ -360,6 +380,8 @@ describe('meeting processing with extraction layers', () => {
   });
 
   test('persists review edits and syncs the row to Google Sheets', async () => {
+    fileSystemGetInfoAsync.mockImplementation(async () => ({ exists: true, size: 128 }));
+    fileSystemReadAsStringAsync.mockImplementation(async () => 'YQ==');
     const { getMeeting, processMeeting, saveMeetingExtractionValues, syncMeetingExtractionResult } =
       await import('./meetings');
 
@@ -390,5 +412,47 @@ describe('meeting processing with extraction layers', () => {
         issue: 'Delayed payroll',
       },
     });
+  });
+
+  test('retries shortly when the meeting audio is not readable yet', async () => {
+    vi.useFakeTimers();
+    fileSystemGetInfoAsync.mockImplementation(async () => ({ exists: true, size: 128 }));
+    fileSystemReadAsStringAsync
+      .mockRejectedValueOnce(new Error('File is not readable yet.'))
+      .mockRejectedValueOnce(new Error('File is not readable yet.'))
+      .mockResolvedValueOnce('YQ==');
+
+    try {
+      const { processMeeting } = await import('./meetings');
+      const processing = processMeeting('meeting-1');
+      const assertion = expect(processing).resolves.toBeUndefined();
+
+      await vi.runAllTimersAsync();
+      await assertion;
+      expect(fileSystemReadAsStringAsync).toHaveBeenCalledTimes(3);
+      expect(transcribeAudio).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('fails early with a clear error when the meeting audio stays unreadable', async () => {
+    vi.useFakeTimers();
+    fileSystemGetInfoAsync.mockImplementation(async () => ({ exists: true, size: 128 }));
+    fileSystemReadAsStringAsync.mockRejectedValue(new Error('File is not readable yet.'));
+
+    try {
+      const { processMeeting } = await import('./meetings');
+      const processing = processMeeting('meeting-1');
+      const assertion = expect(processing).rejects.toThrow(
+        'This recording is saved in the app, but the audio file is not readable yet. Please try again in a moment.'
+      );
+
+      await vi.runAllTimersAsync();
+      await assertion;
+      expect(transcribeAudio).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
