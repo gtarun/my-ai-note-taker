@@ -194,6 +194,13 @@ describe('local inference bridge', () => {
     expect(iosItems.some((item) => item.id === 'whisper-small')).toBe(false);
   });
 
+  test('keeps the built-in whisper-base size aligned with the hosted binary', async () => {
+    const module = await importLocalModelsTestModule('ios');
+    const catalog = await module.getModelCatalog();
+
+    expect(catalog.find((item) => item.id === 'whisper-base')?.sizeBytes).toBe(147951465);
+  });
+
   test('does not advertise summary models for iOS built-in catalog entries', async () => {
     const module = await importLocalModelsTestModule('ios');
     const catalog = await module.getModelCatalog();

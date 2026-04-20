@@ -30,7 +30,7 @@ const BUILT_IN_MODEL_CATALOG: ModelCatalogItem[] = [
     sourceUrl: buildHuggingFaceModelUrl('ggerganov/whisper.cpp'),
     sourceLabel: 'View whisper.cpp files',
     sha256: '',
-    sizeBytes: 152 * 1024 * 1024,
+    sizeBytes: 147951465,
     platforms: ['ios', 'android'],
     minFreeSpaceBytes: 1 * 1024 * 1024 * 1024,
     recommended: true,
