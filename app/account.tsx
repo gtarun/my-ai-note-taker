@@ -19,6 +19,7 @@ import { FadeInView } from '../src/components/FadeInView';
 import { ScreenBackground } from '../src/components/ScreenBackground';
 import {
   formatBuildVersion,
+  getBuildFooterParts,
   getProfileInitials,
 } from '../src/features/account/presentation';
 import {
@@ -66,11 +67,16 @@ function getBuildInfo() {
     appVersion,
     buildNumber,
   });
+  const footerParts = getBuildFooterParts({
+    appVersion,
+    buildNumber,
+  });
 
   return {
     appVersion,
     buildNumber: typeof buildNumber === 'string' ? buildNumber.trim() : '',
     versionLabel,
+    ...footerParts,
   };
 }
 
@@ -420,8 +426,8 @@ export default function AccountScreen() {
         </FadeInView>
 
         <Text style={styles.footer}>
-          Version v{buildInfo.appVersion}
-          {buildInfo.buildNumber ? `  •  Build ${buildInfo.buildNumber}` : ''}
+          Version {buildInfo.appVersionLabel}
+          {buildInfo.buildNumberLabel ? `  •  ${buildInfo.buildNumberLabel}` : ''}
         </Text>
       </ScrollView>
     </SafeAreaView>

@@ -15,7 +15,7 @@ It is intentionally not a Fathom clone yet. No bots, no auto-join, no calendar m
 - post-meeting transcription with the user's own provider API key
 - AI summary, action items, and decisions
 - local SQLite storage on device
-- catalog-driven local model management for future offline processing
+- guided offline-mode setup with local model bundle progress
 - optional Google Drive backup for recordings after Google sign-in + Drive connect
 - native share/export from the meeting detail screen
 
@@ -105,9 +105,19 @@ The app currently has two modes:
 - remote provider mode: works today in Expo Go with API keys
 - local model mode: settings/UI/catalog are implemented, but real on-device inference still needs a custom native build with the local runtime linked
 
-On first launch, the app shows a short onboarding flow and then routes to `Settings` so you can set up your provider before using the main app.
+### 2. First run and offline setup
 
-### 2. Configure a provider
+On first launch, the app shows a short onboarding flow. The final step prepares offline mode automatically when the current build supports local processing.
+
+- choose a recommended bundle size before starting the local model setup
+- review the estimated download size and time before committing
+- keep using or skip into the app while the setup continues
+- watch progress from onboarding or the `Meetings` dashboard
+- if setup is interrupted, reopen the app and tap `Resume` from `Meetings` or `Settings`
+
+Offline setup currently prepares compatible local model files and settings. Real on-device inference still requires a custom native build with the local runtime linked.
+
+### 3. Configure a provider
 
 For remote providers:
 
@@ -122,7 +132,7 @@ For local models:
 - download compatible transcription and summary models where direct download is supported
 - switch both provider selectors to `Local`
 
-### 3. Create a meeting
+### 4. Create a meeting
 
 You have two options:
 
@@ -154,7 +164,7 @@ These are deliberate for speed:
 - processing is post-meeting only
 - data is local-first
 - audio is uploaded to the configured AI provider only when the user processes a meeting
-- local model catalog and install state exist now, but the native offline runtime is still a custom-build feature
+- offline setup prepares local model files and settings, but native inference is still a custom-build feature
 - Google Drive backup is optional and only uploads the saved recording file
 - imported files do not yet calculate duration metadata
 - Google Drive backup needs Google Cloud + Supabase setup before it works

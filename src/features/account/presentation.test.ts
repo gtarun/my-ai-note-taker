@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { formatBuildVersion, getProfileInitials } from './presentation';
+import { formatBuildVersion, getBuildFooterParts, getProfileInitials } from './presentation';
 
 describe('account presentation', () => {
   test('builds profile initials from name before email', () => {
@@ -18,5 +18,18 @@ describe('account presentation', () => {
   test('formats build versions with an optional build number', () => {
     expect(formatBuildVersion({ appVersion: '1.2.3', buildNumber: '45' })).toBe('v1.2.3 (45)');
     expect(formatBuildVersion({ appVersion: '1.2.3' })).toBe('v1.2.3');
+  });
+
+  test('splits app version and build number for footer display', () => {
+    expect(
+      getBuildFooterParts({
+        appVersion: '1.2.3',
+        buildNumber: '45',
+      })
+    ).toEqual({
+      appVersionLabel: 'v1.2.3',
+      buildNumberLabel: 'Build 45',
+      versionLabel: 'v1.2.3 (45)',
+    });
   });
 });

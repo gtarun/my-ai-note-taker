@@ -33,6 +33,22 @@ export function formatBuildVersion({
   return trimmedBuildNumber ? `v${appVersion} (${trimmedBuildNumber})` : `v${appVersion}`;
 }
 
+export function getBuildFooterParts({
+  appVersion,
+  buildNumber,
+}: {
+  appVersion: string;
+  buildNumber?: string | null;
+}) {
+  const trimmedBuildNumber = typeof buildNumber === 'string' ? buildNumber.trim() : '';
+
+  return {
+    appVersionLabel: `v${appVersion}`,
+    buildNumberLabel: trimmedBuildNumber ? `Build ${trimmedBuildNumber}` : '',
+    versionLabel: formatBuildVersion({ appVersion, buildNumber: trimmedBuildNumber }),
+  };
+}
+
 function pickInitialsSource(name: string | null, email: string | null) {
   const trimmedName = typeof name === 'string' ? name.trim() : '';
   if (trimmedName) {
