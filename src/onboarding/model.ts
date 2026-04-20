@@ -42,10 +42,10 @@ export const ONBOARDING_SLIDES: OnboardingSlide[] = [
   },
   {
     id: 'setup',
-    title: "You're ready to start.",
+    title: 'Prepare offline mode',
     body:
-      'Meetings is your home base. You can configure transcript and summary providers any time from the Settings tab.',
-    highlights: ['Meetings home', 'Record anytime', 'Settings tab'],
+      'We can start downloading the recommended local bundle now so your first recording is easier to analyze later.',
+    highlights: ['Auto-started', 'Skippable', 'Resume later'],
     ctaLabel: 'Open app',
     showSkip: true,
   },

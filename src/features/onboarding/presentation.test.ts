@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'vitest';
 
-import { getOnboardingFeatureCard, getOnboardingProgressPercent } from './presentation';
+import {
+  getOfflineSetupStatusCopy,
+  getOnboardingFeatureCard,
+  getOnboardingProgressPercent,
+} from './presentation';
 
 describe('onboarding presentation', () => {
   test('maps each slide to a feature card', () => {
@@ -23,10 +27,38 @@ describe('onboarding presentation', () => {
       tone: 'secondary',
     });
     expect(getOnboardingFeatureCard('setup')).toEqual({
-      icon: 'settings',
-      title: 'Configure providers',
-      body: 'Add your API key or local model choices before you process your first meeting.',
+      icon: 'download-cloud',
+      title: 'Offline setup',
+      body: 'We can prepare the local bundle now and keep progress visible from Meetings.',
       tone: 'secondary',
+    });
+  });
+
+  test('returns setup-card copy for downloading and ready states', () => {
+    expect(
+      getOfflineSetupStatusCopy({
+        status: 'downloading',
+        bundleLabel: 'Starter',
+        progressPercent: 42,
+        estimatedMinutes: 6,
+      })
+    ).toEqual({
+      title: 'Preparing offline mode',
+      body: 'Starter is downloading now. About 6 min remaining.',
+      progressLabel: '42%',
+    });
+
+    expect(
+      getOfflineSetupStatusCopy({
+        status: 'ready',
+        bundleLabel: 'Starter',
+        progressPercent: 100,
+        estimatedMinutes: null,
+      })
+    ).toEqual({
+      title: 'Offline mode is ready',
+      body: 'Starter finished downloading and local setup has been applied.',
+      progressLabel: 'Ready',
     });
   });
 

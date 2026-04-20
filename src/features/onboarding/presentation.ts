@@ -25,12 +25,51 @@ export function getOnboardingFeatureCard(slideId: OnboardingSlideId) {
       };
     case 'setup':
       return {
-        icon: 'settings',
-        title: 'Configure providers',
-        body: 'Add your API key or local model choices before you process your first meeting.',
+        icon: 'download-cloud',
+        title: 'Offline setup',
+        body: 'We can prepare the local bundle now and keep progress visible from Meetings.',
         tone: 'secondary' as const,
       };
   }
+}
+
+export function getOfflineSetupStatusCopy(params: {
+  status: 'preparing' | 'downloading' | 'paused_offline' | 'failed' | 'ready';
+  bundleLabel: string;
+  progressPercent: number;
+  estimatedMinutes: number | null;
+}) {
+  if (params.status === 'ready') {
+    return {
+      title: 'Offline mode is ready',
+      body: `${params.bundleLabel} finished downloading and local setup has been applied.`,
+      progressLabel: 'Ready',
+    };
+  }
+
+  if (params.status === 'paused_offline') {
+    return {
+      title: 'Offline setup paused',
+      body: 'Connection was interrupted. You can resume from Meetings when you are ready.',
+      progressLabel: `${params.progressPercent}%`,
+    };
+  }
+
+  if (params.status === 'failed') {
+    return {
+      title: 'Offline setup needs attention',
+      body: 'We could not finish preparing offline mode. You can retry from Meetings.',
+      progressLabel: `${params.progressPercent}%`,
+    };
+  }
+
+  return {
+    title: 'Preparing offline mode',
+    body: `${params.bundleLabel} is downloading now.${
+      params.estimatedMinutes ? ` About ${params.estimatedMinutes} min remaining.` : ''
+    }`,
+    progressLabel: `${params.progressPercent}%`,
+  };
 }
 
 export function getOnboardingProgressPercent(activeIndex: number, slideCount: number) {

@@ -20,9 +20,9 @@ describe('onboarding model', () => {
       'setup',
     ]);
     expect(ONBOARDING_SLIDES[0].title).toBe('Record it. Upload it. Process it later.');
-    expect(ONBOARDING_SLIDES[3].title).toBe("You're ready to start.");
+    expect(ONBOARDING_SLIDES[3].title).toBe('Prepare offline mode');
     expect(ONBOARDING_SLIDES[3].ctaLabel).toBe('Open app');
-    expect(ONBOARDING_SLIDES[3].body).toContain('Settings tab');
+    expect(ONBOARDING_SLIDES[3].body).toContain('download');
     expect(ONBOARDING_SLIDES.every((slide) => slide.showSkip)).toBe(true);
   });
 
