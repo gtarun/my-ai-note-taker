@@ -188,6 +188,34 @@ export type LocalDeviceSupport = {
   reason: string | null;
 };
 
+export type OfflineSetupStatus =
+  | 'idle'
+  | 'preparing'
+  | 'downloading'
+  | 'paused_offline'
+  | 'paused_user'
+  | 'failed'
+  | 'ready';
+
+export type OfflineSetupBundleId = 'starter' | 'full' | '';
+
+export type OfflineSetupSession = {
+  bundleId: OfflineSetupBundleId;
+  bundleLabel: string;
+  modelIds: string[];
+  status: OfflineSetupStatus;
+  bytesDownloaded: number;
+  totalBytes: number;
+  progress: number;
+  estimatedSecondsRemaining: number | null;
+  networkPolicy: 'wifi_or_cellular';
+  lastError: string | null;
+  startedAt: string | null;
+  updatedAt: string | null;
+  autoConfiguredAt: string | null;
+  isDismissed: boolean;
+};
+
 export type DriveConnection = {
   status: 'not_connected' | 'connected';
   accountEmail: string | null;

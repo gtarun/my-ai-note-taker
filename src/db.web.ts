@@ -1,4 +1,4 @@
-import { MeetingRow } from './types';
+import { MeetingRow, type OfflineSetupSession } from './types';
 
 type SettingsRow = {
   id: number;
@@ -15,6 +15,24 @@ type AppPreferencesRow = {
   delete_uploaded_audio: number;
   model_catalog_url: string;
   has_seen_onboarding: number;
+};
+
+type OfflineSetupSessionRow = {
+  id: number;
+  bundle_id: string;
+  bundle_label: string;
+  model_ids_json: string;
+  status: OfflineSetupSession['status'];
+  bytes_downloaded: number;
+  total_bytes: number;
+  progress: number;
+  estimated_seconds_remaining: number | null;
+  network_policy: string;
+  last_error: string | null;
+  started_at: string | null;
+  updated_at: string | null;
+  auto_configured_at: string | null;
+  is_dismissed: number;
 };
 
 type ProviderSettingsRow = {
@@ -97,6 +115,7 @@ type DatabaseShape = {
   extractionLayerFields: ExtractionLayerFieldStorageRow[];
   settings: SettingsRow;
   appPreferences: AppPreferencesRow;
+  offlineSetupSession: OfflineSetupSessionRow;
   providerSettings: ProviderSettingsRow[];
   installedModels: InstalledModelStorageRow[];
 };
@@ -119,6 +138,23 @@ const defaultState: DatabaseShape = {
     delete_uploaded_audio: 0,
     model_catalog_url: '',
     has_seen_onboarding: 0,
+  },
+  offlineSetupSession: {
+    id: 1,
+    bundle_id: '',
+    bundle_label: '',
+    model_ids_json: '[]',
+    status: 'idle',
+    bytes_downloaded: 0,
+    total_bytes: 0,
+    progress: 0,
+    estimated_seconds_remaining: null,
+    network_policy: 'wifi_or_cellular',
+    last_error: null,
+    started_at: null,
+    updated_at: null,
+    auto_configured_at: null,
+    is_dismissed: 0,
   },
   providerSettings: [],
   installedModels: [],
@@ -146,6 +182,10 @@ function readState(): DatabaseShape {
         ...state.appPreferences,
         model_catalog_url: state.appPreferences?.model_catalog_url ?? defaultState.appPreferences.model_catalog_url,
         has_seen_onboarding: state.appPreferences?.has_seen_onboarding ?? defaultState.appPreferences.has_seen_onboarding,
+      },
+      offlineSetupSession: {
+        ...structuredClone(defaultState.offlineSetupSession),
+        ...state.offlineSetupSession,
       },
       settings: {
         ...structuredClone(defaultState.settings),
@@ -180,6 +220,10 @@ const db = {
 
     if (!state.appPreferences) {
       state.appPreferences = structuredClone(defaultState.appPreferences);
+    }
+
+    if (!state.offlineSetupSession) {
+      state.offlineSetupSession = structuredClone(defaultState.offlineSetupSession);
     }
 
     if (typeof state.appPreferences.model_catalog_url !== 'string') {
@@ -217,6 +261,10 @@ const db = {
 
     if (source.includes('FROM app_settings')) {
       return state.settings as T;
+    }
+
+    if (source.includes('FROM offline_setup_session')) {
+      return state.offlineSetupSession as T;
     }
 
     if (source.includes('FROM meetings WHERE id = ?')) {
@@ -332,6 +380,29 @@ const db = {
         delete_uploaded_audio: Number(params[2]),
         model_catalog_url: params[3] ? String(params[3]) : '',
         has_seen_onboarding: 0,
+      };
+      writeState(state);
+      return;
+    }
+
+    if (source.includes('UPDATE offline_setup_session SET')) {
+      state.offlineSetupSession = {
+        ...state.offlineSetupSession,
+        bundle_id: String(params[0]),
+        bundle_label: String(params[1]),
+        model_ids_json: String(params[2]),
+        status: params[3] as OfflineSetupSessionRow['status'],
+        bytes_downloaded: Number(params[4] ?? 0),
+        total_bytes: Number(params[5] ?? 0),
+        progress: Number(params[6] ?? 0),
+        estimated_seconds_remaining:
+          params[7] == null ? null : Number(params[7]),
+        network_policy: String(params[8]),
+        last_error: params[9] ? String(params[9]) : null,
+        started_at: params[10] ? String(params[10]) : null,
+        updated_at: params[11] ? String(params[11]) : null,
+        auto_configured_at: params[12] ? String(params[12]) : null,
+        is_dismissed: Number(params[13] ?? 0),
       };
       writeState(state);
       return;

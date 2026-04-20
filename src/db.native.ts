@@ -49,6 +49,24 @@ export async function initializeDatabase() {
       has_seen_onboarding INTEGER NOT NULL DEFAULT 0
     );
 
+    CREATE TABLE IF NOT EXISTS offline_setup_session (
+      id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
+      bundle_id TEXT NOT NULL DEFAULT '',
+      bundle_label TEXT NOT NULL DEFAULT '',
+      model_ids_json TEXT NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'idle',
+      bytes_downloaded INTEGER NOT NULL DEFAULT 0,
+      total_bytes INTEGER NOT NULL DEFAULT 0,
+      progress REAL NOT NULL DEFAULT 0,
+      estimated_seconds_remaining INTEGER,
+      network_policy TEXT NOT NULL DEFAULT 'wifi_or_cellular',
+      last_error TEXT,
+      started_at TEXT,
+      updated_at TEXT,
+      auto_configured_at TEXT,
+      is_dismissed INTEGER NOT NULL DEFAULT 0
+    );
+
     CREATE TABLE IF NOT EXISTS provider_settings (
       provider_id TEXT PRIMARY KEY NOT NULL,
       api_key TEXT NOT NULL DEFAULT '',
@@ -122,6 +140,8 @@ export async function initializeDatabase() {
       'openai',
       0
     );
+
+    INSERT OR IGNORE INTO offline_setup_session (id) VALUES (1);
   `);
 
   const appPreferenceColumns = await db.getAllAsync<{ name?: string }>('PRAGMA table_info(app_preferences)');

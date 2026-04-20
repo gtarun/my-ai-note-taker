@@ -50,7 +50,7 @@ function readTrimmedString(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function getVersionLabel() {
+function getBuildInfo() {
   const expoConfig = Constants.expoConfig;
   const appVersion = readTrimmedString(expoConfig?.version) || 'dev';
   const iosBuildNumber = readTrimmedString(expoConfig?.ios?.buildNumber);
@@ -62,10 +62,16 @@ function getVersionLabel() {
     (typeof androidVersionCode === 'number' ? String(androidVersionCode) : '') ||
     nativeBuildVersion;
 
-  return formatBuildVersion({
+  const versionLabel = formatBuildVersion({
     appVersion,
     buildNumber,
   });
+
+  return {
+    appVersion,
+    buildNumber: typeof buildNumber === 'string' ? buildNumber.trim() : '',
+    versionLabel,
+  };
 }
 
 export default function AccountScreen() {
@@ -255,7 +261,7 @@ export default function AccountScreen() {
     name: session?.user.name ?? null,
     email: session?.user.email ?? null,
   });
-  const versionLabel = useMemo(() => getVersionLabel(), []);
+  const buildInfo = useMemo(() => getBuildInfo(), []);
   const displayName = session?.user.name?.trim() || session?.user.email || 'Your profile';
   const emailLabel = session?.user.email ?? 'Sign in with Google to sync your identity, backups, and Sheets.';
   const driveStatusCopy =
@@ -413,7 +419,10 @@ export default function AccountScreen() {
           ) : null}
         </FadeInView>
 
-        <Text style={styles.footer}>Build {versionLabel}</Text>
+        <Text style={styles.footer}>
+          Version v{buildInfo.appVersion}
+          {buildInfo.buildNumber ? `  •  Build ${buildInfo.buildNumber}` : ''}
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
