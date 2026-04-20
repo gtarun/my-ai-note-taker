@@ -18,6 +18,16 @@ const DEFAULT_SESSION: OfflineSetupSession = {
   isDismissed: false,
 };
 
+const OFFLINE_SETUP_STATUSES: OfflineSetupSession['status'][] = [
+  'idle',
+  'preparing',
+  'downloading',
+  'paused_offline',
+  'paused_user',
+  'failed',
+  'ready',
+];
+
 function parseModelIds(value: unknown) {
   if (typeof value !== 'string') {
     return [];
@@ -31,6 +41,23 @@ function parseModelIds(value: unknown) {
   }
 }
 
+function createDefaultSession(): OfflineSetupSession {
+  return {
+    ...DEFAULT_SESSION,
+    modelIds: [...DEFAULT_SESSION.modelIds],
+  };
+}
+
+function normalizeOfflineSetupStatus(value: unknown): OfflineSetupSession['status'] {
+  return typeof value === 'string' && OFFLINE_SETUP_STATUSES.includes(value as OfflineSetupSession['status'])
+    ? (value as OfflineSetupSession['status'])
+    : 'idle';
+}
+
+function normalizeNetworkPolicy(value: unknown): OfflineSetupSession['networkPolicy'] {
+  return value === 'wifi_or_cellular' ? 'wifi_or_cellular' : 'wifi_or_cellular';
+}
+
 export async function getOfflineSetupSession(): Promise<OfflineSetupSession> {
   const db = getDatabase();
   const row = await db.getFirstAsync<Record<string, unknown>>(
@@ -38,20 +65,20 @@ export async function getOfflineSetupSession(): Promise<OfflineSetupSession> {
   );
 
   if (!row) {
-    return DEFAULT_SESSION;
+    return createDefaultSession();
   }
 
   return {
     bundleId: String(row.bundle_id ?? ''),
     bundleLabel: String(row.bundle_label ?? ''),
     modelIds: parseModelIds(row.model_ids_json),
-    status: (row.status as OfflineSetupSession['status']) ?? 'idle',
+    status: normalizeOfflineSetupStatus(row.status),
     bytesDownloaded: Number(row.bytes_downloaded ?? 0),
     totalBytes: Number(row.total_bytes ?? 0),
     progress: Number(row.progress ?? 0),
     estimatedSecondsRemaining:
       row.estimated_seconds_remaining == null ? null : Number(row.estimated_seconds_remaining),
-    networkPolicy: (row.network_policy as OfflineSetupSession['networkPolicy']) ?? 'wifi_or_cellular',
+    networkPolicy: normalizeNetworkPolicy(row.network_policy),
     lastError: row.last_error ? String(row.last_error) : null,
     startedAt: row.started_at ? String(row.started_at) : null,
     updatedAt: row.updated_at ? String(row.updated_at) : null,

@@ -97,6 +97,26 @@ vi.mock('../db', () => ({
 import { getOfflineSetupSession, saveOfflineSetupSession } from './offlineSetupSession';
 
 describe('offline setup session storage', () => {
+  beforeEach(() => {
+    Object.assign(sessionRowState, {
+      id: 1,
+      bundle_id: '',
+      bundle_label: '',
+      model_ids_json: '[]',
+      status: 'idle',
+      bytes_downloaded: 0,
+      total_bytes: 0,
+      progress: 0,
+      estimated_seconds_remaining: null,
+      network_policy: 'wifi_or_cellular',
+      last_error: null,
+      started_at: null,
+      updated_at: null,
+      auto_configured_at: null,
+      is_dismissed: 0,
+    });
+  });
+
   test('hydrates the default idle session', async () => {
     await expect(getOfflineSetupSession()).resolves.toEqual(defaultSession);
   });
@@ -150,6 +170,28 @@ describe('offline setup session storage', () => {
       lastError: null,
       startedAt: '2026-04-20T10:00:00.000Z',
       updatedAt: '2026-04-20T10:00:00.000Z',
+      autoConfiguredAt: null,
+      isDismissed: false,
+    });
+  });
+
+  test('normalizes unexpected persisted enum-like values to safe defaults', async () => {
+    sessionRowState.status = 'not-a-real-status';
+    sessionRowState.network_policy = 'unexpected-policy';
+
+    await expect(getOfflineSetupSession()).resolves.toEqual({
+      bundleId: '',
+      bundleLabel: '',
+      modelIds: [],
+      status: 'idle',
+      bytesDownloaded: 0,
+      totalBytes: 0,
+      progress: 0,
+      estimatedSecondsRemaining: null,
+      networkPolicy: 'wifi_or_cellular',
+      lastError: null,
+      startedAt: null,
+      updatedAt: null,
       autoConfiguredAt: null,
       isDismissed: false,
     });
