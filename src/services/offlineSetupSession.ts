@@ -51,7 +51,7 @@ export async function getOfflineSetupSession(): Promise<OfflineSetupSession> {
     progress: Number(row.progress ?? 0),
     estimatedSecondsRemaining:
       row.estimated_seconds_remaining == null ? null : Number(row.estimated_seconds_remaining),
-    networkPolicy: 'wifi_or_cellular',
+    networkPolicy: (row.network_policy as OfflineSetupSession['networkPolicy']) ?? 'wifi_or_cellular',
     lastError: row.last_error ? String(row.last_error) : null,
     startedAt: row.started_at ? String(row.started_at) : null,
     updatedAt: row.updated_at ? String(row.updated_at) : null,
