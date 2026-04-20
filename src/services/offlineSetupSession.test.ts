@@ -1,4 +1,10 @@
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, expectTypeOf, test, vi } from 'vitest';
+
+import type {
+  OfflineSetupBundleId,
+  OfflineSetupSession,
+  OfflineSetupStatus,
+} from '../types';
 
 const sessionRowState = {
   id: 1,
@@ -34,6 +40,29 @@ const defaultSession = {
   autoConfiguredAt: null,
   isDismissed: false,
 } as const;
+
+expectTypeOf<OfflineSetupStatus>().toEqualTypeOf<
+  'idle' | 'preparing' | 'downloading' | 'paused_offline' | 'paused_user' | 'failed' | 'ready'
+>();
+
+expectTypeOf<OfflineSetupBundleId>().toEqualTypeOf<'starter' | 'full' | ''>();
+
+expectTypeOf<OfflineSetupSession>().toEqualTypeOf<{
+  bundleId: OfflineSetupBundleId;
+  bundleLabel: string;
+  modelIds: string[];
+  status: OfflineSetupStatus;
+  bytesDownloaded: number;
+  totalBytes: number;
+  progress: number;
+  estimatedSecondsRemaining: number | null;
+  networkPolicy: 'wifi_or_cellular';
+  lastError: string | null;
+  startedAt: string | null;
+  updatedAt: string | null;
+  autoConfiguredAt: string | null;
+  isDismissed: boolean;
+}>();
 
 vi.mock('../db', () => ({
   getDatabase: () => ({
