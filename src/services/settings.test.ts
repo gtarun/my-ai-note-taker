@@ -245,4 +245,34 @@ describe('settings persistence', () => {
       },
     });
   });
+
+  test('keeps local readiness when cloud settings sync fails for a signed-in user', async () => {
+    mockGetAuthSession.mockResolvedValue({ accessToken: 'token', user: { id: 'user-1' } });
+    mockFetchCloudUserDataSnapshot.mockResolvedValue({
+      profile: { displayName: 'Tarun', avatarUrl: null, timezone: null },
+      preferences: {
+        selectedTranscriptionProvider: 'openai',
+        selectedSummaryProvider: 'openai',
+        deleteUploadedAudio: false,
+        modelCatalogUrl: '',
+        hasSeenOnboarding: false,
+      },
+      providers: [],
+      integrations: [],
+      layers: [],
+    });
+    mockSaveCloudSettings.mockRejectedValueOnce(new Error('cloud sync failed'));
+
+    await expect(
+      applyOfflineSetupAutoConfig({
+        bundleId: 'starter',
+        modelIds: ['whisper-base'],
+        preferredTranscriptionModelId: 'whisper-base',
+      })
+    ).resolves.toBeUndefined();
+
+    expect(appPreferencesState.selected_transcription_provider).toBe('local');
+    expect(providerSettingsState.local.transcription_model).toBe('whisper-base');
+    expect(mockSaveCloudSettings).toHaveBeenCalled();
+  });
 });

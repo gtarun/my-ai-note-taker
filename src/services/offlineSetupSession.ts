@@ -40,6 +40,9 @@ export type OfflineSetupBundle = {
   description: string;
 };
 
+const IN_APP_DOWNLOADABLE_MODEL = (item: ModelCatalogItem) =>
+  !item.requiresExternalSetup && item.downloadUrl.trim().length > 0;
+
 function parseModelIds(value: unknown) {
   if (typeof value !== 'string') {
     return [];
@@ -74,11 +77,16 @@ function estimateBundleSeconds(totalBytes: number) {
   return Math.max(60, Math.round(totalBytes / (25 * 1024 * 1024)));
 }
 
-function buildBundle(label: OfflineSetupBundle['label'], modelItems: ModelCatalogItem[], isRecommended: boolean): OfflineSetupBundle {
+function buildBundle(
+  id: OfflineSetupBundleId,
+  label: OfflineSetupBundle['label'],
+  modelItems: ModelCatalogItem[],
+  isRecommended: boolean
+): OfflineSetupBundle {
   const totalBytes = modelItems.reduce((sum, item) => sum + item.sizeBytes, 0);
 
   return {
-    id: label.toLowerCase() as OfflineSetupBundleId,
+    id,
     label,
     modelIds: modelItems.map((item) => item.id),
     totalBytes,
@@ -98,7 +106,7 @@ export function resolveOfflineSetupBundles({
   platform: 'ios' | 'android';
   catalog: ModelCatalogItem[];
 }): OfflineSetupBundle[] {
-  const visible = catalog.filter((item) => item.platforms.includes(platform));
+  const visible = catalog.filter((item) => item.platforms.includes(platform) && IN_APP_DOWNLOADABLE_MODEL(item));
   const starterModels =
     platform === 'ios'
       ? visible.filter((item) => item.kind === 'transcription' && isSupportedIosTranscriptionModel(item.id))
@@ -109,11 +117,11 @@ export function resolveOfflineSetupBundles({
   const bundles: OfflineSetupBundle[] = [];
 
   if (starterModels.length) {
-    bundles.push(buildBundle('Starter', starterModels, true));
+    bundles.push(buildBundle('starter', 'Starter', starterModels, true));
   }
 
   if (fullModels.length > starterModels.length) {
-    bundles.push(buildBundle('Full', fullModels, false));
+    bundles.push(buildBundle('full', 'Full', fullModels, false));
   }
 
   return bundles;

@@ -107,7 +107,28 @@ export async function applyOfflineSetupAutoConfig(params: {
     settings.selectedTranscriptionProvider = 'local';
   }
 
-  await saveAppSettings(settings);
+  const sanitized = sanitizeAppSettings(settings);
+  const hasSeenOnboarding = await getHasSeenOnboarding();
+  await saveAppSettingsToLocalCache(sanitized);
+
+  try {
+    const session = await getAuthSession();
+
+    if (!session) {
+      return;
+    }
+
+    await saveCloudSettings({
+      selectedTranscriptionProvider: sanitized.selectedTranscriptionProvider,
+      selectedSummaryProvider: sanitized.selectedSummaryProvider,
+      deleteUploadedAudio: sanitized.deleteUploadedAudio,
+      modelCatalogUrl: sanitized.modelCatalogUrl,
+      hasSeenOnboarding,
+      providers: sanitized.providers,
+    });
+  } catch {
+    return;
+  }
 }
 
 export function sanitizeAppSettings(settings: AppSettings): AppSettings {

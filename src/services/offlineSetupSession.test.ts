@@ -264,6 +264,71 @@ describe('offline setup session storage', () => {
     ]);
   });
 
+  test('builds explicit starter and full bundle ids while skipping non-downloadable android models', async () => {
+    expect(
+      resolveOfflineSetupBundles({
+        platform: 'android',
+        catalog: [
+          {
+            id: 'whisper-base',
+            kind: 'transcription',
+            engine: 'whisper.cpp',
+            displayName: 'Whisper Base',
+            version: 'ggml',
+            downloadUrl: 'https://example.com/whisper-base.bin',
+            sha256: '',
+            sizeBytes: 152,
+            platforms: ['android'],
+            minFreeSpaceBytes: 1,
+            recommended: true,
+            experimental: false,
+            description: 'base',
+          },
+          {
+            id: 'whisper-small',
+            kind: 'transcription',
+            engine: 'whisper.cpp',
+            displayName: 'Whisper Small',
+            version: 'ggml',
+            downloadUrl: 'https://example.com/whisper-small.bin',
+            sha256: '',
+            sizeBytes: 488,
+            platforms: ['android'],
+            minFreeSpaceBytes: 1,
+            recommended: false,
+            experimental: false,
+            description: 'small',
+          },
+          {
+            id: 'gemma-3n-e2b-preview',
+            kind: 'summary',
+            engine: 'mediapipe-llm',
+            displayName: 'Gemma 3n E2B preview',
+            version: '20250520',
+            downloadUrl: '',
+            sha256: '',
+            sizeBytes: 3136226711,
+            platforms: ['android'],
+            minFreeSpaceBytes: 1,
+            recommended: true,
+            experimental: false,
+            description: 'External setup only.',
+            requiresExternalSetup: true,
+          },
+        ],
+      })
+    ).toEqual([
+      expect.objectContaining({
+        id: 'starter',
+        modelIds: ['whisper-base'],
+      }),
+      expect.objectContaining({
+        id: 'full',
+        modelIds: ['whisper-base', 'whisper-small'],
+      }),
+    ]);
+  });
+
   test('starts offline setup from the selected bundle', async () => {
     await startOfflineSetup({
       id: 'starter',
