@@ -9,22 +9,26 @@ export function PillButton({
   icon,
   variant = 'primary',
   disabled,
+  accessibilityLabel,
 }: {
   label: string;
   onPress: () => void;
   icon?: ReactNode;
-  variant?: 'primary' | 'secondary' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
   disabled?: boolean;
+  accessibilityLabel?: string;
 }) {
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
+      accessibilityLabel={accessibilityLabel}
       style={[
         styles.base,
         variant === 'primary' && styles.primary,
         variant === 'secondary' && styles.secondary,
         variant === 'ghost' && styles.ghost,
+        variant === 'danger' && styles.danger,
         disabled && styles.disabled,
       ]}
     >
@@ -32,8 +36,8 @@ export function PillButton({
       <Text
         style={[
           styles.label,
-          variant === 'primary' && styles.primaryLabel,
-          variant !== 'primary' && styles.secondaryLabel,
+          (variant === 'primary' || variant === 'danger') && styles.primaryLabel,
+          variant !== 'primary' && variant !== 'danger' && styles.secondaryLabel,
         ]}
       >
         {label}
@@ -55,6 +59,7 @@ const styles = StyleSheet.create({
   primary: { backgroundColor: palette.accent },
   secondary: { backgroundColor: palette.cardMuted },
   ghost: { backgroundColor: 'transparent' },
+  danger: { backgroundColor: palette.danger },
   disabled: { opacity: 0.45 },
   icon: { alignItems: 'center', justifyContent: 'center' },
   label: { fontFamily: typography.label.fontFamily, fontSize: 15 },

@@ -13,12 +13,17 @@ const tones = {
 export function StatusChip({
   label,
   tone = 'secondary',
+  accessibilityLabel,
 }: {
   label: string;
   tone?: StatusChipTone;
+  accessibilityLabel?: string;
 }) {
   return (
-    <View style={[styles.base, { backgroundColor: tones[tone].backgroundColor }]}>
+    <View
+      style={[styles.base, { backgroundColor: tones[tone].backgroundColor }]}
+      accessibilityLabel={accessibilityLabel}
+    >
       <Text style={[styles.label, { color: tones[tone].color }]}>{label}</Text>
     </View>
   );

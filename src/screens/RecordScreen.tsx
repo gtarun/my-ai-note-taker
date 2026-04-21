@@ -1,29 +1,39 @@
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import {
-  Alert,
-  Pressable,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert, SafeAreaView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { FadeInView } from '../components/FadeInView';
 import { KeyboardAwareScrollView } from '../components/KeyboardAwareScrollView';
 import { ScreenBackground } from '../components/ScreenBackground';
+import { EditorialHero } from '../components/ui/EditorialHero';
+import { PillButton } from '../components/ui/PillButton';
+import { SectionHeading } from '../components/ui/SectionHeading';
+import { StatusChip } from '../components/ui/StatusChip';
+import { SurfaceCard } from '../components/ui/SurfaceCard';
 import { getMeetingDetailEntryMethod } from '../features/meetings/navigation';
 import {
-  getRecordingNoticeBody,
-  getRecordingStatusLabel,
-  getRecordingSupportLabel,
+  getButtonAccessibilityLabel,
+  getButtonDisabled,
+  getButtonIconName,
+  getButtonLabel,
+  getButtonVariant,
+  getConsentBody,
+  getConsentHeading,
+  getHeroBody,
+  getHeroEyebrow,
+  getHeroHeadline,
+  getNoticeBody,
+  getNoticeTitle,
+  getStatusLabel,
+  getStatusTone,
+  getTimerAccessibilityLabel,
+  getTitlePlaceholder,
 } from '../features/recording/presentation';
 import { getMeetingDetailRoute } from '../navigation/routes';
 import { recordingSession } from '../services/recordingSession';
 import { formatDuration } from '../utils/format';
-import { elevation, palette } from '../theme';
+import { palette, typography } from '../theme';
 
 export default function RecordScreen() {
   const [sessionSnapshot, setSessionSnapshot] = useState(() => recordingSession.getSnapshot());
@@ -35,11 +45,10 @@ export default function RecordScreen() {
     });
   }, []);
 
-  const isRecording = sessionSnapshot.phase === 'recording';
-  const isSaving = sessionSnapshot.phase === 'saving';
+  const { phase, titleDraft, durationMillis } = sessionSnapshot;
 
   const handleRecordToggle = async () => {
-    if (isRecording) {
+    if (phase === 'recording') {
       try {
         const result = await recordingSession.stopAndSave();
 
@@ -75,58 +84,65 @@ export default function RecordScreen() {
     <SafeAreaView style={styles.safeArea}>
       <ScreenBackground />
       <KeyboardAwareScrollView contentContainerStyle={styles.container}>
-        <FadeInView style={styles.notice}>
-          <View style={styles.noticeHeader}>
-            <Feather name="shield" size={16} color={palette.ink} />
-            <Text style={styles.noticeTitle}>Week-1 safe mode</Text>
-          </View>
-          <Text style={styles.noticeBody}>{getRecordingNoticeBody()}</Text>
-        </FadeInView>
-
-        <FadeInView style={styles.card} delay={70}>
-          <Text style={styles.label}>Meeting title</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Founder sync, user interview, standup…"
-            placeholderTextColor={palette.mutedInk}
-            value={sessionSnapshot.titleDraft}
-            onChangeText={(nextTitle) => recordingSession.setTitleDraft(nextTitle)}
+        <FadeInView delay={0}>
+          <EditorialHero
+            eyebrow={getHeroEyebrow()}
+            title={getHeroHeadline()}
+            body={getHeroBody()}
           />
-
-          <View style={styles.timerWrap}>
-            <View style={styles.liveChip}>
-              {isRecording ? (
-                <MaterialCommunityIcons name="record-circle" size={14} color={palette.danger} />
-              ) : (
-                <Feather name="mic" size={13} color={palette.lineStrong} />
-              )}
-              <Text style={styles.liveChipText}>{getRecordingStatusLabel(isRecording)}</Text>
-            </View>
-            <Text style={styles.timerValue}>{formatDuration(sessionSnapshot.durationMillis)}</Text>
-            <Text style={styles.timerLabel}>{getRecordingSupportLabel()}</Text>
-          </View>
-
-          <Pressable
-            style={[styles.recordButton, isRecording && styles.recordButtonActive]}
-            onPress={handleRecordToggle}
-            disabled={isSaving}
-          >
-            <MaterialCommunityIcons
-              name={isRecording ? 'stop-circle-outline' : 'microphone-outline'}
-              size={20}
-              color={palette.paper}
-            />
-            <Text style={styles.recordButtonText}>
-              {isSaving ? 'Saving…' : isRecording ? 'Stop and save' : 'Start recording'}
-            </Text>
-          </Pressable>
         </FadeInView>
 
-        <FadeInView style={styles.footerCopy} delay={120}>
-          <Text style={styles.footerTitle}>Consent reminder</Text>
-          <Text style={styles.footerBody}>
-            Make sure everyone in the meeting knows it’s being recorded. You own that responsibility.
-          </Text>
+        <FadeInView delay={70}>
+          <SurfaceCard style={styles.cardGap}>
+            <TextInput
+              style={styles.input}
+              placeholder={getTitlePlaceholder()}
+              placeholderTextColor={palette.mutedInk}
+              value={titleDraft}
+              onChangeText={(nextTitle) => recordingSession.setTitleDraft(nextTitle)}
+              accessibilityLabel="Meeting title"
+            />
+
+            <StatusChip
+              label={getStatusLabel(phase)}
+              tone={getStatusTone(phase)}
+              accessibilityLabel={getStatusLabel(phase)}
+            />
+
+            <View
+              style={styles.timerWrap}
+              accessibilityLabel={getTimerAccessibilityLabel(durationMillis)}
+            >
+              <Text style={styles.timerValue}>{formatDuration(durationMillis)}</Text>
+            </View>
+
+            <PillButton
+              label={getButtonLabel(phase)}
+              variant={getButtonVariant(phase)}
+              icon={
+                <MaterialCommunityIcons
+                  name={getButtonIconName(phase)}
+                  size={20}
+                  color={palette.card}
+                />
+              }
+              disabled={getButtonDisabled(phase)}
+              accessibilityLabel={getButtonAccessibilityLabel(phase)}
+              onPress={handleRecordToggle}
+            />
+          </SurfaceCard>
+        </FadeInView>
+
+        <FadeInView delay={140}>
+          <SurfaceCard muted style={styles.noticeGap}>
+            <SectionHeading title={getNoticeTitle()} />
+            <Text style={styles.noticeBody}>{getNoticeBody()}</Text>
+          </SurfaceCard>
+        </FadeInView>
+
+        <FadeInView delay={210}>
+          <SectionHeading title={getConsentHeading()} />
+          <Text style={styles.consentBody}>{getConsentBody()}</Text>
         </FadeInView>
       </KeyboardAwareScrollView>
     </SafeAreaView>
@@ -142,41 +158,8 @@ const styles = StyleSheet.create({
     padding: 20,
     gap: 16,
   },
-  notice: {
-    backgroundColor: palette.accentMist,
-    borderRadius: 22,
-    padding: 18,
-    gap: 6,
-    borderWidth: 1,
-    borderColor: palette.line,
-  },
-  noticeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  noticeTitle: {
-    color: palette.ink,
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  noticeBody: {
-    color: palette.mutedInk,
-    lineHeight: 21,
-  },
-  card: {
-    backgroundColor: palette.cardStrong,
-    borderRadius: 28,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: palette.line,
+  cardGap: {
     gap: 14,
-    ...elevation.card,
-  },
-  label: {
-    color: palette.ink,
-    fontWeight: '700',
-    fontSize: 14,
   },
   input: {
     backgroundColor: palette.paper,
@@ -184,6 +167,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.line,
     color: palette.ink,
+    fontFamily: typography.body.fontFamily,
     paddingHorizontal: 14,
     paddingVertical: 14,
     fontSize: 16,
@@ -191,61 +175,26 @@ const styles = StyleSheet.create({
   timerWrap: {
     paddingVertical: 14,
     alignItems: 'center',
-    gap: 6,
-  },
-  liveChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: palette.paper,
-    borderWidth: 1,
-    borderColor: palette.line,
-  },
-  liveChipText: {
-    color: palette.ink,
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  timerLabel: {
-    color: palette.mutedInk,
-    fontSize: 13,
-    letterSpacing: 0.4,
   },
   timerValue: {
     color: palette.ink,
+    fontFamily: typography.display.fontFamily,
     fontSize: 56,
-    fontWeight: '800',
   },
-  recordButton: {
-    backgroundColor: palette.ink,
-    borderRadius: 22,
-    paddingVertical: 20,
-    alignItems: 'center',
-    ...elevation.card,
-    gap: 8,
-  },
-  recordButtonActive: {
-    backgroundColor: palette.danger,
-  },
-  recordButtonText: {
-    color: palette.paper,
-    fontWeight: '800',
-    fontSize: 16,
-  },
-  footerCopy: {
+  noticeGap: {
     gap: 6,
-    paddingHorizontal: 4,
   },
-  footerTitle: {
-    color: palette.ink,
-    fontWeight: '700',
+  noticeBody: {
+    color: palette.mutedInk,
+    fontFamily: typography.body.fontFamily,
+    lineHeight: 21,
     fontSize: 15,
   },
-  footerBody: {
+  consentBody: {
     color: palette.mutedInk,
+    fontFamily: typography.body.fontFamily,
     lineHeight: 21,
+    fontSize: 15,
+    marginTop: 4,
   },
 });
