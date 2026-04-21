@@ -154,6 +154,46 @@ describe('local inference bridge', () => {
     });
   });
 
+  test('uses the local summary model for structured analysis', async () => {
+    const summarize = vi.fn(async () =>
+      JSON.stringify({
+        customer: 'Acme',
+        risk: 'Timeline is blocked',
+      })
+    );
+    const module = await importLocalInferenceTestModule({
+      platform: 'android',
+      nativeModule: {
+        getDeviceSupport: vi.fn(async () => ({
+          localProcessingAvailable: true,
+          supportsSummary: true,
+          supportsTranscription: true,
+          requiresCustomBuild: true,
+          reason: 'Android local summary is available in this build.',
+        })),
+        summarize,
+      },
+    });
+
+    await expect(
+      module.extractLocalStructuredData({
+        transcriptText: 'Acme said the timeline is blocked.',
+        modelId: 'gemma-3-1b-it-q4',
+        fields: [
+          { id: 'customer', title: 'Customer', description: 'Customer name' },
+          { id: 'risk', title: 'Risk', description: 'Current risk' },
+        ],
+      })
+    ).resolves.toEqual({
+      customer: 'Acme',
+      risk: 'Timeline is blocked',
+    });
+    expect(summarize).toHaveBeenCalledWith({
+      modelId: 'gemma-3-1b-it-q4',
+      prompt: expect.stringContaining('Return valid JSON only with these exact keys: customer, risk.'),
+    });
+  });
+
   test('fails clearly when a non-whisper-base model is selected on iOS local transcription', async () => {
     const transcribe = vi.fn(async () => 'offline transcript');
     const module = await importLocalInferenceTestModule({
@@ -201,7 +241,7 @@ describe('local inference bridge', () => {
     expect(catalog.find((item) => item.id === 'whisper-base')?.sizeBytes).toBe(147951465);
   });
 
-  test('does not advertise summary models for iOS built-in catalog entries', async () => {
+  test('advertises iOS-compatible summary models from the built-in catalog', async () => {
     const module = await importLocalModelsTestModule('ios');
     const catalog = await module.getModelCatalog();
     const iosItems = module.getCatalogItemsForDevice(catalog, {
@@ -213,7 +253,28 @@ describe('local inference bridge', () => {
       reason: 'iOS local transcription is available in this build.',
     });
 
-    expect(iosItems.some((item) => item.kind === 'summary')).toBe(false);
+    expect(iosItems.filter((item) => item.kind === 'summary').map((item) => item.id)).toEqual([
+      'gemma-3-1b-it-q4',
+      'qwen2.5-1.5b-instruct-q8',
+    ]);
+  });
+
+  test('keeps gated built-in Gemma summary models as external setup entries', async () => {
+    const module = await importLocalModelsTestModule('ios');
+    const catalog = await module.getModelCatalog();
+
+    expect(catalog.find((item) => item.id === 'gemma-3-1b-it-q4')).toMatchObject({
+      downloadUrl: '',
+      requiresExternalSetup: true,
+      sourceUrl: 'https://huggingface.co/litert-community/Gemma3-1B-IT',
+    });
+  });
+
+  test('keeps the built-in Qwen summary size aligned with the hosted binary', async () => {
+    const module = await importLocalModelsTestModule('ios');
+    const catalog = await module.getModelCatalog();
+
+    expect(catalog.find((item) => item.id === 'qwen2.5-1.5b-instruct-q8')?.sizeBytes).toBe(1597913616);
   });
 
   test('does not advertise unsupported iOS transcription models from a custom catalog', async () => {
@@ -264,7 +325,7 @@ describe('local inference bridge', () => {
     expect(iosItems.map((item) => item.id)).toEqual(['whisper-base']);
   });
 
-  test('keeps the iOS starter bundle aligned with the allowed transcription model set', async () => {
+  test('keeps the iOS catalog aligned with the allowed transcription model set and summary entries', async () => {
     const module = await importLocalModelsTestModule('ios');
     const catalog: ModelCatalogItem[] = [
       {
@@ -323,7 +384,7 @@ describe('local inference bridge', () => {
       reason: 'iOS local transcription is available in this build.',
     });
 
-    expect(iosItems.map((item) => item.id)).toEqual(['whisper-base']);
+    expect(iosItems.map((item) => item.id)).toEqual(['whisper-base', 'gemma-3n-e2b-preview']);
   });
 
   test('rejects unsupported iOS transcription model downloads even if a custom catalog exposes them', async () => {
@@ -346,6 +407,116 @@ describe('local inference bridge', () => {
         description: 'Should stay blocked on iOS in this phase.',
       })
     ).rejects.toThrow('Only whisper-base is supported for local transcription on iOS in this phase.');
+  });
+
+  test('allows iOS summary model downloads when the catalog item supports iOS', async () => {
+    const createDownloadResumable = vi.fn(() => ({
+      downloadAsync: vi.fn(async () => ({ uri: 'file:///documents/models/gemma-3-1b-it-q4.task' })),
+    }));
+
+    vi.doMock('react-native', () => ({
+      Platform: {
+        OS: 'ios',
+      },
+    }));
+
+    vi.doMock('expo-file-system/legacy', () => ({
+      documentDirectory: 'file:///documents/',
+      getFreeDiskStorageAsync: vi.fn(async () => 10 * 1024 * 1024 * 1024),
+      getInfoAsync: vi.fn(async () => ({ exists: true, size: 1 })),
+      makeDirectoryAsync: vi.fn(async () => undefined),
+      createDownloadResumable,
+      deleteAsync: vi.fn(async () => undefined),
+    }));
+
+    vi.doMock('../db', () => ({
+      getDatabase: () => ({
+        runAsync: vi.fn(async () => undefined),
+      }),
+    }));
+
+    vi.doMock('../utils/sha256', () => ({
+      Sha256: {
+        hash: vi.fn(),
+      },
+    }));
+
+    const module = await import('./localModels');
+
+    await expect(
+      module.downloadModel({
+        id: 'gemma-3-1b-it-q4',
+        kind: 'summary',
+        engine: 'mediapipe-llm',
+        displayName: 'Gemma 3 1B IT q4',
+        version: 'custom',
+        downloadUrl: 'https://example.com/gemma.task',
+        sha256: '',
+        sizeBytes: 1,
+        platforms: ['ios'],
+        minFreeSpaceBytes: 1,
+        recommended: true,
+        experimental: false,
+        description: 'iOS-compatible summary model.',
+      })
+    ).resolves.toMatchObject({
+      id: 'gemma-3-1b-it-q4',
+      status: 'installed',
+    });
+    expect(createDownloadResumable).toHaveBeenCalledTimes(1);
+  });
+
+  test('reports failed model download HTTP status before validating file size', async () => {
+    const createDownloadResumable = vi.fn(() => ({
+      downloadAsync: vi.fn(async () => ({ uri: 'file:///documents/models/gated.task', status: 401 })),
+    }));
+
+    vi.doMock('react-native', () => ({
+      Platform: {
+        OS: 'ios',
+      },
+    }));
+
+    vi.doMock('expo-file-system/legacy', () => ({
+      documentDirectory: 'file:///documents/',
+      getFreeDiskStorageAsync: vi.fn(async () => 10 * 1024 * 1024 * 1024),
+      getInfoAsync: vi.fn(async () => ({ exists: true, size: 137 })),
+      makeDirectoryAsync: vi.fn(async () => undefined),
+      createDownloadResumable,
+      deleteAsync: vi.fn(async () => undefined),
+    }));
+
+    vi.doMock('../db', () => ({
+      getDatabase: () => ({
+        runAsync: vi.fn(async () => undefined),
+      }),
+    }));
+
+    vi.doMock('../utils/sha256', () => ({
+      Sha256: {
+        hash: vi.fn(),
+      },
+    }));
+
+    const module = await import('./localModels');
+
+    await expect(
+      module.downloadModel({
+        id: 'gated-summary',
+        kind: 'summary',
+        engine: 'mediapipe-llm',
+        displayName: 'Gated Summary',
+        version: 'custom',
+        downloadUrl: 'https://example.com/gated.task',
+        sha256: '',
+        sizeBytes: 554661246,
+        platforms: ['ios'],
+        minFreeSpaceBytes: 1,
+        recommended: true,
+        experimental: false,
+        description: 'Requires auth.',
+      })
+    ).rejects.toThrow('Model download request failed (401).');
   });
 
   test('rejects duplicate downloads for the same paid local model while one is active', async () => {

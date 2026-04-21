@@ -211,7 +211,7 @@ describe('settings persistence', () => {
     expect(await getHasSeenOnboarding()).toBe(true);
   });
 
-  test('drops local summary as a selectable provider during sanitization', () => {
+  test('keeps local summary selectable when a summary model is configured', () => {
     const settings: AppSettings = {
       selectedTranscriptionProvider: 'local',
       selectedSummaryProvider: 'local',
@@ -226,7 +226,7 @@ describe('settings persistence', () => {
     const sanitized = sanitizeAppSettings(settings);
 
     expect(sanitized.selectedTranscriptionProvider).toBe('local');
-    expect(sanitized.selectedSummaryProvider).toBe('openai');
+    expect(sanitized.selectedSummaryProvider).toBe('local');
   });
 
   test('fills empty local transcription config after a ready session', async () => {
@@ -234,6 +234,7 @@ describe('settings persistence', () => {
       bundleId: 'starter',
       modelIds: ['whisper-base'],
       preferredTranscriptionModelId: 'whisper-base',
+      preferredSummaryModelId: null,
     });
 
     await expect(getAppSettings()).resolves.toMatchObject({
@@ -241,6 +242,24 @@ describe('settings persistence', () => {
       providers: {
         local: expect.objectContaining({
           transcriptionModel: 'whisper-base',
+        }),
+      },
+    });
+  });
+
+  test('fills empty local summary config after a ready session', async () => {
+    await applyOfflineSetupAutoConfig({
+      bundleId: 'starter',
+      modelIds: ['gemma-3-1b-it-q4'],
+      preferredTranscriptionModelId: null,
+      preferredSummaryModelId: 'gemma-3-1b-it-q4',
+    });
+
+    await expect(getAppSettings()).resolves.toMatchObject({
+      selectedSummaryProvider: 'local',
+      providers: {
+        local: expect.objectContaining({
+          summaryModel: 'gemma-3-1b-it-q4',
         }),
       },
     });
@@ -268,6 +287,7 @@ describe('settings persistence', () => {
         bundleId: 'starter',
         modelIds: ['whisper-base'],
         preferredTranscriptionModelId: 'whisper-base',
+        preferredSummaryModelId: null,
       })
     ).resolves.toBeUndefined();
 

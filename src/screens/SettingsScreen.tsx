@@ -113,6 +113,10 @@ export default function SettingsScreen() {
     () => getInstalledModelsForKind(installedModels, 'transcription'),
     [installedModels]
   );
+  const installedSummaryModels = useMemo(
+    () => getInstalledModelsForKind(installedModels, 'summary'),
+    [installedModels]
+  );
   const localTranscriptionModelIsInstalled = useMemo(
     () => installedTranscriptionModels.some((model) => model.id === IOS_LOCAL_TRANSCRIPTION_MODEL_ID),
     [installedTranscriptionModels]
@@ -127,6 +131,14 @@ export default function SettingsScreen() {
         value: model.id,
       })),
     [installedTranscriptionModels]
+  );
+  const localSummaryOptions = useMemo(
+    () =>
+      installedSummaryModels.map((model) => ({
+        label: model.displayName,
+        value: model.id,
+      })),
+    [installedSummaryModels]
   );
   const visibleCatalog = useMemo(
     () => getCatalogItemsForDevice(catalog, deviceSupport),
@@ -207,6 +219,7 @@ export default function SettingsScreen() {
     selectedProviderId: sanitizedForm.selectedSummaryProvider,
     mode: 'summary',
   });
+  const offlineSummaryProviderIds = Array.from(new Set<ProviderId>(['local', ...cloudSummaryProviderIds]));
   const editingProvider = providerMap[editingProviderId];
   const editingConfig = form.providers[editingProviderId];
   const selectedTranscriptionProviderId =
@@ -225,7 +238,10 @@ export default function SettingsScreen() {
     selectedTranscriptionProviderId === 'local'
       ? displayModelLabel(installedTranscriptionModels, transcriptionModelId || 'No model selected yet')
       : transcriptionModelId || 'No model selected yet';
-  const summaryModelLabel = summaryModelId || 'No model selected yet';
+  const summaryModelLabel =
+    sanitizedForm.selectedSummaryProvider === 'local'
+      ? displayModelLabel(installedSummaryModels, summaryModelId || 'No model selected yet')
+      : summaryModelId || 'No model selected yet';
   const activeProviderSummary = buildActiveProviderSummary({
     transcriptionProviderLabel: transcriptionProvider.label,
     summaryProviderLabel: summaryProvider.label,
@@ -261,8 +277,6 @@ export default function SettingsScreen() {
         return {
           ...current,
           selectedTranscriptionProvider: 'local',
-          selectedSummaryProvider:
-            current.selectedSummaryProvider === 'local' ? 'openai' : current.selectedSummaryProvider,
         };
       }
 
@@ -407,6 +421,7 @@ export default function SettingsScreen() {
       setInstalledModels(nextInstalledModels);
       await markOfflineSetupReady({
         preferredTranscriptionModelId: item.kind === 'transcription' ? item.id : null,
+        preferredSummaryModelId: item.kind === 'summary' ? item.id : null,
       });
       setOfflineSetup(await getOfflineSetupSession());
 
@@ -419,6 +434,10 @@ export default function SettingsScreen() {
 
         if (item.kind === 'transcription' && !next.providers.local.transcriptionModel) {
           next.providers.local.transcriptionModel = item.id;
+        }
+
+        if (item.kind === 'summary' && !next.providers.local.summaryModel) {
+          next.providers.local.summaryModel = item.id;
         }
 
         return next;
@@ -464,6 +483,11 @@ export default function SettingsScreen() {
 
               if (next.providers.local.transcriptionModel === model.id) {
                 next.providers.local.transcriptionModel = nextTranscriptionFallback;
+              }
+
+              if (next.providers.local.summaryModel === model.id) {
+                next.providers.local.summaryModel =
+                  getInstalledModelsForKind(nextInstalledModels, 'summary')[0]?.id ?? '';
               }
 
               return next;
@@ -540,7 +564,7 @@ export default function SettingsScreen() {
             <Text style={styles.utilityLabel}>On-device runtime</Text>
             <Text style={styles.rowBody}>
               {deviceSupport?.localProcessingAvailable
-                ? 'Ready for local transcription in this build.'
+                ? 'Ready for local processing in this build.'
                 : deviceSupport?.reason ?? 'Checking local runtime availability.'}
             </Text>
             {Platform.OS === 'ios' ? (
@@ -558,6 +582,14 @@ export default function SettingsScreen() {
                 ? 'Local transcription on iOS currently supports whisper-base only. Download whisper-base below before selecting Local here.'
                 : 'Download a local transcription model below before selecting Local here.'
             }
+          />
+
+          <ModelDropdown
+            label="Active summary and analysis model"
+            value={editingConfig.summaryModel}
+            options={localSummaryOptions}
+            onSelect={(value) => updateProvider('local', 'summaryModel', value)}
+            emptyText="Download a local summary model below before selecting Local for summaries and analysis."
           />
 
           <PillButton label="Clear local model selection" onPress={() => resetProvider('local')} variant="secondary" />
@@ -712,13 +744,13 @@ export default function SettingsScreen() {
               <>
                 <SectionHeading
                   title="Offline mode"
-                  subtitle="Use local transcription when the native runtime and a compatible model are installed. Summaries still use your selected cloud provider."
+                  subtitle="Use local models when the native runtime and compatible downloads are installed."
                 />
                 <SurfaceCard muted style={styles.localRuntimeCard}>
                   <Text style={styles.utilityLabel}>On-device runtime</Text>
                   <Text style={styles.rowBody}>
                     {deviceSupport?.localProcessingAvailable
-                      ? 'Ready for local transcription in this build.'
+                      ? 'Ready for local processing in this build.'
                       : deviceSupport?.reason ?? 'Checking local runtime availability.'}
                   </Text>
                   <ModelDropdown
@@ -732,12 +764,22 @@ export default function SettingsScreen() {
                         : 'Download a local transcription model below before selecting Offline mode.'
                     }
                   />
+                  <ModelDropdown
+                    label="Active summary and analysis model"
+                    value={form.providers.local.summaryModel}
+                    options={localSummaryOptions}
+                    onSelect={(value) => updateProvider('local', 'summaryModel', value)}
+                    emptyText="Download a local summary model below before selecting Local for summaries and analysis."
+                  />
                 </SurfaceCard>
                 <SurfaceCard muted style={styles.modeContextCard}>
-                  <Text style={styles.utilityLabel}>What stays cloud</Text>
-                  <Text style={styles.rowBody}>
-                    Summaries and structured extraction still use {summaryProvider.label}. Offline mode currently changes transcription only.
-                  </Text>
+                  <ProviderDropdown
+                    label="Summary and analysis provider"
+                    value={sanitizedForm.selectedSummaryProvider}
+                    providerIds={offlineSummaryProviderIds}
+                    configuredProviderIds={configuredProviderIds}
+                    onSelect={(providerId) => updateForm('selectedSummaryProvider', providerId)}
+                  />
                 </SurfaceCard>
               </>
             )}
@@ -852,6 +894,20 @@ export default function SettingsScreen() {
                 onDelete={handleDeleteModel}
                 onOpenSource={handleOpenModelSource}
                 onSelectActive={(modelId) => updateProvider('local', 'transcriptionModel', modelId)}
+                allowDownload={deviceSupport ? deviceSupport.platform !== 'web' : false}
+              />
+              <ModelCatalogSection
+                title="Summary and analysis models"
+                items={visibleCatalog.filter((item) => item.kind === 'summary')}
+                installedModels={installedSummaryModels}
+                activeModelId={form.providers.local.summaryModel}
+                downloadProgress={downloadProgress}
+                offlineSetupStatusByModel={offlineSetupStatusByModel}
+                activeDownloadIds={activeDownloadIds}
+                onDownload={handleDownloadModel}
+                onDelete={handleDeleteModel}
+                onOpenSource={handleOpenModelSource}
+                onSelectActive={(modelId) => updateProvider('local', 'summaryModel', modelId)}
                 allowDownload={deviceSupport ? deviceSupport.platform !== 'web' : false}
               />
             </SurfaceCard>

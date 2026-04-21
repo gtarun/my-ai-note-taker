@@ -270,13 +270,17 @@ export async function markOfflineSetupFailed(message: string) {
   });
 }
 
-export async function markOfflineSetupReady(params: { preferredTranscriptionModelId: string | null }) {
+export async function markOfflineSetupReady(params: {
+  preferredTranscriptionModelId: string | null;
+  preferredSummaryModelId: string | null;
+}) {
   const current = await getOfflineSetupSession();
 
   await applyOfflineSetupAutoConfig({
     bundleId: current.bundleId,
     modelIds: current.modelIds,
     preferredTranscriptionModelId: params.preferredTranscriptionModelId,
+    preferredSummaryModelId: params.preferredSummaryModelId,
   });
 
   const now = new Date().toISOString();

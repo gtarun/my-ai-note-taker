@@ -131,14 +131,14 @@ export const providerDefinitions: ProviderDefinition[] = [
   {
     id: 'local',
     label: 'Local',
-    description: 'Use on-device model downloads for local transcription.',
+    description: 'Use on-device model downloads for local transcription, summaries, and analysis.',
     supportsTranscription: true,
-    supportsSummary: false,
+    supportsSummary: true,
     usesOpenAICompatibleApi: false,
     apiKeyPlaceholder: '',
     baseUrlPlaceholder: '',
     transcriptionModels: [],
-    summaryModels: [],
+    summaryModels: ['gemma-3-1b-it-q4', 'qwen2.5-1.5b-instruct-q8'],
   },
 ];
 

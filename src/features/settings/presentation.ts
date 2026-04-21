@@ -74,6 +74,13 @@ export function buildProcessingModeDetails({
   summaryProviderLabel: string;
 }) {
   if (processingMode === 'offline') {
+    if (summaryProviderLabel === 'Local') {
+      return {
+        title: 'Offline processing on this device',
+        body: 'Transcription runs on-device. Summaries and structured analysis use Local.',
+      };
+    }
+
     return {
       title: 'Offline transcription on this device',
       body: `Transcription runs on-device with a downloaded local model. Summaries still use ${summaryProviderLabel} in the cloud.`,

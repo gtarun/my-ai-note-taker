@@ -429,20 +429,22 @@ describe('offline setup session storage', () => {
     });
   });
 
-  test('marks offline setup ready and auto-configures local transcription', async () => {
+  test('marks offline setup ready and auto-configures local transcription and summary models', async () => {
     sessionRowState.bundle_id = 'starter';
     sessionRowState.bundle_label = 'Starter';
-    sessionRowState.model_ids_json = '["whisper-base"]';
+    sessionRowState.model_ids_json = '["whisper-base","gemma-3-1b-it-q4"]';
     sessionRowState.total_bytes = 152;
 
     await markOfflineSetupReady({
       preferredTranscriptionModelId: 'whisper-base',
+      preferredSummaryModelId: 'gemma-3-1b-it-q4',
     });
 
     expect(mockApplyOfflineSetupAutoConfig).toHaveBeenCalledWith({
       bundleId: 'starter',
-      modelIds: ['whisper-base'],
+      modelIds: ['whisper-base', 'gemma-3-1b-it-q4'],
       preferredTranscriptionModelId: 'whisper-base',
+      preferredSummaryModelId: 'gemma-3-1b-it-q4',
     });
     expect(sessionRowState).toMatchObject({
       status: 'ready',

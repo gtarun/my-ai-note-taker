@@ -98,12 +98,10 @@ const BUILT_IN_MODEL_CATALOG: ModelCatalogItem[] = [
     engine: 'mediapipe-llm',
     displayName: 'Gemma 3 1B IT q4',
     version: '20250514',
-    downloadUrl: buildHuggingFaceDownloadUrl(
-      'litert-community/Gemma3-1B-IT',
-      'Gemma3-1B-IT_multi-prefill-seq_q4_ekv2048.task'
-    ),
+    downloadUrl: '',
     sourceUrl: buildHuggingFaceModelUrl('litert-community/Gemma3-1B-IT'),
     sourceLabel: 'Open model page',
+    requiresExternalSetup: true,
     sha256: '',
     sizeBytes: 554661246,
     platforms: ['ios', 'android'],
@@ -125,7 +123,7 @@ const BUILT_IN_MODEL_CATALOG: ModelCatalogItem[] = [
     sourceUrl: buildHuggingFaceModelUrl('litert-community/Qwen2.5-1.5B-Instruct'),
     sourceLabel: 'Open model page',
     sha256: '',
-    sizeBytes: 1625493432,
+    sizeBytes: 1597913616,
     platforms: ['ios', 'android'],
     minFreeSpaceBytes: 3 * 1024 * 1024 * 1024,
     recommended: false,
@@ -208,10 +206,6 @@ export function getCatalogItemsForDevice(
 
   return catalog.filter((item) => {
     if (platform === 'ios') {
-      if (item.kind === 'summary') {
-        return false;
-      }
-
       if (item.kind === 'transcription' && !IOS_SUPPORTED_TRANSCRIPTION_MODEL_IDS.has(item.id)) {
         return false;
       }
@@ -261,10 +255,6 @@ async function downloadModelOnce(
   }
 
   if (getCurrentModelPlatform() === 'ios') {
-    if (catalogItem.kind === 'summary') {
-      throw new Error('Local summary models are not available on iOS in this phase.');
-    }
-
     if (catalogItem.kind === 'transcription' && !IOS_SUPPORTED_TRANSCRIPTION_MODEL_IDS.has(catalogItem.id)) {
       throw new Error('Only whisper-base is supported for local transcription on iOS in this phase.');
     }
@@ -305,6 +295,10 @@ async function downloadModelOnce(
 
     if (!result?.uri) {
       throw new Error('Model download did not return a file path.');
+    }
+
+    if (typeof result.status === 'number' && result.status >= 400) {
+      throw new Error(`Model download request failed (${result.status}).`);
     }
 
     const info = await FileSystem.getInfoAsync(result.uri);

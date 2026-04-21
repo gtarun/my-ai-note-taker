@@ -96,6 +96,7 @@ export async function applyOfflineSetupAutoConfig(params: {
   bundleId: string;
   modelIds: string[];
   preferredTranscriptionModelId: string | null;
+  preferredSummaryModelId: string | null;
 }) {
   const settings = await getAppSettings();
 
@@ -103,8 +104,16 @@ export async function applyOfflineSetupAutoConfig(params: {
     settings.providers.local.transcriptionModel = params.preferredTranscriptionModelId;
   }
 
+  if (!settings.providers.local.summaryModel && params.preferredSummaryModelId) {
+    settings.providers.local.summaryModel = params.preferredSummaryModelId;
+  }
+
   if (settings.selectedTranscriptionProvider === 'openai' && params.preferredTranscriptionModelId) {
     settings.selectedTranscriptionProvider = 'local';
+  }
+
+  if (settings.selectedSummaryProvider === 'openai' && params.preferredSummaryModelId) {
+    settings.selectedSummaryProvider = 'local';
   }
 
   const sanitized = sanitizeAppSettings(settings);

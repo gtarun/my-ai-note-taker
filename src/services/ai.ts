@@ -5,6 +5,7 @@ import { ExtractionLayerField, ProviderConfig, ProviderId, SummaryPayload } from
 import {
   IOS_LOCAL_TRANSCRIPTION_MODEL_ERROR,
   IOS_LOCAL_TRANSCRIPTION_MODEL_ID,
+  extractLocalStructuredData,
   summarizeLocalTranscript,
   transcribeLocalAudio,
 } from './localInference';
@@ -101,27 +102,31 @@ export async function extractStructuredData(params: ExtractParams): Promise<Reco
     return {};
   }
 
-  if (params.providerId === 'local') {
-    throw new Error('Local extraction is not supported yet.');
-  }
-
   let rawValues: unknown;
 
-  switch (params.providerId) {
-    case 'anthropic':
-      rawValues = await extractWithAnthropic(params.provider, params.transcriptText, params.fields);
-      break;
-    case 'gemini':
-      rawValues = await extractWithGemini(params.provider, params.transcriptText, params.fields);
-      break;
-    default:
-      rawValues = await extractWithOpenAICompatible(
-        params.provider,
-        params.transcriptText,
-        params.providerId,
-        params.fields
-      );
-      break;
+  if (params.providerId === 'local') {
+    rawValues = await extractLocalStructuredData({
+      transcriptText: params.transcriptText,
+      modelId: params.provider.summaryModel,
+      fields: params.fields,
+    });
+  } else {
+    switch (params.providerId) {
+      case 'anthropic':
+        rawValues = await extractWithAnthropic(params.provider, params.transcriptText, params.fields);
+        break;
+      case 'gemini':
+        rawValues = await extractWithGemini(params.provider, params.transcriptText, params.fields);
+        break;
+      default:
+        rawValues = await extractWithOpenAICompatible(
+          params.provider,
+          params.transcriptText,
+          params.providerId,
+          params.fields
+        );
+        break;
+    }
   }
 
   return normalizeExtractedValues(rawValues, params.fields);

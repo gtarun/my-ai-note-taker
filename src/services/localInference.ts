@@ -1,7 +1,7 @@
 import { requireOptionalNativeModule } from 'expo-modules-core';
 import { Platform } from 'react-native';
 
-import { LocalDeviceSupport, SummaryPayload } from '../types';
+import { ExtractionLayerField, LocalDeviceSupport, SummaryPayload } from '../types';
 
 const LOCAL_TRANSCRIPT_WINDOW = 8000;
 const LOCAL_TRANSCRIPT_OVERLAP = 500;
@@ -120,6 +120,33 @@ export async function summarizeLocalTranscript(params: {
   return runSummaryPass(module, buildCombineSummaryPrompt(combinedPayload), params.modelId);
 }
 
+export async function extractLocalStructuredData(params: {
+  transcriptText: string;
+  modelId: string;
+  fields: ExtractionLayerField[];
+}): Promise<Record<string, string>> {
+  const module = await requireLocalRuntime('summary');
+
+  if (!params.modelId.trim()) {
+    throw new Error('Pick an installed local summary model in Settings first.');
+  }
+
+  if (!params.fields.length) {
+    return {};
+  }
+
+  const rawValues = await runJsonObjectPass(
+    module,
+    buildLocalExtractionPrompt(params.transcriptText, params.fields),
+    params.modelId,
+    params.fields.map((field) => field.id)
+  );
+
+  return Object.fromEntries(
+    params.fields.map((field) => [field.id, String(rawValues[field.id] ?? '').trim()])
+  );
+}
+
 async function runSummaryPass(module: LocalNativeModule, prompt: string, modelId: string) {
   const raw = await module.summarize?.({ prompt, modelId });
 
@@ -140,6 +167,34 @@ async function runSummaryPass(module: LocalNativeModule, prompt: string, modelId
     }
 
     return parseSummaryPayload(repaired);
+  }
+}
+
+async function runJsonObjectPass(
+  module: LocalNativeModule,
+  prompt: string,
+  modelId: string,
+  requiredKeys: string[]
+) {
+  const raw = await module.summarize?.({ prompt, modelId });
+
+  if (!raw?.trim()) {
+    throw new Error('Local summary model returned no analysis content.');
+  }
+
+  try {
+    return parseJsonObject(raw);
+  } catch {
+    const repaired = await module.summarize?.({
+      prompt: buildGenericRepairPrompt(raw, requiredKeys),
+      modelId,
+    });
+
+    if (!repaired?.trim()) {
+      throw new Error('Local analysis parsing failed and repair returned no content.');
+    }
+
+    return parseJsonObject(repaired);
   }
 }
 
@@ -218,6 +273,23 @@ function buildFinalSummaryPrompt(transcriptText: string) {
   ].join('\n');
 }
 
+function buildLocalExtractionPrompt(transcriptText: string, fields: ExtractionLayerField[]) {
+  const keys = fields.map((field) => field.id).join(', ');
+  const fieldLines = fields.map((field) => `- ${field.id}: ${field.title}. ${field.description}`);
+
+  return [
+    'You extract structured meeting data from a transcript for an offline mobile app.',
+    `Return valid JSON only with these exact keys: ${keys}.`,
+    'Use an empty string when a value is missing. Do not invent facts.',
+    '',
+    'Fields:',
+    ...fieldLines,
+    '',
+    'Transcript:',
+    transcriptText,
+  ].join('\n');
+}
+
 function buildRepairPrompt(rawJson: string) {
   return [
     'Repair the following into valid JSON only.',
@@ -228,11 +300,18 @@ function buildRepairPrompt(rawJson: string) {
   ].join('\n');
 }
 
+function buildGenericRepairPrompt(rawJson: string, requiredKeys: string[]) {
+  return [
+    'Repair the following into valid JSON only.',
+    `Required keys: ${requiredKeys.join(', ')}.`,
+    'Do not add markdown fences or explanation.',
+    '',
+    rawJson,
+  ].join('\n');
+}
+
 function parseSummaryPayload(raw: string): SummaryPayload {
-  const start = raw.indexOf('{');
-  const end = raw.lastIndexOf('}');
-  const json = start >= 0 && end > start ? raw.slice(start, end + 1) : raw;
-  const parsed = JSON.parse(json) as Partial<SummaryPayload>;
+  const parsed = parseJsonObject(raw) as Partial<SummaryPayload>;
 
   return {
     summary: parsed.summary?.toString().trim() ?? '',
@@ -246,4 +325,17 @@ function parseSummaryPayload(raw: string): SummaryPayload {
       ? parsed.followUps.map((item) => String(item).trim()).filter(Boolean)
       : [],
   };
+}
+
+function parseJsonObject(raw: string): Record<string, unknown> {
+  const start = raw.indexOf('{');
+  const end = raw.lastIndexOf('}');
+  const json = start >= 0 && end > start ? raw.slice(start, end + 1) : raw;
+  const parsed = JSON.parse(json);
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Local model returned non-object JSON.');
+  }
+
+  return parsed as Record<string, unknown>;
 }

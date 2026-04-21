@@ -30,7 +30,7 @@ describe('settings presentation', () => {
 
     expect(getConfiguredProviderIds(providers)).toEqual(['openai', 'openrouter', 'local']);
     expect(getConfiguredProviderIds(providers, 'transcription')).toEqual(['openai', 'openrouter', 'local']);
-    expect(getConfiguredProviderIds(providers, 'summary')).toEqual(['openai', 'openrouter']);
+    expect(getConfiguredProviderIds(providers, 'summary')).toEqual(['openai', 'openrouter', 'local']);
   });
 
   test('builds the active provider summary copy', () => {
@@ -107,9 +107,9 @@ describe('settings presentation', () => {
       body: 'Transcription and summaries both run through your selected API providers.',
     });
 
-    expect(buildProcessingModeDetails({ processingMode: 'offline', summaryProviderLabel: 'OpenAI' })).toEqual({
-      title: 'Offline transcription on this device',
-      body: 'Transcription runs on-device with a downloaded local model. Summaries still use OpenAI in the cloud.',
+    expect(buildProcessingModeDetails({ processingMode: 'offline', summaryProviderLabel: 'Local' })).toEqual({
+      title: 'Offline processing on this device',
+      body: 'Transcription runs on-device. Summaries and structured analysis use Local.',
     });
   });
 

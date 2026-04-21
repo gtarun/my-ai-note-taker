@@ -84,6 +84,13 @@ export async function processMeeting(id: string, options: { layerId?: string | n
     }
   }
 
+  if (settings.selectedSummaryProvider === 'local') {
+    const installedModel = await getInstalledModel(summaryProvider.summaryModel);
+    if (!installedModel || installedModel.status !== 'installed') {
+      throw new Error('Download and install the selected local summary model first.');
+    }
+  }
+
   if (options.layerId && !layer) {
     throw new Error('Selected extraction layer no longer exists.');
   }
