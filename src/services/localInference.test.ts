@@ -102,16 +102,16 @@ describe('local inference bridge', () => {
     });
   });
 
-  test('passes through iOS local transcription support when the native module is available', async () => {
+  test('passes through iOS local transcription and summary support when the native module is available', async () => {
     const module = await importLocalInferenceTestModule({
       platform: 'ios',
       nativeModule: {
         getDeviceSupport: vi.fn(async () => ({
           localProcessingAvailable: true,
-          supportsSummary: false,
+          supportsSummary: true,
           supportsTranscription: true,
           requiresCustomBuild: true,
-          reason: 'iOS local transcription is available in this build.',
+          reason: 'iOS local transcription and summary are available in this build.',
         })),
       },
     });
@@ -119,10 +119,10 @@ describe('local inference bridge', () => {
     await expect(module.getLocalDeviceSupport()).resolves.toEqual({
       platform: 'ios',
       localProcessingAvailable: true,
-      supportsSummary: false,
+      supportsSummary: true,
       supportsTranscription: true,
       requiresCustomBuild: true,
-      reason: 'iOS local transcription is available in this build.',
+      reason: 'iOS local transcription and summary are available in this build.',
     });
   });
 
@@ -133,10 +133,10 @@ describe('local inference bridge', () => {
       nativeModule: {
         getDeviceSupport: vi.fn(async () => ({
           localProcessingAvailable: true,
-          supportsSummary: false,
+          supportsSummary: true,
           supportsTranscription: true,
           requiresCustomBuild: true,
-          reason: 'iOS local transcription is available in this build.',
+          reason: 'iOS local transcription and summary are available in this build.',
         })),
         transcribe,
       },
@@ -151,6 +151,102 @@ describe('local inference bridge', () => {
     expect(transcribe).toHaveBeenCalledWith({
       audioUri: 'file:///meeting.m4a',
       modelId: 'whisper-base',
+    });
+  });
+
+  test('rejects obvious placeholder transcripts returned by iOS local transcription', async () => {
+    const transcribe = vi.fn(async () => 'page1 page2');
+    const module = await importLocalInferenceTestModule({
+      platform: 'ios',
+      nativeModule: {
+        getDeviceSupport: vi.fn(async () => ({
+          localProcessingAvailable: true,
+          supportsSummary: true,
+          supportsTranscription: true,
+          requiresCustomBuild: true,
+          reason: 'iOS local transcription and summary are available in this build.',
+        })),
+        transcribe,
+      },
+    });
+
+    await expect(
+      module.transcribeLocalAudio({
+        audioUri: 'file:///meeting.m4a',
+        modelId: 'whisper-base',
+      })
+    ).rejects.toThrow(
+      'Local transcription returned placeholder text instead of spoken words. Try recording again, import a clearer M4A, WAV, or MP3 file, or switch transcription back to a cloud provider for this meeting.'
+    );
+  });
+
+  test('turns generic iOS native transcription failures into actionable guidance', async () => {
+    const transcribe = vi.fn(async () => {
+      throw new Error(
+        "Calling the 'transcribe' function has failed\n→ Caused by: The operation couldn't be completed. (Foundation._GenericObjCError error 0.)"
+      );
+    });
+    const module = await importLocalInferenceTestModule({
+      platform: 'ios',
+      nativeModule: {
+        getDeviceSupport: vi.fn(async () => ({
+          localProcessingAvailable: true,
+          supportsSummary: true,
+          supportsTranscription: true,
+          requiresCustomBuild: true,
+          reason: 'iOS local transcription and summary are available in this build.',
+        })),
+        transcribe,
+      },
+    });
+
+    await expect(
+      module.transcribeLocalAudio({
+        audioUri: 'file:///meeting.m4a',
+        modelId: 'whisper-base',
+      })
+    ).rejects.toThrow(
+      'Local transcription could not prepare this recording on iOS. Try recording again, import a standard M4A, WAV, or MP3 file, or switch transcription back to a cloud provider in Settings for this meeting.'
+    );
+  });
+
+  test('calls the native summary path when iOS local summary support is available', async () => {
+    const summarize = vi.fn(async () =>
+      JSON.stringify({
+        summary: 'Acme is blocked on the launch timeline.',
+        actionItems: ['Confirm the revised rollout date'],
+        decisions: ['Keep the customer in weekly check-ins'],
+        followUps: ['Share an updated delivery plan'],
+      })
+    );
+    const module = await importLocalInferenceTestModule({
+      platform: 'ios',
+      nativeModule: {
+        getDeviceSupport: vi.fn(async () => ({
+          localProcessingAvailable: true,
+          supportsSummary: true,
+          supportsTranscription: true,
+          requiresCustomBuild: true,
+          reason: 'iOS local transcription and summary are available in this build.',
+        })),
+        summarize,
+      },
+    });
+
+    await expect(
+      module.summarizeLocalTranscript({
+        transcriptText: 'Acme is blocked on the launch timeline and needs a revised rollout date.',
+        modelId: 'qwen2.5-1.5b-instruct-q8',
+      })
+    ).resolves.toEqual({
+      summary: 'Acme is blocked on the launch timeline.',
+      actionItems: ['Confirm the revised rollout date'],
+      decisions: ['Keep the customer in weekly check-ins'],
+      followUps: ['Share an updated delivery plan'],
+    });
+    expect(summarize).toHaveBeenCalledWith({
+      modelId: 'qwen2.5-1.5b-instruct-q8',
+      prompt: expect.stringContaining('Return valid JSON only'),
     });
   });
 
@@ -201,10 +297,10 @@ describe('local inference bridge', () => {
       nativeModule: {
         getDeviceSupport: vi.fn(async () => ({
           localProcessingAvailable: true,
-          supportsSummary: false,
+          supportsSummary: true,
           supportsTranscription: true,
           requiresCustomBuild: true,
-          reason: 'iOS local transcription is available in this build.',
+          reason: 'iOS local transcription and summary are available in this build.',
         })),
         transcribe,
       },

@@ -130,6 +130,7 @@ export default function MeetingDetailScreen() {
       await processMeeting(id, { layerId: layerId ?? null });
       await loadMeeting();
     } catch (error) {
+      await loadMeeting();
       Alert.alert('Processing failed', error instanceof Error ? error.message : 'Unable to process meeting.');
     } finally {
       setIsBusy(false);

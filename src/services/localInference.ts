@@ -8,6 +8,12 @@ const LOCAL_TRANSCRIPT_OVERLAP = 500;
 export const IOS_LOCAL_TRANSCRIPTION_MODEL_ID = 'whisper-base';
 export const IOS_LOCAL_TRANSCRIPTION_MODEL_ERROR =
   'Only whisper-base is supported for local transcription on iOS in this phase.';
+export const IOS_LOCAL_TRANSCRIPTION_PLACEHOLDER_ERROR =
+  'Local transcription returned placeholder text instead of spoken words. Try recording again, import a clearer M4A, WAV, or MP3 file, or switch transcription back to a cloud provider for this meeting.';
+export const IOS_LOCAL_SUMMARY_UNAVAILABLE_ERROR =
+  'Local summary and structured analysis are not available on iOS in this build. Keep transcription local, then choose a cloud provider for Summary and analysis in Settings.';
+export const IOS_LOCAL_SUMMARY_FALLBACK_REQUIRED_ERROR =
+  'Local summary and structured analysis are not available on iOS in this build, and no cloud summary provider is configured. Keep transcription local, then add a cloud provider like OpenAI for Summary and analysis in Settings.';
 
 type LocalNativeModule = {
   getDeviceSupport?: () => Promise<Partial<LocalDeviceSupport>>;
@@ -74,13 +80,20 @@ export async function transcribeLocalAudio(params: { audioUri: string; modelId: 
     throw new Error(IOS_LOCAL_TRANSCRIPTION_MODEL_ERROR);
   }
 
-  const transcript = await module.transcribe?.(params);
+  let transcript: string | undefined;
+  try {
+    transcript = await module.transcribe?.(params);
+  } catch (error) {
+    throw new Error(normalizeLocalTranscriptionError(error));
+  }
 
   if (!transcript?.trim()) {
     throw new Error('Local transcription returned no text.');
   }
 
-  return transcript.trim();
+  const trimmedTranscript = transcript.trim();
+  validateLocalTranscript(trimmedTranscript);
+  return trimmedTranscript;
 }
 
 export async function summarizeLocalTranscript(params: {
@@ -206,14 +219,87 @@ async function requireLocalRuntime(mode: 'transcription' | 'summary') {
   }
 
   if (mode === 'transcription' && !support.supportsTranscription) {
-    throw new Error(support.reason ?? 'Local transcription is not available on this device.');
+    throw new Error(getLocalRuntimeUnavailableMessage(mode, support));
   }
 
   if (mode === 'summary' && !support.supportsSummary) {
-    throw new Error(support.reason ?? 'Local summary is not available on this device.');
+    throw new Error(getLocalRuntimeUnavailableMessage(mode, support));
   }
 
   return nativeModule;
+}
+
+function getLocalRuntimeUnavailableMessage(
+  mode: 'transcription' | 'summary',
+  support: LocalDeviceSupport
+) {
+  if (mode === 'summary' && Platform.OS === 'ios') {
+    return IOS_LOCAL_SUMMARY_UNAVAILABLE_ERROR;
+  }
+
+  if (mode === 'transcription') {
+    return support.reason ?? 'Local transcription is not available on this device.';
+  }
+
+  return support.reason ?? 'Local summary is not available on this device.';
+}
+
+function normalizeLocalTranscriptionError(error: unknown) {
+  const rawMessage =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : 'Local transcription failed before any text was returned.';
+  const causedBy = rawMessage.match(/Caused by:\s*([\s\S]+)$/i)?.[1];
+  const detail = (causedBy ?? rawMessage)
+    .replace(/^Error:\s*/i, '')
+    .replace(/^Calling the 'transcribe' function has failed\.?\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (
+    /Foundation\._GenericObjCError/i.test(detail) ||
+    /operation couldn't be completed/i.test(detail)
+  ) {
+    return [
+      'Local transcription could not prepare this recording on iOS.',
+      'Try recording again, import a standard M4A, WAV, or MP3 file, or switch transcription back to a cloud provider in Settings for this meeting.',
+    ].join(' ');
+  }
+
+  return detail || 'Local transcription failed before any text was returned.';
+}
+
+function validateLocalTranscript(transcript: string) {
+  if (looksLikePagePlaceholderTranscript(transcript)) {
+    throw new Error(IOS_LOCAL_TRANSCRIPTION_PLACEHOLDER_ERROR);
+  }
+}
+
+function looksLikePagePlaceholderTranscript(transcript: string) {
+  const compact = transcript
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!compact) {
+    return false;
+  }
+
+  if (/^(?:page\s*\d+\s*){2,8}$/i.test(compact)) {
+    return true;
+  }
+
+  const tokens = compact.split(' ');
+  const pageTokenCount = tokens.filter((token) => token === 'page' || /^page\d+$/.test(token)).length;
+
+  if (pageTokenCount < 2 || tokens.length > 10) {
+    return false;
+  }
+
+  return tokens.every((token) => token === 'page' || /^page\d+$/.test(token) || /^\d+$/.test(token));
 }
 
 function chunkTranscript(text: string, windowSize: number, overlap: number) {

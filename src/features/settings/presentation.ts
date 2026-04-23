@@ -63,7 +63,7 @@ export function buildActiveProviderSummary({
   transcriptionModelLabel: string;
   summaryModelLabel: string;
 }) {
-  return `Transcript uses ${transcriptionProviderLabel} (${transcriptionModelLabel}). Summary uses ${summaryProviderLabel} (${summaryModelLabel}).`;
+  return `Transcript: ${transcriptionProviderLabel} (${transcriptionModelLabel}) • Summary: ${summaryProviderLabel} (${summaryModelLabel})`;
 }
 
 export function buildProcessingModeDetails({
@@ -76,35 +76,45 @@ export function buildProcessingModeDetails({
   if (processingMode === 'offline') {
     if (summaryProviderLabel === 'Local') {
       return {
-        title: 'Offline processing on this device',
-        body: 'Transcription runs on-device. Summaries and structured analysis use Local.',
+        title: 'Device-only processing',
+        body: 'Transcription, summaries, and structured analysis use local models.',
       };
     }
 
     return {
-      title: 'Offline transcription on this device',
-      body: `Transcription runs on-device with a downloaded local model. Summaries still use ${summaryProviderLabel} in the cloud.`,
+      title: 'Local-first processing',
+      body: `Transcription stays on this device. Summaries can use ${summaryProviderLabel} when you want cloud analysis.`,
     };
   }
 
   return {
-    title: 'Cloud transcription and summaries',
-    body: 'Transcription and summaries both run through your selected API providers.',
+    title: 'Cloud API processing',
+    body: 'Transcription and summaries use the providers you choose below.',
   };
 }
 
 export function buildSettingsOverviewItems({
+  processingMode,
   transcriptionProviderLabel,
+  summaryProviderLabel,
   installedTranscriptionCount,
+  installedSummaryCount,
 }: {
+  processingMode: SettingsProcessingMode;
   transcriptionProviderLabel: string;
+  summaryProviderLabel: string;
   installedTranscriptionCount: number;
+  installedSummaryCount: number;
 }) {
+  const installedLocalCount = installedTranscriptionCount + installedSummaryCount;
+
   return [
-    { label: 'Transcription', value: transcriptionProviderLabel },
+    { label: 'Mode', value: processingMode === 'offline' ? 'Local first' : 'Cloud APIs' },
+    { label: 'Transcript', value: transcriptionProviderLabel },
+    { label: 'Summary', value: summaryProviderLabel },
     {
-      label: 'Local transcription',
-      value: installedTranscriptionCount > 0 ? `${installedTranscriptionCount} installed` : 'None installed',
+      label: 'Local models',
+      value: installedLocalCount > 0 ? `${installedLocalCount} installed` : 'Not installed',
     },
   ];
 }

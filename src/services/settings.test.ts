@@ -3,12 +3,15 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 const {
   mockGetAuthSession,
   mockFetchCloudUserDataSnapshot,
+  mockGetLocalDeviceSupport,
   mockSaveCloudSettings,
   mockSaveCloudOnboardingState,
   localStorageMock,
+  platformState,
 } = vi.hoisted(() => ({
   mockGetAuthSession: vi.fn(),
   mockFetchCloudUserDataSnapshot: vi.fn(),
+  mockGetLocalDeviceSupport: vi.fn(),
   mockSaveCloudSettings: vi.fn(),
   mockSaveCloudOnboardingState: vi.fn(),
   localStorageMock: {
@@ -16,12 +19,13 @@ const {
     setItem: vi.fn(),
     removeItem: vi.fn(),
   },
+  platformState: {
+    OS: 'web',
+  },
 }));
 
 vi.mock('react-native', () => ({
-  Platform: {
-    OS: 'web',
-  },
+  Platform: platformState,
 }));
 
 vi.mock('expo-secure-store', () => ({
@@ -128,6 +132,10 @@ vi.mock('./cloudUserData', async () => {
   };
 });
 
+vi.mock('./localInference', () => ({
+  getLocalDeviceSupport: mockGetLocalDeviceSupport,
+}));
+
 import { applyOfflineSetupAutoConfig, getAppSettings, saveAppSettings, sanitizeAppSettings } from './settings';
 import { getHasSeenOnboarding, markOnboardingSeen } from './onboarding';
 import { defaultProviderConfigs } from './providers';
@@ -135,6 +143,7 @@ import type { AppSettings } from '../types';
 
 describe('settings persistence', () => {
   beforeEach(() => {
+    platformState.OS = 'web';
     appPreferencesState.selected_transcription_provider = 'openai';
     appPreferencesState.selected_summary_provider = 'openai';
     appPreferencesState.delete_uploaded_audio = 0;
@@ -151,9 +160,18 @@ describe('settings persistence', () => {
     }
     mockGetAuthSession.mockReset();
     mockFetchCloudUserDataSnapshot.mockReset();
+    mockGetLocalDeviceSupport.mockReset();
     mockSaveCloudSettings.mockReset();
     mockSaveCloudOnboardingState.mockReset();
     mockGetAuthSession.mockResolvedValue(null);
+    mockGetLocalDeviceSupport.mockResolvedValue({
+      platform: 'web',
+      localProcessingAvailable: false,
+      supportsSummary: false,
+      supportsTranscription: false,
+      requiresCustomBuild: false,
+      reason: 'Local model runtime is mobile-only.',
+    });
     localStorageMock.getItem.mockReturnValue(null);
   });
 
@@ -259,6 +277,72 @@ describe('settings persistence', () => {
       selectedSummaryProvider: 'local',
       providers: {
         local: expect.objectContaining({
+          summaryModel: 'gemma-3-1b-it-q4',
+        }),
+      },
+    });
+  });
+
+  test('falls back to a cloud summary provider when the current device cannot run local summary', async () => {
+    platformState.OS = 'ios';
+    mockGetLocalDeviceSupport.mockResolvedValue({
+      platform: 'ios',
+      localProcessingAvailable: true,
+      supportsSummary: false,
+      supportsTranscription: true,
+      requiresCustomBuild: true,
+      reason: 'iOS supports local transcription in this build. Local summary is not supported yet.',
+    });
+
+    const settings: AppSettings = {
+      selectedTranscriptionProvider: 'local',
+      selectedSummaryProvider: 'local',
+      providers: structuredClone(defaultProviderConfigs),
+      deleteUploadedAudio: false,
+      modelCatalogUrl: '',
+    };
+
+    settings.providers.local.transcriptionModel = 'whisper-base';
+    settings.providers.local.summaryModel = 'gemma-3-1b-it-q4';
+    settings.providers.openai.apiKey = 'test-key';
+
+    await saveAppSettings(settings);
+
+    await expect(getAppSettings()).resolves.toMatchObject({
+      selectedTranscriptionProvider: 'local',
+      selectedSummaryProvider: 'openai',
+      providers: {
+        local: expect.objectContaining({
+          summaryModel: 'gemma-3-1b-it-q4',
+        }),
+      },
+    });
+  });
+
+  test('does not auto-select local summary during offline setup when the device cannot run it', async () => {
+    platformState.OS = 'ios';
+    mockGetLocalDeviceSupport.mockResolvedValue({
+      platform: 'ios',
+      localProcessingAvailable: true,
+      supportsSummary: false,
+      supportsTranscription: true,
+      requiresCustomBuild: true,
+      reason: 'iOS supports local transcription in this build. Local summary is not supported yet.',
+    });
+
+    await applyOfflineSetupAutoConfig({
+      bundleId: 'starter',
+      modelIds: ['whisper-base', 'gemma-3-1b-it-q4'],
+      preferredTranscriptionModelId: 'whisper-base',
+      preferredSummaryModelId: 'gemma-3-1b-it-q4',
+    });
+
+    await expect(getAppSettings()).resolves.toMatchObject({
+      selectedTranscriptionProvider: 'local',
+      selectedSummaryProvider: 'openai',
+      providers: {
+        local: expect.objectContaining({
+          transcriptionModel: 'whisper-base',
           summaryModel: 'gemma-3-1b-it-q4',
         }),
       },

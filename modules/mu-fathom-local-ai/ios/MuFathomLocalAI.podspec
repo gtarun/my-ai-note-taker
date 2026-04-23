@@ -14,6 +14,8 @@ Pod::Spec.new do |s|
   s.static_framework = true
 
   s.dependency 'ExpoModulesCore'
+  s.dependency 'MediaPipeTasksGenAI'
+  s.dependency 'MediaPipeTasksGenAIC'
   s.libraries = 'c++'
 
   # Swift/Objective-C compatibility

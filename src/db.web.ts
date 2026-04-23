@@ -548,6 +548,15 @@ const db = {
       return;
     }
 
+    if (source.includes('UPDATE meetings SET audio_uri = ? WHERE id = ?')) {
+      const meeting = state.meetings.find((row) => row.id === params[1]);
+      if (meeting) {
+        meeting.audio_uri = String(params[0]);
+        writeState(state);
+      }
+      return;
+    }
+
     if (source.includes('SET status = ?, error_message = ?, updated_at = ?')) {
       const meeting = state.meetings.find((row) => row.id === params[3]);
       if (meeting) {

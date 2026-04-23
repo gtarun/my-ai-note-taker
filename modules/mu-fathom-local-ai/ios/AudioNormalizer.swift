@@ -7,58 +7,51 @@ struct AudioNormalizer {
   private let outputChannels: AVAudioChannelCount = 1
   private let readFrameCount: AVAudioFrameCount = 4096
 
-  func normalizeForWhisper(inputUri: String) throws -> URL {
+  func normalizeForWhisper(inputUri: String) throws -> Data {
     let inputURL = try resolveInputURL(from: inputUri)
-    let outputURL = FileManager.default.temporaryDirectory
-      .appendingPathComponent("whisper-\(UUID().uuidString)")
-      .appendingPathExtension("wav")
 
     do {
-      let inputFile = try AVAudioFile(forReading: inputURL)
-      guard let outputFormat = AVAudioFormat(
-        commonFormat: .pcmFormatInt16,
-        sampleRate: outputSampleRate,
-        channels: outputChannels,
-        interleaved: true
+      return try normalizeWithAudioFile(inputURL)
+    } catch {
+      return try normalizeWithAssetReader(inputURL)
+    }
+  }
+
+  private func normalizeWithAudioFile(_ inputURL: URL) throws -> Data {
+    let inputFile = try AVAudioFile(forReading: inputURL)
+    let outputFormat = try makeOutputFormat()
+
+    guard let converter = AVAudioConverter(from: inputFile.processingFormat, to: outputFormat) else {
+      throw normalizationException("Unable to configure audio conversion for local transcription.")
+    }
+
+    let inputToOutputRatio = outputFormat.sampleRate / inputFile.processingFormat.sampleRate
+    var sampleData = Data()
+
+    while true {
+      guard let inputBuffer = AVAudioPCMBuffer(
+        pcmFormat: inputFile.processingFormat,
+        frameCapacity: readFrameCount
       ) else {
-        throw normalizationException("Unable to create a 16 kHz mono WAV output format.")
+        throw normalizationException("Unable to allocate an input audio buffer.")
       }
 
-      guard let converter = AVAudioConverter(from: inputFile.processingFormat, to: outputFormat) else {
-        throw normalizationException("Unable to configure audio conversion for local transcription.")
+      try inputFile.read(into: inputBuffer, frameCount: readFrameCount)
+
+      if inputBuffer.frameLength == 0 {
+        break
       }
 
-      let outputFile = try AVAudioFile(
-        forWriting: outputURL,
-        settings: outputFormat.settings,
-        commonFormat: outputFormat.commonFormat,
-        interleaved: outputFormat.isInterleaved
-      )
-
-      let inputToOutputRatio = outputFormat.sampleRate / inputFile.processingFormat.sampleRate
-
-      while true {
-        guard let inputBuffer = AVAudioPCMBuffer(
-          pcmFormat: inputFile.processingFormat,
-          frameCapacity: readFrameCount
-        ) else {
-          throw normalizationException("Unable to allocate an input audio buffer.")
-        }
-
-        try inputFile.read(into: inputBuffer, frameCount: readFrameCount)
-
-        if inputBuffer.frameLength == 0 {
-          break
-        }
-
-        var didProvideInput = false
-        try drainConvertedAudio(
-          converter: converter,
-          outputFile: outputFile,
-          outputFormat: outputFormat,
-          estimatedInputFrameCount: inputBuffer.frameLength,
-          inputToOutputRatio: inputToOutputRatio
-        ) { _, outStatus in
+      var didProvideInput = false
+      try drainConvertedAudio(
+        converter: converter,
+        outputFormat: outputFormat,
+        estimatedInputFrameCount: inputBuffer.frameLength,
+        inputToOutputRatio: inputToOutputRatio,
+        onOutput: { outputBuffer in
+          try appendSamples(from: outputBuffer, to: &sampleData)
+        },
+        inputBlock: { _, outStatus in
           if didProvideInput {
             outStatus.pointee = .noDataNow
             return nil
@@ -68,26 +61,76 @@ struct AudioNormalizer {
           outStatus.pointee = .haveData
           return inputBuffer
         }
-      }
+      )
+    }
 
-      try drainConvertedAudio(
-        converter: converter,
-        outputFile: outputFile,
-        outputFormat: outputFormat,
-        estimatedInputFrameCount: readFrameCount,
-        inputToOutputRatio: inputToOutputRatio
-      ) { _, outStatus in
+    try drainConvertedAudio(
+      converter: converter,
+      outputFormat: outputFormat,
+      estimatedInputFrameCount: readFrameCount,
+      inputToOutputRatio: inputToOutputRatio,
+      onOutput: { outputBuffer in
+        try appendSamples(from: outputBuffer, to: &sampleData)
+      },
+      inputBlock: { _, outStatus in
         outStatus.pointee = .endOfStream
         return nil
       }
+    )
 
-      return outputURL
+    guard !sampleData.isEmpty else {
+      throw normalizationException("Local transcription could not find any audio samples in this recording.")
+    }
+
+    return sampleData
+  }
+
+  private func normalizeWithAssetReader(_ inputURL: URL) throws -> Data {
+    do {
+      let asset = AVURLAsset(url: inputURL)
+      guard let audioTrack = asset.tracks(withMediaType: .audio).first else {
+        throw normalizationException("This recording does not contain a readable audio track.")
+      }
+
+      let reader = try AVAssetReader(asset: asset)
+      let output = AVAssetReaderTrackOutput(track: audioTrack, outputSettings: assetReaderOutputSettings())
+      output.alwaysCopiesSampleData = false
+
+      guard reader.canAdd(output) else {
+        throw normalizationException("iOS could not prepare this recording for audio sample reading.")
+      }
+
+      reader.add(output)
+
+      guard reader.startReading() else {
+        throw reader.error ?? normalizationException("iOS could not start reading this recording.")
+      }
+
+      var sampleData = Data()
+      while let sampleBuffer = output.copyNextSampleBuffer() {
+        try appendSamples(from: sampleBuffer, to: &sampleData)
+      }
+
+      switch reader.status {
+      case .completed:
+        break
+      case .failed:
+        throw reader.error ?? normalizationException("iOS failed while reading this recording.")
+      case .cancelled:
+        throw normalizationException("iOS cancelled audio sample reading before transcription could start.")
+      default:
+        break
+      }
+
+      guard !sampleData.isEmpty else {
+        throw normalizationException("Local transcription could not find any audio samples in this recording.")
+      }
+
+      return sampleData
     } catch let exception as Exception {
-      try? FileManager.default.removeItem(at: outputURL)
       throw exception
     } catch {
-      try? FileManager.default.removeItem(at: outputURL)
-      throw normalizationException(error.localizedDescription)
+      throw normalizationException(for: error)
     }
   }
 
@@ -114,8 +157,50 @@ struct AudioNormalizer {
     return inputURL
   }
 
+  private func makeOutputFormat() throws -> AVAudioFormat {
+    guard let outputFormat = AVAudioFormat(
+      commonFormat: .pcmFormatFloat32,
+      sampleRate: outputSampleRate,
+      channels: outputChannels,
+      interleaved: false
+    ) else {
+      throw normalizationException("Unable to create a 16 kHz mono audio format.")
+    }
+
+    return outputFormat
+  }
+
+  private func assetReaderOutputSettings() -> [String: Any] {
+    [
+      AVFormatIDKey: kAudioFormatLinearPCM,
+      AVSampleRateKey: outputSampleRate,
+      AVNumberOfChannelsKey: Int(outputChannels),
+      AVLinearPCMBitDepthKey: 32,
+      AVLinearPCMIsFloatKey: true,
+      AVLinearPCMIsBigEndianKey: false,
+      AVLinearPCMIsNonInterleaved: false,
+    ]
+  }
+
   private func normalizationException(_ description: String) -> Exception {
     Exception(name: "E_LOCAL_TRANSCRIBE_NORMALIZE_FAILED", description: description)
+  }
+
+  private func normalizationException(for error: Error) -> Exception {
+    let nsError = error as NSError
+    let details = nsError.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    if details.contains("Foundation._GenericObjCError") || nsError.domain.contains("Foundation") {
+      return normalizationException(
+        "iOS could not decode or convert this recording for local transcription. Try recording again, or use a standard M4A, WAV, or MP3 file."
+      )
+    }
+
+    if details.isEmpty {
+      return normalizationException("iOS could not prepare this audio for local transcription.")
+    }
+
+    return normalizationException("iOS could not prepare this audio for local transcription: \(details)")
   }
 
   private func outputCapacity(
@@ -130,10 +215,10 @@ struct AudioNormalizer {
 
   private func drainConvertedAudio(
     converter: AVAudioConverter,
-    outputFile: AVAudioFile,
     outputFormat: AVAudioFormat,
     estimatedInputFrameCount: AVAudioFrameCount,
     inputToOutputRatio: Double,
+    onOutput: (AVAudioPCMBuffer) throws -> Void,
     inputBlock: @escaping AVAudioConverterInputBlock
   ) throws {
     while true {
@@ -153,7 +238,7 @@ struct AudioNormalizer {
       }
 
       if outputBuffer.frameLength > 0 {
-        try outputFile.write(from: outputBuffer)
+        try onOutput(outputBuffer)
       }
 
       switch status {
@@ -167,5 +252,55 @@ struct AudioNormalizer {
         throw normalizationException("Audio conversion returned an unknown status.")
       }
     }
+  }
+
+  private func appendSamples(from outputBuffer: AVAudioPCMBuffer, to sampleData: inout Data) throws {
+    guard outputBuffer.format.commonFormat == .pcmFormatFloat32,
+          outputBuffer.format.channelCount == outputChannels,
+          let channelData = outputBuffer.floatChannelData?[0] else {
+      throw normalizationException("Audio conversion produced an unexpected sample format.")
+    }
+
+    let frameLength = Int(outputBuffer.frameLength)
+    if frameLength == 0 {
+      return
+    }
+
+    sampleData.append(Data(bytes: channelData, count: frameLength * MemoryLayout<Float>.stride))
+  }
+
+  private func appendSamples(from sampleBuffer: CMSampleBuffer, to sampleData: inout Data) throws {
+    guard CMSampleBufferDataIsReady(sampleBuffer) else {
+      return
+    }
+
+    guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else {
+      throw normalizationException("iOS produced an audio sample buffer without PCM data.")
+    }
+
+    let byteCount = CMBlockBufferGetDataLength(blockBuffer)
+    if byteCount == 0 {
+      return
+    }
+
+    var bytes = [UInt8](repeating: 0, count: byteCount)
+    let status = bytes.withUnsafeMutableBytes { destination -> OSStatus in
+      guard let baseAddress = destination.baseAddress else {
+        return -1
+      }
+
+      return CMBlockBufferCopyDataBytes(
+        blockBuffer,
+        atOffset: 0,
+        dataLength: byteCount,
+        destination: baseAddress
+      )
+    }
+
+    guard status == noErr else {
+      throw normalizationException("iOS could not copy decoded audio samples for transcription.")
+    }
+
+    sampleData.append(contentsOf: bytes)
   }
 }

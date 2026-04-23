@@ -6,6 +6,14 @@ struct WhisperRuntime {
     WhisperBridge.sdkVersion()
   }
 
+  func transcribe(samples: Data, modelPath: String) throws -> String {
+    do {
+      return try WhisperBridge.transcribeSamples(samples, modelPath: modelPath)
+    } catch {
+      throw Exception(name: "E_LOCAL_TRANSCRIBE_FAILED", description: error.localizedDescription)
+    }
+  }
+
   func transcribe(audioPath: String, modelPath: String) throws -> String {
     do {
       return try WhisperBridge.transcribeFile(atPath: audioPath, modelPath: modelPath)

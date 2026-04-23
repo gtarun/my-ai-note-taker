@@ -41,7 +41,7 @@ describe('settings presentation', () => {
         transcriptionModelLabel: 'Whisper Base',
         summaryModelLabel: 'google/gemini-2.5-flash',
       })
-    ).toBe('Transcript uses Local (Whisper Base). Summary uses OpenRouter (google/gemini-2.5-flash).');
+    ).toBe('Transcript: Local (Whisper Base) • Summary: OpenRouter (google/gemini-2.5-flash)');
   });
 
   test('formats bytes and display labels predictably', () => {
@@ -87,12 +87,17 @@ describe('settings presentation', () => {
   test('builds compact overview rows for the settings header', () => {
     expect(
       buildSettingsOverviewItems({
+        processingMode: 'offline',
         transcriptionProviderLabel: 'OpenAI',
+        summaryProviderLabel: 'Local',
         installedTranscriptionCount: 1,
+        installedSummaryCount: 1,
       })
     ).toEqual([
-      { label: 'Transcription', value: 'OpenAI' },
-      { label: 'Local transcription', value: '1 installed' },
+      { label: 'Mode', value: 'Local first' },
+      { label: 'Transcript', value: 'OpenAI' },
+      { label: 'Summary', value: 'Local' },
+      { label: 'Local models', value: '2 installed' },
     ]);
   });
 
@@ -103,13 +108,13 @@ describe('settings presentation', () => {
 
   test('explains what changes between cloud and offline processing modes', () => {
     expect(buildProcessingModeDetails({ processingMode: 'cloud', summaryProviderLabel: 'OpenAI' })).toEqual({
-      title: 'Cloud transcription and summaries',
-      body: 'Transcription and summaries both run through your selected API providers.',
+      title: 'Cloud API processing',
+      body: 'Transcription and summaries use the providers you choose below.',
     });
 
     expect(buildProcessingModeDetails({ processingMode: 'offline', summaryProviderLabel: 'Local' })).toEqual({
-      title: 'Offline processing on this device',
-      body: 'Transcription runs on-device. Summaries and structured analysis use Local.',
+      title: 'Device-only processing',
+      body: 'Transcription, summaries, and structured analysis use local models.',
     });
   });
 

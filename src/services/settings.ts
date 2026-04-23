@@ -5,6 +5,7 @@ import { getDatabase } from '../db';
 import { AppSettings, ProviderConfig, ProviderId } from '../types';
 import { getAuthSession } from './account';
 import { fetchCloudUserDataSnapshot, mapBootstrapSnapshotToAppSettings, saveCloudSettings } from './cloudUserData';
+import { getLocalDeviceSupport } from './localInference';
 import {
   defaultProviderConfigs,
   isProviderConfigured,
@@ -51,7 +52,7 @@ function getDefaultSettings(): AppSettings {
 }
 
 export async function getAppSettings(): Promise<AppSettings> {
-  const cached = await getLocalAppSettings();
+  const cached = await normalizeAppSettingsForCurrentDevice(await getLocalAppSettings());
 
   try {
     const session = await getAuthSession();
@@ -61,7 +62,7 @@ export async function getAppSettings(): Promise<AppSettings> {
     }
 
     const snapshot = await fetchCloudUserDataSnapshot();
-    const next = mapBootstrapSnapshotToAppSettings(snapshot);
+    const next = await normalizeAppSettingsForCurrentDevice(mapBootstrapSnapshotToAppSettings(snapshot));
     await saveAppSettingsToLocalCache(next, {
       hasSeenOnboarding: snapshot.preferences.hasSeenOnboarding,
     });
@@ -72,7 +73,7 @@ export async function getAppSettings(): Promise<AppSettings> {
 }
 
 export async function saveAppSettings(settings: AppSettings) {
-  const sanitized = sanitizeAppSettings(settings);
+  const sanitized = await normalizeAppSettingsForCurrentDevice(settings);
   const hasSeenOnboarding = await getHasSeenOnboarding();
   await saveAppSettingsToLocalCache(sanitized);
 
@@ -116,7 +117,7 @@ export async function applyOfflineSetupAutoConfig(params: {
     settings.selectedSummaryProvider = 'local';
   }
 
-  const sanitized = sanitizeAppSettings(settings);
+  const sanitized = await normalizeAppSettingsForCurrentDevice(settings);
   const hasSeenOnboarding = await getHasSeenOnboarding();
   await saveAppSettingsToLocalCache(sanitized);
 
@@ -180,6 +181,35 @@ export function sanitizeAppSettings(settings: AppSettings): AppSettings {
   };
 }
 
+async function normalizeAppSettingsForCurrentDevice(settings: AppSettings): Promise<AppSettings> {
+  const sanitized = sanitizeAppSettings(settings);
+
+  if (
+    sanitized.selectedTranscriptionProvider !== 'local' &&
+    sanitized.selectedSummaryProvider !== 'local'
+  ) {
+    return sanitized;
+  }
+
+  const support = await getLocalDeviceSupport();
+
+  if (support.platform === 'web') {
+    return sanitized;
+  }
+
+  const next = { ...sanitized };
+
+  if (next.selectedTranscriptionProvider === 'local' && !support.supportsTranscription) {
+    next.selectedTranscriptionProvider = getFallbackCloudProviderId(next, 'transcription');
+  }
+
+  if (next.selectedSummaryProvider === 'local' && !support.supportsSummary) {
+    next.selectedSummaryProvider = getFallbackCloudProviderId(next, 'summary');
+  }
+
+  return next;
+}
+
 function buildProvidersFromRows(
   defaultProviders: Record<ProviderId, ProviderConfig>,
   rows: ProviderSettingsRow[]
@@ -230,6 +260,25 @@ function resolveSelectedProvider(
   return 'openai';
 }
 
+function getFallbackCloudProviderId(settings: AppSettings, mode: 'transcription' | 'summary'): ProviderId {
+  const configured = providerDefinitions
+    .filter((definition) => definition.id !== 'local')
+    .filter((definition) => {
+      if (mode === 'transcription' && !definition.supportsTranscription) {
+        return false;
+      }
+
+      if (mode === 'summary' && !definition.supportsSummary) {
+        return false;
+      }
+
+      return isProviderConfigured(definition.id, settings.providers[definition.id], mode);
+    })
+    .map((definition) => definition.id);
+
+  return configured[0] ?? 'openai';
+}
+
 async function readLegacySettings(defaultSettings: AppSettings) {
   const legacySettings = (await readLegacyStoredSettingsV3()) ?? (await readLegacyStoredSettingsV2());
   const legacyProviders = { ...defaultSettings.providers };
@@ -268,7 +317,6 @@ export async function saveAppSettingsToLocalCache(
   settings: AppSettings,
   options?: { hasSeenOnboarding?: boolean }
 ) {
-  const sanitized = sanitizeAppSettings(settings);
   const db = getDatabase();
 
   await db.runAsync(
@@ -278,10 +326,10 @@ export async function saveAppSettingsToLocalCache(
       delete_uploaded_audio = ?,
       model_catalog_url = ?
     WHERE id = 1`,
-    sanitized.selectedTranscriptionProvider,
-    sanitized.selectedSummaryProvider,
-    sanitized.deleteUploadedAudio ? 1 : 0,
-    sanitized.modelCatalogUrl
+    settings.selectedTranscriptionProvider,
+    settings.selectedSummaryProvider,
+    settings.deleteUploadedAudio ? 1 : 0,
+    settings.modelCatalogUrl
   );
 
   if (options?.hasSeenOnboarding != null) {
@@ -292,7 +340,7 @@ export async function saveAppSettingsToLocalCache(
   }
 
   for (const definition of providerDefinitions) {
-    const provider = sanitized.providers[definition.id];
+    const provider = settings.providers[definition.id];
     await db.runAsync(
       `INSERT OR REPLACE INTO provider_settings (
         provider_id,

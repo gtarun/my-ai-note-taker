@@ -8,7 +8,12 @@ import { extractStructuredData, summarizeTranscript, transcribeAudio } from './a
 import { getExtractionLayer } from './extractionLayers';
 import { appendExtractionLayerRow } from './googleSheets';
 import { getInstalledModel } from './localModels';
-import { isProviderConfigured } from './providers';
+import {
+  IOS_LOCAL_SUMMARY_FALLBACK_REQUIRED_ERROR,
+  IOS_LOCAL_SUMMARY_UNAVAILABLE_ERROR,
+  getLocalDeviceSupport,
+} from './localInference';
+import { isProviderConfigured, providerDefinitions } from './providers';
 import { getAppSettings } from './settings';
 
 type RecordingInput = {
@@ -25,13 +30,13 @@ export async function listMeetings(): Promise<MeetingRow[]> {
   const rows = await db.getAllAsync<Record<string, unknown>>(
     'SELECT * FROM meetings ORDER BY datetime(created_at) DESC'
   );
-  return rows.map(mapMeetingRow);
+  return Promise.all(rows.map((row) => repairMeetingAudioUri(mapMeetingRow(row))));
 }
 
 export async function getMeeting(id: string): Promise<MeetingRow | null> {
   const db = getDatabase();
   const row = await db.getFirstAsync<Record<string, unknown>>('SELECT * FROM meetings WHERE id = ?', id);
-  return row ? mapMeetingRow(row) : null;
+  return row ? repairMeetingAudioUri(mapMeetingRow(row)) : null;
 }
 
 export async function createMeetingFromRecording(input: RecordingInput): Promise<{ id: string; audioUri: string }> {
@@ -66,14 +71,15 @@ export async function processMeeting(id: string, options: { layerId?: string | n
 
   const settings = await getAppSettings();
   const transcriptionProvider = settings.providers[settings.selectedTranscriptionProvider];
-  const summaryProvider = settings.providers[settings.selectedSummaryProvider];
+  const { providerId: summaryProviderId, provider: summaryProvider } =
+    await resolveSummaryProviderForCurrentDevice(settings);
   const layer = options.layerId ? await getExtractionLayer(options.layerId) : null;
 
   if (!isProviderConfigured(settings.selectedTranscriptionProvider, transcriptionProvider, 'transcription')) {
     throw new Error('Configure the selected transcription provider in Settings first.');
   }
 
-  if (!isProviderConfigured(settings.selectedSummaryProvider, summaryProvider, 'summary')) {
+  if (!isProviderConfigured(summaryProviderId, summaryProvider, 'summary')) {
     throw new Error('Configure the selected summary provider in Settings first.');
   }
 
@@ -84,7 +90,7 @@ export async function processMeeting(id: string, options: { layerId?: string | n
     }
   }
 
-  if (settings.selectedSummaryProvider === 'local') {
+  if (summaryProviderId === 'local') {
     const installedModel = await getInstalledModel(summaryProvider.summaryModel);
     if (!installedModel || installedModel.status !== 'installed') {
       throw new Error('Download and install the selected local summary model first.');
@@ -112,12 +118,12 @@ export async function processMeeting(id: string, options: { layerId?: string | n
     await updateTranscript(id, transcriptText);
     await updateMeetingStatus(
       id,
-      settings.selectedSummaryProvider === 'local' ? 'summarizing_local' : 'summarizing',
+      summaryProviderId === 'local' ? 'summarizing_local' : 'summarizing',
       null
     );
 
     const summary = await summarizeTranscript({
-      providerId: settings.selectedSummaryProvider,
+      providerId: summaryProviderId,
       provider: summaryProvider,
       transcriptText,
     });
@@ -141,7 +147,7 @@ export async function processMeeting(id: string, options: { layerId?: string | n
 
       try {
         const extractedValues = await extractStructuredData({
-          providerId: settings.selectedSummaryProvider,
+          providerId: summaryProviderId,
           provider: summaryProvider,
           transcriptText,
           fields: layer.fields,
@@ -179,6 +185,54 @@ export async function processMeeting(id: string, options: { layerId?: string | n
     await updateMeetingStatus(id, 'failed', message);
     throw error;
   }
+}
+
+async function resolveSummaryProviderForCurrentDevice(settings: Awaited<ReturnType<typeof getAppSettings>>) {
+  if (settings.selectedSummaryProvider !== 'local') {
+    return {
+      providerId: settings.selectedSummaryProvider,
+      provider: settings.providers[settings.selectedSummaryProvider],
+    };
+  }
+
+  const support = await getLocalDeviceSupport();
+  if (support.platform !== 'ios' || support.supportsSummary) {
+    return {
+      providerId: settings.selectedSummaryProvider,
+      provider: settings.providers[settings.selectedSummaryProvider],
+    };
+  }
+
+  const fallbackProviderId = getConfiguredCloudProviderId(settings, 'summary');
+  if (!fallbackProviderId) {
+    throw new Error(IOS_LOCAL_SUMMARY_FALLBACK_REQUIRED_ERROR);
+  }
+
+  return {
+    providerId: fallbackProviderId,
+    provider: settings.providers[fallbackProviderId],
+  };
+}
+
+function getConfiguredCloudProviderId(
+  settings: Awaited<ReturnType<typeof getAppSettings>>,
+  mode: 'transcription' | 'summary'
+) {
+  return (
+    providerDefinitions
+      .filter((definition) => definition.id !== 'local')
+      .find((definition) => {
+        if (mode === 'transcription' && !definition.supportsTranscription) {
+          return false;
+        }
+
+        if (mode === 'summary' && !definition.supportsSummary) {
+          return false;
+        }
+
+        return isProviderConfigured(definition.id, settings.providers[definition.id], mode);
+      })?.id ?? null
+  );
 }
 
 export async function saveMeetingExtractionValues(id: string, values: Record<string, string>) {
@@ -322,6 +376,11 @@ async function updateMeetingStatus(id: string, status: MeetingRow['status'], err
   );
 }
 
+async function updateMeetingAudioUri(id: string, audioUri: string) {
+  const db = getDatabase();
+  await db.runAsync('UPDATE meetings SET audio_uri = ? WHERE id = ?', audioUri, id);
+}
+
 async function updateTranscript(id: string, transcriptText: string) {
   const db = getDatabase();
   await db.runAsync(
@@ -415,6 +474,72 @@ async function copyAudioIntoAppStorage(sourceUri: string, extension: string) {
     to: destination,
   });
   return destination;
+}
+
+async function repairMeetingAudioUri(meeting: MeetingRow): Promise<MeetingRow> {
+  const audioUri = await resolveAudioUriForCurrentInstall(meeting.audioUri);
+
+  if (audioUri === meeting.audioUri) {
+    return meeting;
+  }
+
+  await updateMeetingAudioUri(meeting.id, audioUri);
+  return {
+    ...meeting,
+    audioUri,
+  };
+}
+
+async function resolveAudioUriForCurrentInstall(audioUri: string) {
+  if (!audioUri) {
+    return audioUri;
+  }
+
+  const currentInfo = await getAudioInfo(audioUri);
+
+  if (currentInfo.exists) {
+    return audioUri;
+  }
+
+  const portableAudioUri = getCurrentInstallAudioUri(audioUri);
+
+  if (!portableAudioUri || portableAudioUri === audioUri) {
+    return audioUri;
+  }
+
+  const portableInfo = await getAudioInfo(portableAudioUri);
+  return portableInfo.exists ? portableAudioUri : audioUri;
+}
+
+async function getAudioInfo(audioUri: string) {
+  try {
+    return await FileSystem.getInfoAsync(audioUri);
+  } catch {
+    return { exists: false };
+  }
+}
+
+function getCurrentInstallAudioUri(audioUri: string) {
+  const fileName = getStoredAudioFileName(audioUri);
+  return fileName ? `${getAudioDirectory()}/${fileName}` : null;
+}
+
+function getStoredAudioFileName(audioUri: string) {
+  const cleanUri = audioUri.split(/[?#]/)[0];
+  const marker = '/audio/';
+  const markerIndex = cleanUri.lastIndexOf(marker);
+
+  if (markerIndex < 0) {
+    return null;
+  }
+
+  const fileName = cleanUri.slice(markerIndex + marker.length);
+
+  if (!fileName || fileName.includes('/')) {
+    return null;
+  }
+
+  return fileName;
 }
 
 async function ensureAudioFileReadable(audioUri: string) {
