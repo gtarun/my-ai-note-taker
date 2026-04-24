@@ -2,7 +2,7 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -67,6 +67,7 @@ export default function MeetingDetailScreen() {
   const [copiedSection, setCopiedSection] = useState<CopyableMeetingSection | null>(null);
   const player = useAudioPlayer(meeting?.audioUri ?? null);
   const playerStatus = useAudioPlayerStatus(player);
+  const loadedAudioUriRef = useRef<string | null>(null);
   const insets = useSafeAreaInsets();
   const windowHeight = useWindowDimensions().height;
   const canReturnToPreviousScreen = router.canGoBack();
@@ -91,9 +92,16 @@ export default function MeetingDetailScreen() {
   }, [id]);
 
   useEffect(() => {
-    if (meeting?.audioUri) {
-      player.replace(meeting.audioUri);
+    const audioUri = meeting?.audioUri ?? null;
+    if (!audioUri) {
+      loadedAudioUriRef.current = null;
+      return;
     }
+    if (loadedAudioUriRef.current === audioUri) {
+      return;
+    }
+    loadedAudioUriRef.current = audioUri;
+    player.replace(audioUri);
   }, [meeting?.audioUri, player]);
 
   useEffect(() => {
@@ -121,7 +129,7 @@ export default function MeetingDetailScreen() {
   );
 
   const runAnalysis = async (layerId?: string | null) => {
-    if (!id) {
+    if (!id || isBusy) {
       return;
     }
 
@@ -235,14 +243,20 @@ export default function MeetingDetailScreen() {
       return;
     }
 
+    let savedDraft = false;
     try {
       setIsSyncingExtraction(true);
       await saveMeetingExtractionValues(id, extractionDraftValues);
+      savedDraft = true;
       await syncMeetingExtractionResult(id);
       await loadMeeting();
       Alert.alert('Synced', 'The extracted row was sent to Google Sheets.');
     } catch (error) {
-      await loadMeeting();
+      // Only reload from DB if we at least persisted the draft; otherwise keep
+      // the user's in-progress edits so they can retry without losing work.
+      if (savedDraft) {
+        await loadMeeting();
+      }
       Alert.alert('Sync failed', error instanceof Error ? error.message : 'Unable to sync this row.');
     } finally {
       setIsSyncingExtraction(false);
@@ -339,7 +353,7 @@ export default function MeetingDetailScreen() {
           <View style={styles.statusWrap}>
             <View style={styles.statusRow}>
               <StatusIcon status={meeting.status} />
-              <Text style={styles.status}>Status: {meeting.status.replace('_', ' ')}</Text>
+              <Text style={styles.status}>Status: {meeting.status.replace(/_/g, ' ')}</Text>
             </View>
           </View>
           {meeting.errorMessage ? <Text style={styles.errorText}>{meeting.errorMessage}</Text> : null}

@@ -136,7 +136,7 @@ export type CloudUserDataSnapshot = {
 
 export type LocalModelKind = 'transcription' | 'summary';
 
-export type LocalModelEngine = 'whisper.cpp' | 'mediapipe-llm' | 'litert-lm';
+export type LocalModelEngine = 'whisper.cpp' | 'mediapipe-llm' | 'litert-lm' | 'llama.cpp';
 
 export type LocalModelPlatform = 'ios' | 'android';
 

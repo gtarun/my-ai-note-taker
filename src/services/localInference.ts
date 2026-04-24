@@ -18,7 +18,23 @@ type LocalNativeModule = {
 const nativeModule =
   Platform.OS === 'web' ? null : requireOptionalNativeModule<LocalNativeModule>('MuFathomLocalAI');
 
-export async function getLocalDeviceSupport(): Promise<LocalDeviceSupport> {
+let deviceSupportPromise: Promise<LocalDeviceSupport> | null = null;
+
+export function resetLocalDeviceSupportCache() {
+  deviceSupportPromise = null;
+}
+
+export function getLocalDeviceSupport(): Promise<LocalDeviceSupport> {
+  if (!deviceSupportPromise) {
+    deviceSupportPromise = computeLocalDeviceSupport().catch((error) => {
+      deviceSupportPromise = null;
+      throw error;
+    });
+  }
+  return deviceSupportPromise;
+}
+
+async function computeLocalDeviceSupport(): Promise<LocalDeviceSupport> {
   if (Platform.OS === 'web') {
     return {
       platform: 'web',

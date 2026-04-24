@@ -3,6 +3,7 @@ import Foundation
 
 public class MuFathomLocalAIModule: Module {
   private let whisperRuntime = WhisperRuntime()
+  private let llamaRuntime = LlamaRuntime()
   private let modelResolver = LocalModelResolver()
   private let audioNormalizer = AudioNormalizer()
 
@@ -13,10 +14,10 @@ public class MuFathomLocalAIModule: Module {
       return [
         "platform": "ios",
         "localProcessingAvailable": true,
-        "supportsSummary": false,
+        "supportsSummary": true,
         "supportsTranscription": true,
-        "requiresCustomBuild": true,
-        "reason": "iOS local transcription is available in this build."
+        "requiresCustomBuild": false,
+        "reason": "iOS local transcription and summary are available in this build."
       ]
     }
 
@@ -47,11 +48,19 @@ public class MuFathomLocalAIModule: Module {
       return trimmedTranscript
     }
 
-    AsyncFunction("summarize") { (_: LocalSummarizeParams) in
-      throw Exception(
-        name: "E_LOCAL_SUMMARY_UNAVAILABLE",
-        description: "Local summary is not supported on iOS in this phase."
-      )
+    AsyncFunction("summarize") { (params: LocalSummarizeParams) -> String in
+      let prompt = params.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+      let modelId = params.modelId.trimmingCharacters(in: .whitespacesAndNewlines)
+
+      if prompt.isEmpty {
+        throw Exception(name: "E_LOCAL_SUMMARY_INPUT", description: "Missing local summary prompt.")
+      }
+      if modelId.isEmpty {
+        throw Exception(name: "E_LOCAL_SUMMARY_MODEL", description: "Missing local summary model ID.")
+      }
+
+      let modelPath = try modelResolver.resolveSummaryModelPath(for: modelId)
+      return try await llamaRuntime.generate(prompt: prompt, modelPath: modelPath, maxTokens: 1024)
     }
   }
 }
