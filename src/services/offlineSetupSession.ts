@@ -69,8 +69,10 @@ function normalizeOfflineSetupStatus(value: unknown): OfflineSetupSession['statu
     : 'idle';
 }
 
-function normalizeNetworkPolicy(value: unknown): OfflineSetupSession['networkPolicy'] {
-  return value === 'wifi_or_cellular' ? 'wifi_or_cellular' : 'wifi_or_cellular';
+function normalizeNetworkPolicy(_value: unknown): OfflineSetupSession['networkPolicy'] {
+  // Only one policy is currently supported; any persisted value is normalized
+  // to the single valid union member.
+  return 'wifi_or_cellular';
 }
 
 function normalizeBundleId(value: unknown): OfflineSetupBundleId {

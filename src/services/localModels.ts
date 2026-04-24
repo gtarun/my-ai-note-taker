@@ -18,6 +18,11 @@ const SHA256_CHUNK_BYTES = 256 * 1024;
 const HUGGING_FACE_BASE_URL = 'https://huggingface.co';
 const activeModelDownloadIds = new Set<string>();
 export const IOS_SUPPORTED_TRANSCRIPTION_MODEL_IDS = new Set(['whisper-base']);
+export const IOS_SUPPORTED_SUMMARY_MODEL_IDS = new Set([
+  'qwen2.5-1.5b-instruct-gguf-q4',
+  'gemma-3-1b-it-q4',
+  'qwen2.5-1.5b-instruct-q8',
+]);
 
 const BUILT_IN_MODEL_CATALOG: ModelCatalogItem[] = [
   {
@@ -130,6 +135,26 @@ const BUILT_IN_MODEL_CATALOG: ModelCatalogItem[] = [
     experimental: false,
     description: 'Small instruction-tuned community model that is easier to ship than huge Gemma-family checkpoints.',
   },
+  {
+    id: 'qwen2.5-1.5b-instruct-gguf-q4',
+    kind: 'summary',
+    engine: 'llama.cpp',
+    displayName: 'Qwen 2.5 1.5B Instruct (GGUF q4)',
+    version: 'q4_k_m',
+    downloadUrl: buildHuggingFaceDownloadUrl(
+      'Qwen/Qwen2.5-1.5B-Instruct-GGUF',
+      'qwen2.5-1.5b-instruct-q4_k_m.gguf'
+    ),
+    sourceUrl: buildHuggingFaceModelUrl('Qwen/Qwen2.5-1.5B-Instruct-GGUF'),
+    sourceLabel: 'Open model page',
+    sha256: '',
+    sizeBytes: 986049728,
+    platforms: ['ios'],
+    minFreeSpaceBytes: 2 * 1024 * 1024 * 1024,
+    recommended: true,
+    experimental: false,
+    description: 'Quantized GGUF build of Qwen 2.5 1.5B Instruct for on-device summarization via llama.cpp (iOS).',
+  },
 ];
 
 type InstalledModelRowRecord = {
@@ -209,6 +234,9 @@ export function getCatalogItemsForDevice(
       if (item.kind === 'transcription' && !IOS_SUPPORTED_TRANSCRIPTION_MODEL_IDS.has(item.id)) {
         return false;
       }
+      if (item.kind === 'summary' && !IOS_SUPPORTED_SUMMARY_MODEL_IDS.has(item.id)) {
+        return false;
+      }
     }
 
     return item.platforms.includes(platform);
@@ -217,6 +245,10 @@ export function getCatalogItemsForDevice(
 
 export function isSupportedIosTranscriptionModel(modelId: string) {
   return IOS_SUPPORTED_TRANSCRIPTION_MODEL_IDS.has(modelId);
+}
+
+export function isSupportedIosSummaryModel(modelId: string) {
+  return IOS_SUPPORTED_SUMMARY_MODEL_IDS.has(modelId);
 }
 
 export async function downloadModel(
@@ -257,6 +289,9 @@ async function downloadModelOnce(
   if (getCurrentModelPlatform() === 'ios') {
     if (catalogItem.kind === 'transcription' && !IOS_SUPPORTED_TRANSCRIPTION_MODEL_IDS.has(catalogItem.id)) {
       throw new Error('Only whisper-base is supported for local transcription on iOS in this phase.');
+    }
+    if (catalogItem.kind === 'summary' && !IOS_SUPPORTED_SUMMARY_MODEL_IDS.has(catalogItem.id)) {
+      throw new Error('Only GGUF/llama.cpp summary models are supported on iOS in this phase.');
     }
   }
 
@@ -462,7 +497,10 @@ function normalizeCatalogItem(input: unknown): ModelCatalogItem | null {
   const record = input as Record<string, unknown>;
   const kind = record.kind === 'summary' ? 'summary' : record.kind === 'transcription' ? 'transcription' : null;
   const engine =
-    record.engine === 'mediapipe-llm' || record.engine === 'litert-lm' || record.engine === 'whisper.cpp'
+    record.engine === 'mediapipe-llm' ||
+    record.engine === 'litert-lm' ||
+    record.engine === 'whisper.cpp' ||
+    record.engine === 'llama.cpp'
       ? record.engine
       : null;
   const platforms = Array.isArray(record.platforms)
@@ -520,6 +558,10 @@ function inferFileExtension(downloadUrl: string, engine: ModelCatalogItem['engin
 
   if (engine === 'litert-lm') {
     return '.litertlm';
+  }
+
+  if (engine === 'llama.cpp') {
+    return '.gguf';
   }
 
   return '.task';

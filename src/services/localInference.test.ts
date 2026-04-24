@@ -4,19 +4,22 @@ import type { ModelCatalogItem } from '../types';
 
 afterEach(() => {
   vi.resetModules();
-  vi.unmock('react-native');
-  vi.unmock('expo-modules-core');
-  vi.unmock('expo-file-system/legacy');
-  vi.unmock('../db');
-  vi.unmock('../utils/sha256');
+  vi.doUnmock('react-native');
+  vi.doUnmock('expo-modules-core');
+  vi.doUnmock('expo-file-system/legacy');
+  vi.doUnmock('../db');
+  vi.doUnmock('../utils/sha256');
+  vi.doUnmock('./localModels');
 });
 
 async function importLocalInferenceTestModule({
   platform,
   nativeModule,
+  installedModelsByEngine,
 }: {
   platform: 'ios' | 'android' | 'web';
   nativeModule: unknown;
+  installedModelsByEngine?: Record<string, string>;
 }) {
   vi.doMock('react-native', () => ({
     Platform: {
@@ -27,6 +30,15 @@ async function importLocalInferenceTestModule({
   vi.doMock('expo-modules-core', () => ({
     requireOptionalNativeModule: vi.fn(() => nativeModule),
   }));
+
+  if (installedModelsByEngine) {
+    vi.doMock('./localModels', () => ({
+      getInstalledModel: vi.fn(async (id: string) => {
+        const engine = installedModelsByEngine[id];
+        return engine ? { id, engine } : null;
+      }),
+    }));
+  }
 
   return import('./localInference');
 }
@@ -231,6 +243,7 @@ describe('local inference bridge', () => {
         })),
         summarize,
       },
+      installedModelsByEngine: { 'qwen2.5-1.5b-instruct-q8': 'mediapipe-llm' },
     });
 
     await expect(
@@ -246,6 +259,7 @@ describe('local inference bridge', () => {
     });
     expect(summarize).toHaveBeenCalledWith({
       modelId: 'qwen2.5-1.5b-instruct-q8',
+      engine: 'mediapipe-llm',
       prompt: expect.stringContaining('Return valid JSON only'),
     });
   });
@@ -269,6 +283,7 @@ describe('local inference bridge', () => {
         })),
         summarize,
       },
+      installedModelsByEngine: { 'gemma-3-1b-it-q4': 'mediapipe-llm' },
     });
 
     await expect(
@@ -286,6 +301,7 @@ describe('local inference bridge', () => {
     });
     expect(summarize).toHaveBeenCalledWith({
       modelId: 'gemma-3-1b-it-q4',
+      engine: 'mediapipe-llm',
       prompt: expect.stringContaining('Return valid JSON only with these exact keys: customer, risk.'),
     });
   });
@@ -349,8 +365,9 @@ describe('local inference bridge', () => {
       reason: 'iOS local transcription is available in this build.',
     });
 
-    expect(iosItems.filter((item) => item.kind === 'summary').map((item) => item.id)).toEqual([
+    expect(iosItems.filter((item) => item.kind === 'summary').map((item) => item.id).sort()).toEqual([
       'gemma-3-1b-it-q4',
+      'qwen2.5-1.5b-instruct-gguf-q4',
       'qwen2.5-1.5b-instruct-q8',
     ]);
   });
@@ -455,10 +472,10 @@ describe('local inference bridge', () => {
         description: 'Should stay hidden on iOS in this phase.',
       },
       {
-        id: 'gemma-3n-e2b-preview',
+        id: 'qwen2.5-1.5b-instruct-gguf-q4',
         kind: 'summary',
-        engine: 'mediapipe-llm',
-        displayName: 'Gemma 3n E2B preview',
+        engine: 'llama.cpp',
+        displayName: 'Qwen 2.5 1.5B Instruct (GGUF q4)',
         version: 'custom',
         downloadUrl: '',
         sha256: '',
@@ -467,7 +484,22 @@ describe('local inference bridge', () => {
         minFreeSpaceBytes: 1,
         recommended: true,
         experimental: false,
-        description: 'Not part of the transcription starter bundle.',
+        description: 'iOS-compatible GGUF summary model.',
+      },
+      {
+        id: 'gemma-3-1b-it-q4',
+        kind: 'summary',
+        engine: 'mediapipe-llm',
+        displayName: 'Gemma 3 1B IT q4',
+        version: 'custom',
+        downloadUrl: '',
+        sha256: '',
+        sizeBytes: 1,
+        platforms: ['ios'],
+        minFreeSpaceBytes: 1,
+        recommended: true,
+        experimental: false,
+        description: 'MediaPipe summary model allowed on iOS.',
       },
     ];
 
@@ -480,7 +512,11 @@ describe('local inference bridge', () => {
       reason: 'iOS local transcription is available in this build.',
     });
 
-    expect(iosItems.map((item) => item.id)).toEqual(['whisper-base', 'gemma-3n-e2b-preview']);
+    expect(iosItems.map((item) => item.id)).toEqual([
+      'whisper-base',
+      'qwen2.5-1.5b-instruct-gguf-q4',
+      'gemma-3-1b-it-q4',
+    ]);
   });
 
   test('rejects unsupported iOS transcription model downloads even if a custom catalog exposes them', async () => {
@@ -507,7 +543,7 @@ describe('local inference bridge', () => {
 
   test('allows iOS summary model downloads when the catalog item supports iOS', async () => {
     const createDownloadResumable = vi.fn(() => ({
-      downloadAsync: vi.fn(async () => ({ uri: 'file:///documents/models/gemma-3-1b-it-q4.task' })),
+      downloadAsync: vi.fn(async () => ({ uri: 'file:///documents/models/qwen2.5-1.5b-instruct-gguf-q4.gguf' })),
     }));
 
     vi.doMock('react-native', () => ({
@@ -541,22 +577,22 @@ describe('local inference bridge', () => {
 
     await expect(
       module.downloadModel({
-        id: 'gemma-3-1b-it-q4',
+        id: 'qwen2.5-1.5b-instruct-gguf-q4',
         kind: 'summary',
-        engine: 'mediapipe-llm',
-        displayName: 'Gemma 3 1B IT q4',
+        engine: 'llama.cpp',
+        displayName: 'Qwen 2.5 1.5B Instruct (GGUF q4)',
         version: 'custom',
-        downloadUrl: 'https://example.com/gemma.task',
+        downloadUrl: 'https://example.com/qwen.gguf',
         sha256: '',
         sizeBytes: 1,
         platforms: ['ios'],
         minFreeSpaceBytes: 1,
         recommended: true,
         experimental: false,
-        description: 'iOS-compatible summary model.',
+        description: 'iOS-compatible GGUF summary model.',
       })
     ).resolves.toMatchObject({
-      id: 'gemma-3-1b-it-q4',
+      id: 'qwen2.5-1.5b-instruct-gguf-q4',
       status: 'installed',
     });
     expect(createDownloadResumable).toHaveBeenCalledTimes(1);
@@ -598,12 +634,12 @@ describe('local inference bridge', () => {
 
     await expect(
       module.downloadModel({
-        id: 'gated-summary',
+        id: 'qwen2.5-1.5b-instruct-gguf-q4',
         kind: 'summary',
-        engine: 'mediapipe-llm',
+        engine: 'llama.cpp',
         displayName: 'Gated Summary',
         version: 'custom',
-        downloadUrl: 'https://example.com/gated.task',
+        downloadUrl: 'https://example.com/gated.gguf',
         sha256: '',
         sizeBytes: 554661246,
         platforms: ['ios'],

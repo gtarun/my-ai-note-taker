@@ -4,6 +4,7 @@ import Foundation
 public class MuFathomLocalAIModule: Module {
   private let whisperRuntime = WhisperRuntime()
   private let summaryRuntime = SummaryRuntime()
+  private let llamaRuntime = LlamaRuntime()
   private let modelResolver = LocalModelResolver()
   private let audioNormalizer = AudioNormalizer()
 
@@ -14,9 +15,9 @@ public class MuFathomLocalAIModule: Module {
       return [
         "platform": "ios",
         "localProcessingAvailable": true,
-        "supportsSummary": Self.supportsSummary,
+        "supportsSummary": true,
         "supportsTranscription": true,
-        "requiresCustomBuild": true,
+        "requiresCustomBuild": false,
         "reason": Self.supportReason
       ]
     }
@@ -47,6 +48,7 @@ public class MuFathomLocalAIModule: Module {
     AsyncFunction("summarize") { (params: LocalSummarizeParams) -> String in
       let prompt = params.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
       let modelId = params.modelId.trimmingCharacters(in: .whitespacesAndNewlines)
+      let engine = params.engine.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
       if prompt.isEmpty {
         throw Exception(name: "E_LOCAL_SUMMARY_INPUT", description: "Missing local summary prompt.")
@@ -54,35 +56,34 @@ public class MuFathomLocalAIModule: Module {
       if modelId.isEmpty {
         throw Exception(name: "E_LOCAL_SUMMARY_MODEL", description: "Missing local summary model ID.")
       }
-
-      guard Self.supportsSummary else {
-        throw Exception(
-          name: "E_LOCAL_SUMMARY_UNAVAILABLE",
-          description: "This build does not include the iOS local summary runtime yet."
-        )
+      if engine.isEmpty {
+        throw Exception(name: "E_LOCAL_SUMMARY_ENGINE", description: "Missing local summary engine.")
       }
 
-      let modelPath = try modelResolver.resolveSummaryModelPath(for: modelId)
-      return try summaryRuntime.summarize(prompt: prompt, modelPath: modelPath)
+      let modelPath = try modelResolver.resolveSummaryModelPath(for: modelId, engine: engine)
+
+      switch engine {
+      case "llama.cpp":
+        return try await llamaRuntime.generate(prompt: prompt, modelPath: modelPath, maxTokens: 1024)
+      case "mediapipe-llm", "litert-lm":
+        return try summaryRuntime.summarize(prompt: prompt, modelPath: modelPath)
+      default:
+        throw Exception(
+          name: "E_LOCAL_SUMMARY_ENGINE_UNSUPPORTED",
+          description: "Unsupported local summary engine: \(params.engine)."
+        )
+      }
     }
   }
 }
 
 private extension MuFathomLocalAIModule {
-  static var supportsSummary: Bool {
-    #if canImport(MediaPipeTasksGenAI)
-    return true
-    #else
-    return false
-    #endif
-  }
-
   static var supportReason: String {
-    if supportsSummary {
-      return "iOS local transcription and summary are available in this build."
-    }
-
-    return "iOS supports local transcription in this build. Local summary and structured analysis are not supported yet."
+    #if canImport(MediaPipeTasksGenAI)
+    return "iOS local transcription and summary are available in this build (MediaPipe + llama.cpp)."
+    #else
+    return "iOS local transcription and llama.cpp summary are available in this build. MediaPipe summary engines require a dev build with the MediaPipe Tasks GenAI pod linked."
+    #endif
   }
 }
 
@@ -100,4 +101,7 @@ struct LocalSummarizeParams: Record {
 
   @Field
   var modelId: String = ""
+
+  @Field
+  var engine: String = ""
 }

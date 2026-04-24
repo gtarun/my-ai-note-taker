@@ -40,6 +40,7 @@ import {
   getSettingsProcessingMode,
   pickInitialProvider,
 } from '../features/settings/presentation';
+import { LAYERS_ROUTE } from '../navigation/routes';
 import { IOS_LOCAL_TRANSCRIPTION_MODEL_ID, getLocalDeviceSupport } from '../services/localInference';
 import {
   deleteInstalledModel,
@@ -102,8 +103,19 @@ export default function SettingsScreen() {
   const [showAdvancedEndpoint, setShowAdvancedEndpoint] = useState(false);
   const [activeDownloadIds, setActiveDownloadIds] = useState<Set<string>>(() => new Set());
   const [providerSettingsSectionY, setProviderSettingsSectionY] = useState(0);
+  // Mirror of activeDownloadIds used for synchronous guards inside handlers —
+  // React state alone can race across quick successive taps.
   const activeDownloadIdsRef = useRef(new Set<string>());
   const settingsScrollViewRef = useRef<ScrollView | null>(null);
+
+  const setActiveDownload = (modelId: string, isActive: boolean) => {
+    if (isActive) {
+      activeDownloadIdsRef.current.add(modelId);
+    } else {
+      activeDownloadIdsRef.current.delete(modelId);
+    }
+    setActiveDownloadIds(new Set(activeDownloadIdsRef.current));
+  };
 
   useEffect(() => {
     void hydrateScreen();
@@ -420,8 +432,7 @@ export default function SettingsScreen() {
         return;
       }
 
-      activeDownloadIdsRef.current.add(item.id);
-      setActiveDownloadIds(new Set(activeDownloadIdsRef.current));
+      setActiveDownload(item.id, true);
       await startOfflineSetup(bundle);
       setOfflineSetup(await getOfflineSetupSession());
 
@@ -486,8 +497,7 @@ export default function SettingsScreen() {
       setOfflineSetup(await getOfflineSetupSession());
       Alert.alert('Download failed', message);
     } finally {
-      activeDownloadIdsRef.current.delete(item.id);
-      setActiveDownloadIds(new Set(activeDownloadIdsRef.current));
+      setActiveDownload(item.id, false);
     }
   };
 
@@ -590,65 +600,87 @@ export default function SettingsScreen() {
         />
       </View>
 
-      <FieldGroup>
-        <Label text="API key" />
-        <TextInput
-          style={styles.input}
-          autoCapitalize="none"
-          autoCorrect={false}
-          placeholder={editingProvider.apiKeyPlaceholder}
-          placeholderTextColor={palette.mutedInk}
-          secureTextEntry
-          value={editingConfig.apiKey}
-          onChangeText={(value) => updateProvider(editingCloudProviderId, 'apiKey', value)}
-        />
-      </FieldGroup>
+      {editingProviderId === 'local' ? (
+        <>
+          <SurfaceCard style={styles.localRuntimeCard}>
+            <Text style={styles.utilityLabel}>On-device runtime</Text>
+            <Text style={styles.rowBody}>
+              {deviceSupport?.localProcessingAvailable
+                ? 'Ready for local processing in this build.'
+                : deviceSupport?.reason ?? 'Checking local runtime availability.'}
+            </Text>
+            <Text style={styles.rowBody}>
+              Pick the active transcription and summary models in{' '}
+              {processingMode === 'offline' ? 'Offline mode above' : 'the Local models section'}. Download or manage
+              model files in the Local models section.
+            </Text>
+          </SurfaceCard>
 
-      {editingProvider.supportsTranscription ? (
-        <ModelDropdown
-          label="Default transcription model"
-          value={editingConfig.transcriptionModel}
-          options={toModelOptions(editingProvider.transcriptionModels)}
-          onSelect={(value) => updateProvider(editingCloudProviderId, 'transcriptionModel', value)}
-          emptyText="This provider does not publish preset transcription models yet."
-        />
-      ) : null}
-
-      {editingProvider.supportsSummary ? (
-        <ModelDropdown
-          label="Default summary model"
-          value={editingConfig.summaryModel}
-          options={toModelOptions(editingProvider.summaryModels)}
-          onSelect={(value) => updateProvider(editingCloudProviderId, 'summaryModel', value)}
-          emptyText="This provider does not publish preset summary models yet."
-        />
-      ) : null}
-
-      {editingCloudProviderId === 'custom' || showAdvancedEndpoint ? (
-        <FieldGroup>
-          <Label text={editingCloudProviderId === 'custom' ? 'Base URL' : 'Advanced base URL'} />
-          <TextInput
-            style={styles.input}
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder={editingProvider.baseUrlPlaceholder}
-            placeholderTextColor={palette.mutedInk}
-            value={editingConfig.baseUrl}
-            onChangeText={(value) => updateProvider(editingCloudProviderId, 'baseUrl', value)}
-          />
-        </FieldGroup>
+          <PillButton label="Clear local model selection" onPress={() => resetProvider('local')} variant="secondary" />
+        </>
       ) : (
-        <PillButton
-          label="Show advanced endpoint"
-          onPress={() => setShowAdvancedEndpoint(true)}
-          variant="ghost"
-          icon={<Feather name="sliders" size={16} color={palette.ink} />}
-        />
+        <>
+          <FieldGroup>
+            <Label text="API key" />
+            <TextInput
+              style={styles.input}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder={editingProvider.apiKeyPlaceholder}
+              placeholderTextColor={palette.mutedInk}
+              secureTextEntry
+              value={editingConfig.apiKey}
+              onChangeText={(value) => updateProvider(editingCloudProviderId, 'apiKey', value)}
+            />
+          </FieldGroup>
+
+          {editingProvider.supportsTranscription ? (
+            <ModelDropdown
+              label="Default transcription model"
+              value={editingConfig.transcriptionModel}
+              options={toModelOptions(editingProvider.transcriptionModels)}
+              onSelect={(value) => updateProvider(editingCloudProviderId, 'transcriptionModel', value)}
+              emptyText="This provider does not publish preset transcription models yet."
+            />
+          ) : null}
+
+          {editingProvider.supportsSummary ? (
+            <ModelDropdown
+              label="Default summary model"
+              value={editingConfig.summaryModel}
+              options={toModelOptions(editingProvider.summaryModels)}
+              onSelect={(value) => updateProvider(editingCloudProviderId, 'summaryModel', value)}
+              emptyText="This provider does not publish preset summary models yet."
+            />
+          ) : null}
+
+          {editingCloudProviderId === 'custom' || showAdvancedEndpoint ? (
+            <FieldGroup>
+              <Label text={editingCloudProviderId === 'custom' ? 'Base URL' : 'Advanced base URL'} />
+              <TextInput
+                style={styles.input}
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder={editingProvider.baseUrlPlaceholder}
+                placeholderTextColor={palette.mutedInk}
+                value={editingConfig.baseUrl}
+                onChangeText={(value) => updateProvider(editingCloudProviderId, 'baseUrl', value)}
+              />
+            </FieldGroup>
+          ) : (
+            <PillButton
+              label="Show advanced endpoint"
+              onPress={() => setShowAdvancedEndpoint(true)}
+              variant="ghost"
+              icon={<Feather name="sliders" size={16} color={palette.ink} />}
+            />
+          )}
+
+          <PillButton label={isSaving ? 'Saving…' : 'Save provider settings'} onPress={handleSave} disabled={isSaving} />
+
+          <PillButton label="Clear saved provider" onPress={() => resetProvider(editingCloudProviderId)} variant="secondary" />
+        </>
       )}
-
-      <PillButton label={isSaving ? 'Saving…' : 'Save provider settings'} onPress={handleSave} disabled={isSaving} />
-
-      <PillButton label="Clear saved provider" onPress={() => resetProvider(editingCloudProviderId)} variant="secondary" />
     </View>
   );
 
@@ -912,6 +944,21 @@ export default function SettingsScreen() {
               allowDownload={deviceSupport ? deviceSupport.platform !== 'web' : false}
             />
           </View>
+        </FadeInView>
+
+        <FadeInView delay={165}>
+          <SurfaceCard muted style={styles.advancedSection}>
+            <SectionHeading
+              title="Extraction layers"
+              subtitle="Define the structured fields that get pulled from each meeting and optionally synced to Google Sheets."
+            />
+            <PillButton
+              label="Manage extraction layers"
+              onPress={() => router.push(LAYERS_ROUTE)}
+              variant="secondary"
+              icon={<Feather name="layers" size={16} color={palette.ink} />}
+            />
+          </SurfaceCard>
         </FadeInView>
 
         <FadeInView delay={180}>
@@ -1570,6 +1617,10 @@ const styles = StyleSheet.create({
     backgroundColor: palette.cardUtility,
     padding: 14,
   },
+  localRuntimeCard: {
+    gap: 8,
+    padding: 12,
+  },
   providerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1763,11 +1814,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 20,
   },
-  modalSheetBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(23, 35, 31, 0.32)',
-    justifyContent: 'flex-end',
-  },
   modalCard: {
     width: '100%',
     maxWidth: 420,
@@ -1780,27 +1826,6 @@ const styles = StyleSheet.create({
   },
   providerPickerModalCard: {
     maxHeight: '82%',
-  },
-  providerEditorSheet: {
-    maxHeight: '88%',
-    backgroundColor: palette.paper,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingTop: 18,
-    overflow: 'hidden',
-  },
-  providerEditorContent: {
-    padding: 18,
-    paddingTop: 12,
-    gap: 14,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
-    paddingHorizontal: 18,
-    paddingBottom: 12,
   },
   modalTitle: {
     color: palette.ink,

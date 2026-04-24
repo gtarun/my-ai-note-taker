@@ -1,8 +1,8 @@
 export type AppTabDefinition = {
-  name: 'index' | 'record' | 'settings' | 'layers';
+  name: 'index' | 'record' | 'settings';
   title: string;
   label: string;
-  icon: 'home' | 'mic' | 'settings' | 'layers';
+  icon: 'home' | 'mic' | 'settings';
 };
 
 export const APP_TABS: AppTabDefinition[] = [
@@ -23,11 +23,5 @@ export const APP_TABS: AppTabDefinition[] = [
     title: 'Settings',
     label: 'Settings',
     icon: 'settings',
-  },
-  {
-    name: 'layers',
-    title: 'Layers',
-    label: 'Layers',
-    icon: 'layers',
   },
 ];

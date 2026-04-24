@@ -1,7 +1,7 @@
 import { requireOptionalNativeModule } from 'expo-modules-core';
 import { Platform } from 'react-native';
 
-import { ExtractionLayerField, LocalDeviceSupport, SummaryPayload } from '../types';
+import { ExtractionLayerField, LocalDeviceSupport, LocalModelEngine, SummaryPayload } from '../types';
 
 const LOCAL_TRANSCRIPT_WINDOW = 8000;
 const LOCAL_TRANSCRIPT_OVERLAP = 500;
@@ -18,13 +18,41 @@ export const IOS_LOCAL_SUMMARY_FALLBACK_REQUIRED_ERROR =
 type LocalNativeModule = {
   getDeviceSupport?: () => Promise<Partial<LocalDeviceSupport>>;
   transcribe?: (params: { audioUri: string; modelId: string }) => Promise<string>;
-  summarize?: (params: { prompt: string; modelId: string }) => Promise<string>;
+  summarize?: (params: { prompt: string; modelId: string; engine: string }) => Promise<string>;
 };
+
+async function resolveSummaryEngine(modelId: string): Promise<LocalModelEngine> {
+  // Lazy import: localModels transitively loads expo-file-system which is not
+  // always available in unit tests. Pull it in only when a real summarize call
+  // happens (which only fires on-device).
+  const { getInstalledModel } = await import('./localModels');
+  const installed = await getInstalledModel(modelId);
+  if (!installed) {
+    throw new Error(`Local summary model "${modelId}" is not installed. Download it in Settings → Local models.`);
+  }
+  return installed.engine;
+}
 
 const nativeModule =
   Platform.OS === 'web' ? null : requireOptionalNativeModule<LocalNativeModule>('MuFathomLocalAI');
 
-export async function getLocalDeviceSupport(): Promise<LocalDeviceSupport> {
+let deviceSupportPromise: Promise<LocalDeviceSupport> | null = null;
+
+export function resetLocalDeviceSupportCache() {
+  deviceSupportPromise = null;
+}
+
+export function getLocalDeviceSupport(): Promise<LocalDeviceSupport> {
+  if (!deviceSupportPromise) {
+    deviceSupportPromise = computeLocalDeviceSupport().catch((error) => {
+      deviceSupportPromise = null;
+      throw error;
+    });
+  }
+  return deviceSupportPromise;
+}
+
+async function computeLocalDeviceSupport(): Promise<LocalDeviceSupport> {
   if (Platform.OS === 'web') {
     return {
       platform: 'web',
@@ -106,16 +134,17 @@ export async function summarizeLocalTranscript(params: {
     throw new Error('Pick an installed local summary model in Settings first.');
   }
 
+  const engine = await resolveSummaryEngine(params.modelId);
   const chunks = chunkTranscript(params.transcriptText, LOCAL_TRANSCRIPT_WINDOW, LOCAL_TRANSCRIPT_OVERLAP);
 
   if (chunks.length <= 1) {
-    return runSummaryPass(module, buildFinalSummaryPrompt(params.transcriptText), params.modelId);
+    return runSummaryPass(module, buildFinalSummaryPrompt(params.transcriptText), params.modelId, engine);
   }
 
   const partialSummaries: SummaryPayload[] = [];
 
   for (const chunk of chunks) {
-    partialSummaries.push(await runSummaryPass(module, buildChunkSummaryPrompt(chunk), params.modelId));
+    partialSummaries.push(await runSummaryPass(module, buildChunkSummaryPrompt(chunk), params.modelId, engine));
   }
 
   const combinedPayload = partialSummaries
@@ -130,7 +159,7 @@ export async function summarizeLocalTranscript(params: {
     )
     .join('\n\n');
 
-  return runSummaryPass(module, buildCombineSummaryPrompt(combinedPayload), params.modelId);
+  return runSummaryPass(module, buildCombineSummaryPrompt(combinedPayload), params.modelId, engine);
 }
 
 export async function extractLocalStructuredData(params: {
@@ -148,10 +177,12 @@ export async function extractLocalStructuredData(params: {
     return {};
   }
 
+  const engine = await resolveSummaryEngine(params.modelId);
   const rawValues = await runJsonObjectPass(
     module,
     buildLocalExtractionPrompt(params.transcriptText, params.fields),
     params.modelId,
+    engine,
     params.fields.map((field) => field.id)
   );
 
@@ -160,8 +191,13 @@ export async function extractLocalStructuredData(params: {
   );
 }
 
-async function runSummaryPass(module: LocalNativeModule, prompt: string, modelId: string) {
-  const raw = await module.summarize?.({ prompt, modelId });
+async function runSummaryPass(
+  module: LocalNativeModule,
+  prompt: string,
+  modelId: string,
+  engine: LocalModelEngine
+) {
+  const raw = await module.summarize?.({ prompt, modelId, engine });
 
   if (!raw?.trim()) {
     throw new Error('Local summary model returned no content.');
@@ -173,6 +209,7 @@ async function runSummaryPass(module: LocalNativeModule, prompt: string, modelId
     const repaired = await module.summarize?.({
       prompt: buildRepairPrompt(raw),
       modelId,
+      engine,
     });
 
     if (!repaired?.trim()) {
@@ -187,9 +224,10 @@ async function runJsonObjectPass(
   module: LocalNativeModule,
   prompt: string,
   modelId: string,
+  engine: LocalModelEngine,
   requiredKeys: string[]
 ) {
-  const raw = await module.summarize?.({ prompt, modelId });
+  const raw = await module.summarize?.({ prompt, modelId, engine });
 
   if (!raw?.trim()) {
     throw new Error('Local summary model returned no analysis content.');
@@ -201,6 +239,7 @@ async function runJsonObjectPass(
     const repaired = await module.summarize?.({
       prompt: buildGenericRepairPrompt(raw, requiredKeys),
       modelId,
+      engine,
     });
 
     if (!repaired?.trim()) {
