@@ -59,6 +59,9 @@ export default function LayersScreen() {
   const [isLoadingTabs, setIsLoadingTabs] = useState(false);
   const [isFieldEditorVisible, setIsFieldEditorVisible] = useState(false);
   const [activeField, setActiveField] = useState<EditableField | null>(null);
+  // When the sheet picker is opened directly from a layer card's "Connect sheet"
+  // button we should not linger in the editor modal after the picker closes.
+  const [sheetOnlyLayerId, setSheetOnlyLayerId] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
 
@@ -172,22 +175,33 @@ export default function LayersScreen() {
 
     setIsSheetPickerVisible(false);
     resetSheetPickerState();
-  }, [isPreparingSheet, isSaving, resetSheetPickerState]);
+
+    // If the picker was launched directly from a layer card and the user
+    // backed out without picking a sheet, also close the editor so we don't
+    // strand the user in an unexpectedly-open edit modal.
+    if (sheetOnlyLayerId) {
+      setSheetOnlyLayerId(null);
+      setIsEditorVisible(false);
+    }
+  }, [isPreparingSheet, isSaving, resetSheetPickerState, sheetOnlyLayerId]);
 
   const openCreateModal = () => {
     resetEditorState(createEmptyDraft());
+    setSheetOnlyLayerId(null);
     setIsEditorVisible(true);
   };
 
   const openEditModal = (layer: ExtractionLayer) => {
     const nextDraft = createDraftFromLayer(layer);
     resetEditorState(nextDraft);
+    setSheetOnlyLayerId(null);
     setIsEditorVisible(true);
   };
 
   const openSheetPickerFromLayerCard = (layer: ExtractionLayer) => {
     const nextDraft = createDraftFromLayer(layer);
     resetEditorState(nextDraft);
+    setSheetOnlyLayerId(layer.id);
     setIsEditorVisible(true);
     openSheetPicker(nextDraft);
   };
@@ -199,6 +213,7 @@ export default function LayersScreen() {
 
     setIsEditorVisible(false);
     setIsSheetPickerVisible(false);
+    setSheetOnlyLayerId(null);
     resetEditorState(createEmptyDraft());
     resetSheetPickerState();
   };
@@ -355,18 +370,57 @@ export default function LayersScreen() {
         return;
       }
 
-      setDraft((current) =>
-        applySheetSelection(current, {
-          spreadsheetId: selectedSpreadsheet.id,
-          spreadsheetTitle: selectedSpreadsheet.title,
-          sheetTitle: selectedTab,
-          headers: availableHeaders,
-          mode,
-        })
-      );
+      const nextDraft = applySheetSelection(draft, {
+        spreadsheetId: selectedSpreadsheet.id,
+        spreadsheetTitle: selectedSpreadsheet.title,
+        sheetTitle: selectedTab,
+        headers: availableHeaders,
+        mode,
+      });
+      setDraft(nextDraft);
+
+      // If the user entered through "Connect sheet" on a layer card, persist
+      // the change immediately and close the editor — that was their only
+      // intent. Otherwise just close the picker and let them keep editing.
+      if (sheetOnlyLayerId) {
+        setIsSheetPickerVisible(false);
+        resetSheetPickerState();
+        const layerIdToSave = sheetOnlyLayerId;
+        setSheetOnlyLayerId(null);
+        void (async () => {
+          try {
+            setIsSaving(true);
+            await saveExtractionLayer(toSaveLayerInput(nextDraft));
+            await loadLayers();
+            setIsEditorVisible(false);
+            resetEditorState(createEmptyDraft());
+          } catch (error) {
+            Alert.alert(
+              'Save failed',
+              error instanceof Error ? error.message : 'Unable to save this extraction layer.'
+            );
+          } finally {
+            setIsSaving(false);
+          }
+        })();
+        // Keep reference to layerIdToSave for debugging only; no further use.
+        void layerIdToSave;
+        return;
+      }
+
       closeSheetPicker();
     },
-    [availableHeaders, closeSheetPicker, selectedSpreadsheet, selectedTab]
+    [
+      availableHeaders,
+      closeSheetPicker,
+      draft,
+      loadLayers,
+      resetEditorState,
+      resetSheetPickerState,
+      selectedSpreadsheet,
+      selectedTab,
+      sheetOnlyLayerId,
+    ]
   );
 
   const handleChooseKeepCurrentFields = useCallback(() => {

@@ -138,7 +138,7 @@ export const providerDefinitions: ProviderDefinition[] = [
     apiKeyPlaceholder: '',
     baseUrlPlaceholder: '',
     transcriptionModels: [],
-    summaryModels: ['gemma-3-1b-it-q4', 'qwen2.5-1.5b-instruct-q8'],
+    summaryModels: ['qwen2.5-1.5b-instruct-gguf-q4', 'gemma-3-1b-it-q4', 'qwen2.5-1.5b-instruct-q8'],
   },
 ];
 
