@@ -22,7 +22,7 @@ Pod::Spec.new do |s|
     'DEFINES_MODULE' => 'YES',
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17',
     'CLANG_CXX_LIBRARY' => 'libc++',
-    'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) WHISPER_VERSION=\"vendor-scaffold\" GGML_VERSION=\"vendor-scaffold\" GGML_COMMIT=\"95ea8f9bfb03a15db08a8989966fd1ae3361e20d\" GGML_USE_CPU GGML_CPU_GENERIC GGML_USE_METAL=1',
+    'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) WHISPER_VERSION=\"vendor-scaffold\" GGML_VERSION=\"vendor-scaffold\" GGML_COMMIT=\"95ea8f9bfb03a15db08a8989966fd1ae3361e20d\" GGML_USE_CPU GGML_CPU_GENERIC',
     'HEADER_SEARCH_PATHS' => '$(inherited) "$(PODS_TARGET_SRCROOT)/../vendor/whisper.cpp/include" "$(PODS_TARGET_SRCROOT)/../vendor/whisper.cpp/ggml/include" "$(PODS_TARGET_SRCROOT)/../vendor/whisper.cpp/ggml/src" "$(PODS_TARGET_SRCROOT)/../vendor/whisper.cpp/ggml/src/ggml-cpu" "$(PODS_TARGET_SRCROOT)/../vendor/llama.cpp/include" "$(PODS_TARGET_SRCROOT)/../vendor/llama.cpp/src" "$(PODS_TARGET_SRCROOT)/../vendor/llama.cpp/common"',
   }
   s.compiler_flags = '-Wno-shorten-64-to-32'
