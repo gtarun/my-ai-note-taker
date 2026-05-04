@@ -17,6 +17,7 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSMicrophoneUsageDescription": "AI Notes records meeting audio only when you explicitly start recording.",
+        "NSSpeechRecognitionUsageDescription": "AI Notes uses on-device Speech Recognition to transcribe your saved meeting recordings. Audio stays on this device.",
         "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "com.gtarun.mu-fathom",

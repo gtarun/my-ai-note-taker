@@ -163,6 +163,8 @@ describe('local inference bridge', () => {
     expect(transcribe).toHaveBeenCalledWith({
       audioUri: 'file:///meeting.m4a',
       modelId: 'whisper-base',
+      locale: undefined,
+      language: '',
     });
   });
 
@@ -264,6 +266,103 @@ describe('local inference bridge', () => {
     });
   });
 
+  test('parses repairable local summary JSON without a second native generation', async () => {
+    const summarize = vi.fn(async () =>
+      [
+        '{',
+        '"summary": "Acme is blocked on the timeline.",',
+        '"actionItems": ["Confirm rollout"],',
+        '"decisions": [],',
+        '"followUps": [],',
+        '}',
+      ].join('')
+    );
+    const module = await importLocalInferenceTestModule({
+      platform: 'ios',
+      nativeModule: {
+        getDeviceSupport: vi.fn(async () => ({
+          localProcessingAvailable: true,
+          supportsSummary: true,
+          supportsTranscription: true,
+          requiresCustomBuild: true,
+          reason: 'iOS local transcription and summary are available in this build.',
+        })),
+        summarize,
+      },
+      installedModelsByEngine: { 'qwen2.5-1.5b-instruct-q8': 'mediapipe-llm' },
+    });
+
+    await expect(
+      module.summarizeLocalTranscript({
+        transcriptText: 'Acme is blocked on the timeline and needs rollout confirmation.',
+        modelId: 'qwen2.5-1.5b-instruct-q8',
+      })
+    ).resolves.toEqual({
+      summary: 'Acme is blocked on the timeline.',
+      actionItems: ['Confirm rollout'],
+      decisions: [],
+      followUps: [],
+    });
+    expect(summarize).toHaveBeenCalledTimes(1);
+  });
+
+  test('combines local summary and extraction for short transcripts in one native generation', async () => {
+    const summarize = vi.fn(async () =>
+      JSON.stringify({
+        summary: 'Acme needs a revised rollout date.',
+        actionItems: ['Confirm rollout date'],
+        decisions: [],
+        followUps: [],
+        extracted: {
+          customer: 'Acme',
+          risk: 'Timeline is blocked',
+        },
+      })
+    );
+    const module = await importLocalInferenceTestModule({
+      platform: 'ios',
+      nativeModule: {
+        getDeviceSupport: vi.fn(async () => ({
+          localProcessingAvailable: true,
+          supportsSummary: true,
+          supportsTranscription: true,
+          requiresCustomBuild: true,
+          reason: 'iOS local transcription and summary are available in this build.',
+        })),
+        summarize,
+      },
+      installedModelsByEngine: { 'qwen2.5-1.5b-instruct-q8': 'mediapipe-llm' },
+    });
+
+    await expect(
+      module.summarizeAndExtractLocalTranscript({
+        transcriptText: 'Acme said the timeline is blocked and asked for a revised rollout date.',
+        modelId: 'qwen2.5-1.5b-instruct-q8',
+        fields: [
+          { id: 'customer', title: 'Customer', description: 'Customer name' },
+          { id: 'risk', title: 'Risk', description: 'Current risk' },
+        ],
+      })
+    ).resolves.toEqual({
+      summary: {
+        summary: 'Acme needs a revised rollout date.',
+        actionItems: ['Confirm rollout date'],
+        decisions: [],
+        followUps: [],
+      },
+      extractedValues: {
+        customer: 'Acme',
+        risk: 'Timeline is blocked',
+      },
+    });
+    expect(summarize).toHaveBeenCalledTimes(1);
+    expect(summarize).toHaveBeenCalledWith({
+      modelId: 'qwen2.5-1.5b-instruct-q8',
+      engine: 'mediapipe-llm',
+      prompt: expect.stringContaining('Return valid JSON only with keys: summary, actionItems, decisions, followUps, extracted.'),
+    });
+  });
+
   test('uses the local summary model for structured analysis', async () => {
     const summarize = vi.fn(async () =>
       JSON.stringify({
@@ -306,7 +405,7 @@ describe('local inference bridge', () => {
     });
   });
 
-  test('fails clearly when a non-whisper-base model is selected on iOS local transcription', async () => {
+  test('rejects unknown whisper variants on iOS while accepting both base and small', async () => {
     const transcribe = vi.fn(async () => 'offline transcript');
     const module = await importLocalInferenceTestModule({
       platform: 'ios',
@@ -322,16 +421,26 @@ describe('local inference bridge', () => {
       },
     });
 
+    // Unsupported model — gate should still reject.
+    await expect(
+      module.transcribeLocalAudio({
+        audioUri: 'file:///meeting.m4a',
+        modelId: 'whisper-medium',
+      })
+    ).rejects.toThrow(/not supported on iOS/i);
+    expect(transcribe).not.toHaveBeenCalled();
+
+    // Whisper-small is now supported on iOS — gate should let it through.
     await expect(
       module.transcribeLocalAudio({
         audioUri: 'file:///meeting.m4a',
         modelId: 'whisper-small',
       })
-    ).rejects.toThrow('Only whisper-base is supported for local transcription on iOS in this phase.');
-    expect(transcribe).not.toHaveBeenCalled();
+    ).resolves.toBe('offline transcript');
+    expect(transcribe).toHaveBeenCalledTimes(1);
   });
 
-  test('does not advertise whisper-small as an iOS transcription option', async () => {
+  test('advertises Apple Speech, whisper-base, and whisper-small as iOS transcription options', async () => {
     const module = await importLocalModelsTestModule('ios');
     const catalog = await module.getModelCatalog();
     const iosItems = module.getCatalogItemsForDevice(catalog, {
@@ -343,7 +452,23 @@ describe('local inference bridge', () => {
       reason: 'iOS local transcription is available in this build.',
     });
 
-    expect(iosItems.some((item) => item.id === 'whisper-small')).toBe(false);
+    const transcriptionIds = iosItems
+      .filter((item) => item.kind === 'transcription')
+      .map((item) => item.id)
+      .sort();
+    expect(transcriptionIds).toEqual(['apple-speech-recognizer', 'whisper-base', 'whisper-small']);
+  });
+
+  test('returns Apple Speech as a synthetic always-installed model on iOS', async () => {
+    const module = await importLocalModelsTestModule('ios');
+    const installed = await module.getInstalledModel('apple-speech-recognizer');
+    expect(installed).toMatchObject({
+      id: 'apple-speech-recognizer',
+      kind: 'transcription',
+      engine: 'apple-speech',
+      status: 'installed',
+      platforms: ['ios'],
+    });
   });
 
   test('keeps the built-in whisper-base size aligned with the hosted binary', async () => {
@@ -422,7 +547,23 @@ describe('local inference bridge', () => {
           minFreeSpaceBytes: 1,
           recommended: false,
           experimental: false,
-          description: 'Should stay hidden on iOS in this phase.',
+          description: 'Allowed on iOS for higher-accuracy transcripts.',
+        },
+        {
+          // Models outside the iOS-supported set should still be filtered out.
+          id: 'whisper-medium',
+          kind: 'transcription',
+          engine: 'whisper.cpp',
+          displayName: 'Whisper Medium',
+          version: 'custom',
+          downloadUrl: 'https://example.com/whisper-medium.bin',
+          sha256: '',
+          sizeBytes: 1,
+          platforms: ['ios'],
+          minFreeSpaceBytes: 1,
+          recommended: false,
+          experimental: false,
+          description: 'Should stay hidden on iOS — not in the allowed set.',
         },
       ],
       {
@@ -435,7 +576,7 @@ describe('local inference bridge', () => {
       }
     );
 
-    expect(iosItems.map((item) => item.id)).toEqual(['whisper-base']);
+    expect(iosItems.map((item) => item.id).sort()).toEqual(['whisper-base', 'whisper-small']);
   });
 
   test('keeps the iOS catalog aligned with the allowed transcription model set and summary entries', async () => {
@@ -514,6 +655,7 @@ describe('local inference bridge', () => {
 
     expect(iosItems.map((item) => item.id)).toEqual([
       'whisper-base',
+      'whisper-small',
       'qwen2.5-1.5b-instruct-gguf-q4',
       'gemma-3-1b-it-q4',
     ]);
@@ -524,21 +666,21 @@ describe('local inference bridge', () => {
 
     await expect(
       module.downloadModel({
-        id: 'whisper-small',
+        id: 'whisper-medium',
         kind: 'transcription',
         engine: 'whisper.cpp',
-        displayName: 'Whisper Small',
+        displayName: 'Whisper Medium',
         version: 'custom',
-        downloadUrl: 'https://example.com/whisper-small.bin',
+        downloadUrl: 'https://example.com/whisper-medium.bin',
         sha256: '',
         sizeBytes: 1,
         platforms: ['ios'],
         minFreeSpaceBytes: 1,
         recommended: false,
         experimental: false,
-        description: 'Should stay blocked on iOS in this phase.',
+        description: 'Outside the iOS allowed set — should still be blocked.',
       })
-    ).rejects.toThrow('Only whisper-base is supported for local transcription on iOS in this phase.');
+    ).rejects.toThrow(/are supported for local transcription on iOS/);
   });
 
   test('allows iOS summary model downloads when the catalog item supports iOS', async () => {

@@ -107,6 +107,15 @@ type InstalledModelStorageRow = {
   error_message: string | null;
 };
 
+type AppLogStorageRow = {
+  id: string;
+  created_at: string;
+  level: 'debug' | 'info' | 'warn' | 'error';
+  scope: string;
+  message: string;
+  metadata_json: string | null;
+};
+
 const STORAGE_KEY = 'mu-fathom-web-db';
 
 type DatabaseShape = {
@@ -118,6 +127,7 @@ type DatabaseShape = {
   offlineSetupSession: OfflineSetupSessionRow;
   providerSettings: ProviderSettingsRow[];
   installedModels: InstalledModelStorageRow[];
+  appLogs: AppLogStorageRow[];
 };
 
 const defaultState: DatabaseShape = {
@@ -158,6 +168,7 @@ const defaultState: DatabaseShape = {
   },
   providerSettings: [],
   installedModels: [],
+  appLogs: [],
 };
 
 function readState(): DatabaseShape {
@@ -193,6 +204,7 @@ function readState(): DatabaseShape {
       },
       providerSettings: state.providerSettings ?? [],
       installedModels: state.installedModels ?? [],
+      appLogs: state.appLogs ?? [],
       meetings: state.meetings ?? [],
       extractionLayers: state.extractionLayers ?? [],
       extractionLayerFields: state.extractionLayerFields ?? [],
@@ -240,6 +252,10 @@ const db = {
 
     if (!state.installedModels) {
       state.installedModels = [];
+    }
+
+    if (!state.appLogs) {
+      state.appLogs = [];
     }
 
     if (!state.extractionLayers) {
@@ -326,10 +342,52 @@ const db = {
         });
     }
 
+    if (source.includes('FROM app_logs')) {
+      return [...state.appLogs]
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))
+        .slice(0, Number(params[0] ?? 200))
+        .map((row) => row as T);
+    }
+
     return [];
   },
   async runAsync(source: string, ...params: unknown[]) {
     const state = readState();
+
+    if (source.includes('INSERT INTO app_logs')) {
+      state.appLogs.push({
+        id: String(params[0]),
+        created_at: String(params[1]),
+        level:
+          params[2] === 'debug' || params[2] === 'warn' || params[2] === 'error'
+            ? params[2]
+            : 'info',
+        scope: String(params[3]),
+        message: String(params[4]),
+        metadata_json: params[5] ? String(params[5]) : null,
+      });
+      writeState(state);
+      return;
+    }
+
+    if (source.includes('DELETE FROM app_logs') && source.includes('WHERE id NOT IN')) {
+      const keepCount = Number(params[0] ?? 400);
+      const keepIds = new Set(
+        [...state.appLogs]
+          .sort((a, b) => b.created_at.localeCompare(a.created_at))
+          .slice(0, keepCount)
+          .map((row) => row.id)
+      );
+      state.appLogs = state.appLogs.filter((row) => keepIds.has(row.id));
+      writeState(state);
+      return;
+    }
+
+    if (source.includes('DELETE FROM app_logs')) {
+      state.appLogs = [];
+      writeState(state);
+      return;
+    }
 
     if (source.includes('INSERT INTO meetings')) {
       state.meetings.push({

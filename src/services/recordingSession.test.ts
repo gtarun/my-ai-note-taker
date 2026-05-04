@@ -32,6 +32,40 @@ vi.mock('./googleDrive', () => ({
   uploadMeetingRecordingIfConfigured: vi.fn(),
 }));
 
+vi.mock('./localInference', () => ({
+  // Default to "no live transcription" so existing tests behave exactly as
+  // before. Tests that exercise the live-transcription path can override
+  // these via the deps argument to createRecordingSession.
+  supportsLiveTranscription: vi.fn(() => false),
+  startLiveTranscription: vi.fn(async () => undefined),
+  stopLiveTranscription: vi.fn(async () => ''),
+  cancelLiveTranscription: vi.fn(async () => undefined),
+  addLivePartialTranscriptListener: vi.fn(() => () => undefined),
+  resolveTranscriptionPlan: vi.fn(() => ({
+    modelId: 'apple-speech-recognizer',
+    appleSpeechLocale: 'en-US',
+    whisperLanguage: null,
+    liveSupported: true,
+  })),
+}));
+
+vi.mock('./settings', () => ({
+  getAppSettings: vi.fn(async () => ({
+    selectedTranscriptionProvider: 'local',
+    selectedSummaryProvider: 'openai',
+    providers: {
+      local: { apiKey: '', baseUrl: '', transcriptionModel: 'apple-speech-recognizer', summaryModel: '' },
+    },
+    transcriptionLocale: 'en-US',
+    deleteUploadedAudio: false,
+    modelCatalogUrl: '',
+  })),
+}));
+
+vi.mock('./localModels', () => ({
+  getInstalledModels: vi.fn(async () => []),
+}));
+
 type RecorderDouble = {
   currentTime: number;
   uri: string | null;
@@ -96,7 +130,7 @@ describe('recording session service', () => {
     expect(setAudioMode).toHaveBeenCalledWith(getActiveRecordingAudioMode());
     expect(recorder.prepareToRecordAsync).toHaveBeenCalled();
     expect(recorder.record).toHaveBeenCalled();
-    expect(session.getSnapshot()).toEqual({
+    expect(session.getSnapshot()).toMatchObject({
       phase: 'recording',
       titleDraft: 'Field interview',
       durationMillis: 0,
@@ -131,7 +165,7 @@ describe('recording session service', () => {
     expect(requestPermission).toHaveBeenCalledTimes(1);
     expect(recorder.prepareToRecordAsync).toHaveBeenCalledTimes(1);
     expect(recorder.record).toHaveBeenCalledTimes(1);
-    expect(session.getSnapshot()).toEqual({
+    expect(session.getSnapshot()).toMatchObject({
       phase: 'recording',
       titleDraft: '',
       durationMillis: 0,
@@ -177,7 +211,7 @@ describe('recording session service', () => {
     expect(createRecorder).toHaveBeenCalledTimes(1);
     expect(recorder.prepareToRecordAsync).toHaveBeenCalledTimes(1);
     expect(recorder.record).toHaveBeenCalledTimes(1);
-    expect(session.getSnapshot()).toEqual({
+    expect(session.getSnapshot()).toMatchObject({
       phase: 'recording',
       titleDraft: '',
       durationMillis: 0,
@@ -246,7 +280,7 @@ describe('recording session service', () => {
     await session.startRecording();
 
     const savePromise = session.stopAndSave();
-    expect(session.getSnapshot()).toEqual({
+    expect(session.getSnapshot()).toMatchObject({
       phase: 'saving',
       titleDraft: 'Weekly sync',
       durationMillis: 12345,
@@ -265,12 +299,13 @@ describe('recording session service', () => {
       uri: 'file:///recordings/session.m4a',
       title: 'Weekly sync',
       durationMs: 12345,
+      preTranscribedText: null,
     });
     expect(uploadMeetingRecordingIfConfigured).toHaveBeenCalledWith({
       title: 'Weekly sync',
       localAudioUri: 'file:///saved/Weekly sync.m4a',
     });
-    expect(session.getSnapshot()).toEqual({
+    expect(session.getSnapshot()).toMatchObject({
       phase: 'idle',
       titleDraft: '',
       durationMillis: 0,
@@ -299,7 +334,7 @@ describe('recording session service', () => {
     await session.startRecording();
 
     await expect(session.stopAndSave()).rejects.toThrow('Recording file was unavailable after stopping.');
-    expect(session.getSnapshot()).toEqual({
+    expect(session.getSnapshot()).toMatchObject({
       phase: 'error',
       titleDraft: '',
       durationMillis: 0,
@@ -337,7 +372,7 @@ describe('recording session service', () => {
 
     await expect(session.stopAndSave()).rejects.toThrow('Stop failed.');
     expect(setAudioMode).toHaveBeenNthCalledWith(2, getIdleRecordingAudioMode());
-    expect(session.getSnapshot()).toEqual({
+    expect(session.getSnapshot()).toMatchObject({
       phase: 'error',
       titleDraft: '',
       durationMillis: 0,
@@ -349,7 +384,7 @@ describe('recording session service', () => {
     expect(createRecorder).toHaveBeenCalledTimes(2);
     expect(secondRecorder.prepareToRecordAsync).toHaveBeenCalledTimes(1);
     expect(secondRecorder.record).toHaveBeenCalledTimes(1);
-    expect(session.getSnapshot()).toEqual({
+    expect(session.getSnapshot()).toMatchObject({
       phase: 'recording',
       titleDraft: '',
       durationMillis: 0,
@@ -395,7 +430,7 @@ describe('recording session service', () => {
       });
 
       await expect(session.startRecording()).rejects.toThrow(failureMessage);
-      expect(session.getSnapshot()).toEqual({
+      expect(session.getSnapshot()).toMatchObject({
         phase: 'error',
         titleDraft: '',
         durationMillis: 0,
@@ -413,7 +448,7 @@ describe('recording session service', () => {
       expect(createRecorder).toHaveBeenCalledTimes(2);
       expect(secondRecorder.prepareToRecordAsync).toHaveBeenCalledTimes(1);
       expect(secondRecorder.record).toHaveBeenCalledTimes(1);
-      expect(session.getSnapshot()).toEqual({
+      expect(session.getSnapshot()).toMatchObject({
         phase: 'recording',
         titleDraft: '',
         durationMillis: 0,
@@ -455,7 +490,7 @@ describe('recording session service', () => {
     await expect(session.startRecording()).rejects.toThrow(
       'Cannot start a recording while the session is saving.',
     );
-    expect(session.getSnapshot()).toEqual({
+    expect(session.getSnapshot()).toMatchObject({
       phase: 'saving',
       titleDraft: '',
       durationMillis: 0,
@@ -547,7 +582,7 @@ describe('recording session service', () => {
     await expect(session.stopAndSave()).rejects.toThrow(
       'Cannot stop and save while a recording start is in progress.',
     );
-    expect(session.getSnapshot()).toEqual({
+    expect(session.getSnapshot()).toMatchObject({
       phase: 'idle',
       titleDraft: '',
       durationMillis: 0,
@@ -558,10 +593,119 @@ describe('recording session service', () => {
 
     resolvePermission?.({ granted: true });
     await expect(startPromise).resolves.toBeUndefined();
-    expect(session.getSnapshot()).toEqual({
+    expect(session.getSnapshot()).toMatchObject({
       phase: 'recording',
       titleDraft: '',
       durationMillis: 0,
+      errorMessage: null,
+    });
+  });
+
+  test('streams live partial transcripts and forwards the final to createMeetingFromRecording', async () => {
+    const recorder = createRecorderDouble();
+    const createMeetingFromRecording = vi.fn(async () => ({
+      id: 'm-1',
+      audioUri: 'file:///saved/m-1.m4a',
+    }));
+
+    let partialHandler: ((transcript: string) => void) | null = null;
+    const supportsLive = vi.fn(() => true);
+    const startLive = vi.fn(async () => undefined);
+    const stopLive = vi.fn(async () => 'Hello, this is the final transcript.');
+    const cancelLive = vi.fn(async () => undefined);
+    const addLiveListener = vi.fn((handler: (text: string) => void) => {
+      partialHandler = handler;
+      return () => {
+        partialHandler = null;
+      };
+    });
+
+    const { createRecordingSession } = await import('./recordingSession');
+    const session = createRecordingSession({
+      requestRecordingPermissionsAsync: vi.fn(async () => ({ granted: true })),
+      setAudioModeAsync: vi.fn(async () => undefined),
+      createRecorder: vi.fn(() => recorder),
+      createMeetingFromRecording,
+      uploadMeetingRecordingIfConfigured: vi.fn(async () => 'skipped' as const),
+      supportsLiveTranscription: supportsLive,
+      startLiveTranscription: startLive,
+      stopLiveTranscription: stopLive,
+      cancelLiveTranscription: cancelLive,
+      addLivePartialTranscriptListener: addLiveListener,
+      now: () => 0,
+      setInterval: vi.fn(() => 1),
+      clearInterval: vi.fn(),
+    });
+
+    await session.startRecording();
+
+    // Streaming should be marked enabled and the listener subscribed.
+    expect(supportsLive).toHaveBeenCalled();
+    expect(startLive).toHaveBeenCalledWith({ locale: 'en-US' });
+    expect(addLiveListener).toHaveBeenCalled();
+    expect(session.getSnapshot()).toMatchObject({
+      phase: 'recording',
+      liveTranscriptionEnabled: true,
+      liveTranscript: '',
+    });
+
+    // Simulate the recognizer emitting partials mid-recording.
+    partialHandler?.('Hello,');
+    expect(session.getSnapshot().liveTranscript).toBe('Hello,');
+    partialHandler?.('Hello, this is');
+    expect(session.getSnapshot().liveTranscript).toBe('Hello, this is');
+
+    recorder.currentTime = 12;
+    const result = await session.stopAndSave();
+
+    expect(stopLive).toHaveBeenCalled();
+    expect(result.meetingId).toBe('m-1');
+    expect(createMeetingFromRecording).toHaveBeenCalledWith({
+      uri: 'file:///recordings/session.m4a',
+      title: expect.any(String),
+      durationMs: expect.any(Number),
+      preTranscribedText: 'Hello, this is the final transcript.',
+    });
+    expect(session.getSnapshot()).toMatchObject({
+      phase: 'idle',
+      liveTranscriptionEnabled: false,
+      liveTranscript: '',
+    });
+  });
+
+  test('falls back gracefully when starting live transcription throws', async () => {
+    const recorder = createRecorderDouble();
+    const supportsLive = vi.fn(() => true);
+    const startLive = vi.fn(async () => {
+      throw new Error('Permission denied.');
+    });
+    const stopLive = vi.fn(async () => '');
+    const cancelLive = vi.fn(async () => undefined);
+    const addLiveListener = vi.fn(() => () => undefined);
+
+    const { createRecordingSession } = await import('./recordingSession');
+    const session = createRecordingSession({
+      requestRecordingPermissionsAsync: vi.fn(async () => ({ granted: true })),
+      setAudioModeAsync: vi.fn(async () => undefined),
+      createRecorder: vi.fn(() => recorder),
+      createMeetingFromRecording: vi.fn(),
+      uploadMeetingRecordingIfConfigured: vi.fn(),
+      supportsLiveTranscription: supportsLive,
+      startLiveTranscription: startLive,
+      stopLiveTranscription: stopLive,
+      cancelLiveTranscription: cancelLive,
+      addLivePartialTranscriptListener: addLiveListener,
+      now: () => 0,
+      setInterval: vi.fn(() => 1),
+      clearInterval: vi.fn(),
+    });
+
+    // The recording itself must not fail just because the live recognizer
+    // couldn't start — that's the entire point of best-effort streaming.
+    await expect(session.startRecording()).resolves.toBeUndefined();
+    expect(session.getSnapshot()).toMatchObject({
+      phase: 'recording',
+      liveTranscriptionEnabled: false,
       errorMessage: null,
     });
   });

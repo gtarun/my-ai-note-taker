@@ -17,7 +17,16 @@ const MODEL_DIR = `${FileSystem.documentDirectory}models`;
 const SHA256_CHUNK_BYTES = 256 * 1024;
 const HUGGING_FACE_BASE_URL = 'https://huggingface.co';
 const activeModelDownloadIds = new Set<string>();
-export const IOS_SUPPORTED_TRANSCRIPTION_MODEL_IDS = new Set(['whisper-base']);
+/** Catalog id for Apple's built-in SFSpeechRecognizer.
+ *  Always-installed on iOS — no download flow, no disk file. Routed natively
+ *  via `MuFathomLocalAIModule.transcribe` based on this id. */
+export const APPLE_SPEECH_MODEL_ID = 'apple-speech-recognizer';
+
+export const IOS_SUPPORTED_TRANSCRIPTION_MODEL_IDS = new Set([
+  APPLE_SPEECH_MODEL_ID,
+  'whisper-base',
+  'whisper-small',
+]);
 export const IOS_SUPPORTED_SUMMARY_MODEL_IDS = new Set([
   'qwen2.5-1.5b-instruct-gguf-q4',
   'gemma-3-1b-it-q4',
@@ -25,6 +34,24 @@ export const IOS_SUPPORTED_SUMMARY_MODEL_IDS = new Set([
 ]);
 
 const BUILT_IN_MODEL_CATALOG: ModelCatalogItem[] = [
+  {
+    id: APPLE_SPEECH_MODEL_ID,
+    kind: 'transcription',
+    engine: 'apple-speech',
+    displayName: 'Apple Speech (on-device)',
+    version: 'system',
+    downloadUrl: '', // Built into iOS — handled natively, no download.
+    sourceUrl: 'https://developer.apple.com/documentation/speech',
+    sourceLabel: 'About Apple Speech',
+    sha256: '',
+    sizeBytes: 0,
+    platforms: ['ios'],
+    minFreeSpaceBytes: 0,
+    recommended: true,
+    experimental: false,
+    description:
+      "Apple's built-in speech recognition. Runs on the Neural Engine, fully on-device, no model download. Recommended default for English meetings on iOS 17+.",
+  },
   {
     id: 'whisper-base',
     kind: 'transcription',
@@ -53,11 +80,12 @@ const BUILT_IN_MODEL_CATALOG: ModelCatalogItem[] = [
     sourceLabel: 'View whisper.cpp files',
     sha256: '',
     sizeBytes: 488 * 1024 * 1024,
-    platforms: ['android'],
+    platforms: ['ios', 'android'],
     minFreeSpaceBytes: 2 * 1024 * 1024 * 1024,
     recommended: false,
     experimental: false,
-    description: 'Higher accuracy multilingual speech-to-text model with a larger footprint.',
+    description:
+      'Higher accuracy multilingual speech-to-text. ~5× larger than Whisper Base; recommended when Base produces short or hallucinated transcripts on quiet audio.',
   },
   {
     id: 'gemma-3n-e2b-preview',
@@ -183,15 +211,52 @@ export async function ensureModelDirectory() {
   }
 }
 
+/**
+ * Synthetic "always installed" row for Apple Speech on iOS. The OS provides the
+ * recognizer; there's no file on disk and no download flow. We surface it as
+ * an installed row so the rest of the app (Settings dropdown, processMeeting
+ * install check) can treat it like any other transcription model.
+ */
+function buildAppleSpeechSyntheticRow(): InstalledModelRow {
+  return {
+    id: APPLE_SPEECH_MODEL_ID,
+    kind: 'transcription',
+    engine: 'apple-speech',
+    displayName: 'Apple Speech (on-device)',
+    version: 'system',
+    platforms: ['ios'],
+    fileUri: null,
+    sizeBytes: 0,
+    sha256: '',
+    status: 'installed',
+    installedAt: null,
+    downloadUrl: '',
+    recommended: true,
+    experimental: false,
+    errorMessage: null,
+  };
+}
+
+function shouldExposeAppleSpeech() {
+  return Platform.OS === 'ios';
+}
+
 export async function getInstalledModels(): Promise<InstalledModelRow[]> {
   const db = getDatabase();
   const rows = await db.getAllAsync<InstalledModelRowRecord>(
     'SELECT * FROM installed_models ORDER BY display_name ASC'
   );
-  return rows.map(mapInstalledModelRow);
+  const dbRows = rows.map(mapInstalledModelRow);
+  if (shouldExposeAppleSpeech() && !dbRows.some((row) => row.id === APPLE_SPEECH_MODEL_ID)) {
+    return [buildAppleSpeechSyntheticRow(), ...dbRows];
+  }
+  return dbRows;
 }
 
 export async function getInstalledModel(id: string): Promise<InstalledModelRow | null> {
+  if (id === APPLE_SPEECH_MODEL_ID && shouldExposeAppleSpeech()) {
+    return buildAppleSpeechSyntheticRow();
+  }
   const db = getDatabase();
   const row = await db.getFirstAsync<InstalledModelRowRecord>(
     'SELECT * FROM installed_models WHERE id = ?',
@@ -272,6 +337,16 @@ async function downloadModelOnce(
   catalogItem: ModelCatalogItem,
   options?: { onProgress?: (progress: number) => void }
 ) {
+  // Apple Speech is provided by iOS; nothing to download. Just report
+  // installed-and-ready so the UI completion path runs the same way.
+  if (catalogItem.engine === 'apple-speech') {
+    if (Platform.OS !== 'ios') {
+      throw new Error('Apple Speech is only available on iOS.');
+    }
+    options?.onProgress?.(1);
+    return buildAppleSpeechSyntheticRow();
+  }
+
   if (!catalogItem.downloadUrl.trim()) {
     if (catalogItem.requiresExternalSetup) {
       throw new Error(
@@ -288,7 +363,8 @@ async function downloadModelOnce(
 
   if (getCurrentModelPlatform() === 'ios') {
     if (catalogItem.kind === 'transcription' && !IOS_SUPPORTED_TRANSCRIPTION_MODEL_IDS.has(catalogItem.id)) {
-      throw new Error('Only whisper-base is supported for local transcription on iOS in this phase.');
+      const supportedList = Array.from(IOS_SUPPORTED_TRANSCRIPTION_MODEL_IDS).join(', ');
+      throw new Error(`Only ${supportedList} are supported for local transcription on iOS in this phase.`);
     }
     if (catalogItem.kind === 'summary' && !IOS_SUPPORTED_SUMMARY_MODEL_IDS.has(catalogItem.id)) {
       throw new Error('Only GGUF/llama.cpp summary models are supported on iOS in this phase.');

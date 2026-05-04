@@ -153,6 +153,8 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="account" options={{ title: 'Account' }} />
+        <Stack.Screen name="debug" options={{ title: 'Debug logs' }} />
+        <Stack.Screen name="local-models" options={{ title: 'Local models' }} />
         <Stack.Screen name="meetings/[id]" options={{ title: 'Meeting' }} />
       </Stack>
     </>

@@ -43,6 +43,19 @@ const extractStructuredData = vi.fn(async () => ({
   qualification: 'B.Com',
   issue: 'Delayed payroll',
 }));
+const summarizeAndExtractTranscript = vi.fn(async () => ({
+  summary: {
+    summary: 'Customer shared onboarding details and an issue.',
+    actionItems: ['Follow up on payroll issue'],
+    decisions: [],
+    followUps: [],
+  },
+  extractedValues: {
+    full_name: 'Priya',
+    qualification: 'B.Com',
+    issue: 'Delayed payroll',
+  },
+}));
 const getAppSettingsMock = vi.fn<() => Promise<any>>(async () => ({
   selectedTranscriptionProvider: 'openai',
   selectedSummaryProvider: 'openai',
@@ -60,9 +73,11 @@ const getAppSettingsMock = vi.fn<() => Promise<any>>(async () => ({
     together: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
     fireworks: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
     deepseek: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+    nvidia: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
     custom: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
     local: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
   },
+  transcriptionLocale: 'en-US',
   deleteUploadedAudio: false,
   modelCatalogUrl: '',
 }));
@@ -74,8 +89,8 @@ const getLocalDeviceSupportMock = vi.fn<() => Promise<any>>(async () => ({
   requiresCustomBuild: false,
   reason: 'Local model runtime is mobile-only.',
 }));
-const getInstalledModelMock = vi.fn(async () => null);
-const isProviderConfiguredMock = vi.fn(() => true);
+const getInstalledModelMock = vi.fn<(modelId: string) => Promise<any>>(async () => null);
+const isProviderConfiguredMock = vi.fn<(providerId: string, provider?: any, mode?: any) => boolean>(() => true);
 const appendExtractionLayerRow = vi.fn(async () => ({
   rowRange: 'Lead intake!A2:C2',
   spreadsheetId: 'sheet-123',
@@ -106,6 +121,7 @@ beforeEach(() => {
   transcribeAudio.mockClear();
   summarizeTranscript.mockClear();
   extractStructuredData.mockClear();
+  summarizeAndExtractTranscript.mockClear();
   getAppSettingsMock.mockClear();
   getAppSettingsMock.mockImplementation(async () => ({
     selectedTranscriptionProvider: 'openai',
@@ -124,10 +140,12 @@ beforeEach(() => {
       together: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
       fireworks: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
       deepseek: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+      nvidia: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
       custom: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
       local: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
     },
-    deleteUploadedAudio: false,
+    transcriptionLocale: 'en-US',
+  deleteUploadedAudio: false,
     modelCatalogUrl: '',
   }));
   getLocalDeviceSupportMock.mockClear();
@@ -325,6 +343,7 @@ vi.mock('../db', () => ({
 vi.mock('./ai', () => ({
   transcribeAudio,
   summarizeTranscript,
+  summarizeAndExtractTranscript,
   extractStructuredData,
 }));
 
@@ -342,6 +361,7 @@ vi.mock('./providers', () => ({
     { id: 'together', supportsTranscription: false, supportsSummary: true },
     { id: 'fireworks', supportsTranscription: false, supportsSummary: true },
     { id: 'deepseek', supportsTranscription: false, supportsSummary: true },
+    { id: 'nvidia', supportsTranscription: false, supportsSummary: true },
     { id: 'custom', supportsTranscription: true, supportsSummary: true },
     { id: 'local', supportsTranscription: true, supportsSummary: true },
   ],
@@ -350,6 +370,17 @@ vi.mock('./providers', () => ({
 
 vi.mock('./localModels', () => ({
   getInstalledModel: getInstalledModelMock,
+  // Plumb through the same mock for plural so processMeeting's plan resolver
+  // sees the same set of "installed" models as the install-check.
+  getInstalledModels: vi.fn(async () => {
+    const candidates = ['whisper-base', 'whisper-small', 'apple-speech-recognizer', 'qwen2.5-1.5b-instruct-q8'];
+    const installed = [];
+    for (const id of candidates) {
+      const row = await getInstalledModelMock(id);
+      if (row) installed.push(row);
+    }
+    return installed;
+  }),
 }));
 
 vi.mock('./localInference', () => ({
@@ -358,6 +389,21 @@ vi.mock('./localInference', () => ({
   IOS_LOCAL_SUMMARY_FALLBACK_REQUIRED_ERROR:
     'Local summary and structured analysis are not available on iOS in this build, and no cloud summary provider is configured. Keep transcription local, then add a cloud provider like OpenAI for Summary and analysis in Settings.',
   getLocalDeviceSupport: getLocalDeviceSupportMock,
+  // Mirror the real implementation in localInference.ts: parse-shape failures
+  // are retryable via the two-pass flow; setup/runtime failures are not.
+  isLocalCombinedAnalysisRetryable: (error: unknown) => {
+    if (error instanceof SyntaxError) return true;
+    if (!(error instanceof Error)) return false;
+    return /no analysis content|parsing failed|non-object JSON/i.test(error.message);
+  },
+  // Default plan: keep the user's saved local model + en-US Apple Speech.
+  // Tests that don't care about locale routing get vanilla behavior.
+  resolveTranscriptionPlan: ({ selectedModelId }: { selectedModelId: string }) => ({
+    modelId: selectedModelId || 'whisper-base',
+    appleSpeechLocale: 'en-US',
+    whisperLanguage: 'en',
+    liveSupported: false,
+  }),
 }));
 
 vi.mock('./extractionLayers', () => ({
@@ -423,10 +469,12 @@ describe('meeting processing with extraction layers', () => {
         together: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
         fireworks: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
         deepseek: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        nvidia: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
         custom: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
         local: { apiKey: '', baseUrl: '', transcriptionModel: 'whisper-base', summaryModel: 'gemma-3-1b-it-q4' },
       },
-      deleteUploadedAudio: false,
+      transcriptionLocale: 'en-US',
+  deleteUploadedAudio: false,
       modelCatalogUrl: '',
     }));
     getLocalDeviceSupportMock.mockImplementation(async () => ({
@@ -487,6 +535,7 @@ describe('meeting processing with extraction layers', () => {
         together: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
         fireworks: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
         deepseek: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        nvidia: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
         custom: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
         local: {
           apiKey: '',
@@ -495,7 +544,8 @@ describe('meeting processing with extraction layers', () => {
           summaryModel: 'qwen2.5-1.5b-instruct-q8',
         },
       },
-      deleteUploadedAudio: false,
+      transcriptionLocale: 'en-US',
+  deleteUploadedAudio: false,
       modelCatalogUrl: '',
     }));
     getLocalDeviceSupportMock.mockImplementation(async () => ({
@@ -556,10 +606,12 @@ describe('meeting processing with extraction layers', () => {
         together: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
         fireworks: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
         deepseek: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        nvidia: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
         custom: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
         local: { apiKey: '', baseUrl: '', transcriptionModel: 'whisper-base', summaryModel: 'gemma-3-1b-it-q4' },
       },
-      deleteUploadedAudio: false,
+      transcriptionLocale: 'en-US',
+  deleteUploadedAudio: false,
       modelCatalogUrl: '',
     }));
     getLocalDeviceSupportMock.mockImplementation(async () => ({
@@ -641,6 +693,272 @@ describe('meeting processing with extraction layers', () => {
         issue: 'Delayed payroll',
       },
     });
+  });
+
+  test('uses one combined local model call when a local layer analysis is selected', async () => {
+    fileSystemGetInfoAsync.mockImplementation(async () => ({ exists: true, size: 128 }));
+    fileSystemReadAsStringAsync.mockImplementation(async () => 'YQ==');
+    getAppSettingsMock.mockImplementation(async () => ({
+      selectedTranscriptionProvider: 'local',
+      selectedSummaryProvider: 'local',
+      providers: {
+        openai: {
+          apiKey: 'test-key',
+          baseUrl: 'https://api.openai.com/v1',
+          transcriptionModel: 'gpt-4o-mini-transcribe',
+          summaryModel: 'gpt-4.1-mini',
+        },
+        openrouter: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        groq: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        anthropic: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        gemini: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        together: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        fireworks: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        deepseek: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        nvidia: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        custom: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        local: {
+          apiKey: '',
+          baseUrl: '',
+          transcriptionModel: 'whisper-base',
+          summaryModel: 'qwen2.5-1.5b-instruct-q8',
+        },
+      },
+      transcriptionLocale: 'en-US',
+  deleteUploadedAudio: false,
+      modelCatalogUrl: '',
+    }));
+    getLocalDeviceSupportMock.mockImplementation(async () => ({
+      platform: 'ios',
+      localProcessingAvailable: true,
+      supportsSummary: true,
+      supportsTranscription: true,
+      requiresCustomBuild: true,
+      reason: 'iOS local transcription and summary are available in this build.',
+    }));
+    getInstalledModelMock.mockImplementation(async (modelId: string) =>
+      modelId === 'whisper-base' || modelId === 'qwen2.5-1.5b-instruct-q8'
+        ? {
+            id: modelId,
+            status: 'installed',
+          }
+        : null
+    );
+
+    const { getMeeting, processMeeting } = await import('./meetings');
+
+    await processMeeting('meeting-1', { layerId: 'layer-1' });
+
+    const meeting = await getMeeting('meeting-1');
+    expect(summarizeAndExtractTranscript).toHaveBeenCalledTimes(1);
+    expect(summarizeTranscript).not.toHaveBeenCalled();
+    expect(extractStructuredData).not.toHaveBeenCalled();
+    expect(meeting?.status).toBe('ready');
+    expect(meeting?.extractionResult).toMatchObject({
+      extractionStatus: 'ready',
+      values: {
+        full_name: 'Priya',
+        qualification: 'B.Com',
+        issue: 'Delayed payroll',
+      },
+    });
+  });
+
+  test('falls back to two-pass local flow when combined analysis fails to parse', async () => {
+    fileSystemGetInfoAsync.mockImplementation(async () => ({ exists: true, size: 128 }));
+    fileSystemReadAsStringAsync.mockImplementation(async () => 'YQ==');
+    getAppSettingsMock.mockImplementation(async () => ({
+      selectedTranscriptionProvider: 'local',
+      selectedSummaryProvider: 'local',
+      providers: {
+        openai: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        openrouter: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        groq: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        anthropic: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        gemini: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        together: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        fireworks: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        deepseek: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        nvidia: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        custom: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        local: {
+          apiKey: '',
+          baseUrl: '',
+          transcriptionModel: 'whisper-base',
+          summaryModel: 'qwen2.5-1.5b-instruct-q8',
+        },
+      },
+      transcriptionLocale: 'en-US',
+  deleteUploadedAudio: false,
+      modelCatalogUrl: '',
+    }));
+    getLocalDeviceSupportMock.mockImplementation(async () => ({
+      platform: 'ios',
+      localProcessingAvailable: true,
+      supportsSummary: true,
+      supportsTranscription: true,
+      requiresCustomBuild: true,
+      reason: 'iOS local transcription and summary are available in this build.',
+    }));
+    getInstalledModelMock.mockImplementation(async (modelId: string) =>
+      modelId === 'whisper-base' || modelId === 'qwen2.5-1.5b-instruct-q8'
+        ? { id: modelId, status: 'installed' }
+        : null
+    );
+    summarizeAndExtractTranscript.mockImplementationOnce(async () => {
+      throw new Error('Local combined analysis parsing failed and repair returned no content.');
+    });
+
+    const { getMeeting, processMeeting } = await import('./meetings');
+
+    await processMeeting('meeting-1', { layerId: 'layer-1' });
+
+    const meeting = await getMeeting('meeting-1');
+    // Combined attempted once, then the two-pass flow ran summary + extraction separately.
+    expect(summarizeAndExtractTranscript).toHaveBeenCalledTimes(1);
+    expect(summarizeTranscript).toHaveBeenCalledTimes(1);
+    expect(extractStructuredData).toHaveBeenCalledTimes(1);
+    expect(meeting?.status).toBe('ready');
+  });
+
+  test('rethrows non-parse errors from combined analysis without retrying two-pass', async () => {
+    fileSystemGetInfoAsync.mockImplementation(async () => ({ exists: true, size: 128 }));
+    fileSystemReadAsStringAsync.mockImplementation(async () => 'YQ==');
+    getAppSettingsMock.mockImplementation(async () => ({
+      selectedTranscriptionProvider: 'local',
+      selectedSummaryProvider: 'local',
+      providers: {
+        openai: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        openrouter: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        groq: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        anthropic: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        gemini: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        together: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        fireworks: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        deepseek: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        nvidia: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        custom: { apiKey: '', baseUrl: '', transcriptionModel: '', summaryModel: '' },
+        local: {
+          apiKey: '',
+          baseUrl: '',
+          transcriptionModel: 'whisper-base',
+          summaryModel: 'qwen2.5-1.5b-instruct-q8',
+        },
+      },
+      transcriptionLocale: 'en-US',
+  deleteUploadedAudio: false,
+      modelCatalogUrl: '',
+    }));
+    getLocalDeviceSupportMock.mockImplementation(async () => ({
+      platform: 'ios',
+      localProcessingAvailable: true,
+      supportsSummary: true,
+      supportsTranscription: true,
+      requiresCustomBuild: true,
+      reason: 'iOS local transcription and summary are available in this build.',
+    }));
+    getInstalledModelMock.mockImplementation(async (modelId: string) =>
+      modelId === 'whisper-base' || modelId === 'qwen2.5-1.5b-instruct-q8'
+        ? { id: modelId, status: 'installed' }
+        : null
+    );
+    summarizeAndExtractTranscript.mockImplementationOnce(async () => {
+      throw new Error('Local runtime unavailable.');
+    });
+
+    const { getMeeting, processMeeting } = await import('./meetings');
+
+    await expect(processMeeting('meeting-1', { layerId: 'layer-1' })).rejects.toThrow(
+      'Local runtime unavailable.'
+    );
+
+    const meeting = await getMeeting('meeting-1');
+    // Setup error: combined attempted once, no two-pass retry, meeting marked failed.
+    expect(summarizeAndExtractTranscript).toHaveBeenCalledTimes(1);
+    expect(summarizeTranscript).not.toHaveBeenCalled();
+    expect(extractStructuredData).not.toHaveBeenCalled();
+    expect(meeting?.status).toBe('failed');
+    expect(meeting?.errorMessage).toBe('Local runtime unavailable.');
+  });
+
+  test('emits progress events for transcription, summary, and complete', async () => {
+    fileSystemGetInfoAsync.mockImplementation(async () => ({ exists: true, size: 128 }));
+    fileSystemReadAsStringAsync.mockImplementation(async () => 'YQ==');
+
+    const { processMeeting } = await import('./meetings');
+    const events: string[] = [];
+
+    await processMeeting('meeting-1', {
+      onProgress: (event) => {
+        if (event.phase === 'preparing' || event.phase === 'complete') {
+          events.push(event.phase);
+        } else {
+          events.push(`${event.phase}:${event.state}`);
+        }
+      },
+    });
+
+    // openai (cloud) provider, no layer → transcription + summary, no extraction.
+    expect(events).toEqual([
+      'preparing',
+      'transcription:started',
+      'transcription:finished',
+      'summary:started',
+      'summary:finished',
+      'complete',
+    ]);
+  });
+
+  test('flags a transcript-quality warning when output is suspiciously short', async () => {
+    fileSystemGetInfoAsync.mockImplementation(async () => ({ exists: true, size: 128 }));
+    fileSystemReadAsStringAsync.mockImplementation(async () => 'YQ==');
+    // 30s of audio — the heuristic kicks in for clips ≥ 8000ms.
+    meetingState.set('meeting-1', {
+      ...(meetingState.get('meeting-1') as MeetingRecord),
+      duration_ms: 30000,
+    });
+    transcribeAudio.mockImplementationOnce(async () => 'Hello.');
+
+    const { processMeeting } = await import('./meetings');
+
+    let warning: string | null = null;
+    await processMeeting('meeting-1', {
+      onProgress: (event) => {
+        if (event.phase === 'transcription' && event.state === 'finished') {
+          warning = event.qualityWarning;
+        }
+      },
+    });
+
+    expect(warning).toMatch(/short/i);
+    expect(warning).toMatch(/30s/);
+  });
+
+  test('does not flag a quality warning for normal-length transcripts', async () => {
+    fileSystemGetInfoAsync.mockImplementation(async () => ({ exists: true, size: 128 }));
+    fileSystemReadAsStringAsync.mockImplementation(async () => 'YQ==');
+    meetingState.set('meeting-1', {
+      ...(meetingState.get('meeting-1') as MeetingRecord),
+      duration_ms: 30000,
+    });
+    // ~7 chars/sec on a 30s clip — comfortably above the 4 chars/sec threshold.
+    transcribeAudio.mockImplementationOnce(
+      async () =>
+        'This is a representative transcript with a couple of sentences and enough characters to clear the quality bar comfortably.'
+    );
+
+    const { processMeeting } = await import('./meetings');
+
+    let warning: string | null = 'unset';
+    await processMeeting('meeting-1', {
+      onProgress: (event) => {
+        if (event.phase === 'transcription' && event.state === 'finished') {
+          warning = event.qualityWarning;
+        }
+      },
+    });
+
+    expect(warning).toBeNull();
   });
 
   test('keeps transcript + summary ready even when extraction fails', async () => {

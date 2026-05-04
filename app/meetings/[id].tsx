@@ -21,6 +21,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FadeInView } from '../../src/components/FadeInView';
 import { KeyboardAwareScrollView } from '../../src/components/KeyboardAwareScrollView';
+import {
+  MeetingProcessingProgress,
+  type MeetingProcessingProgressState,
+  applyProgressEvent,
+  createInitialProgressState,
+  markProgressFailed,
+} from '../../src/components/MeetingProcessingProgress';
 import { ScreenBackground } from '../../src/components/ScreenBackground';
 import {
   MEETING_DETAIL_TITLE_ACTION_SLOT_MIN_WIDTH,
@@ -65,6 +72,7 @@ export default function MeetingDetailScreen() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isLayerPickerVisible, setIsLayerPickerVisible] = useState(false);
   const [copiedSection, setCopiedSection] = useState<CopyableMeetingSection | null>(null);
+  const [progressState, setProgressState] = useState<MeetingProcessingProgressState | null>(null);
   const player = useAudioPlayer(meeting?.audioUri ?? null);
   const playerStatus = useAudioPlayerStatus(player);
   const loadedAudioUriRef = useRef<string | null>(null);
@@ -133,13 +141,25 @@ export default function MeetingDetailScreen() {
       return;
     }
 
+    const initialProgress = createInitialProgressState({ hasLayer: Boolean(layerId) });
+    setProgressState(initialProgress);
+
     try {
       setIsBusy(true);
-      await processMeeting(id, { layerId: layerId ?? null });
+      await processMeeting(id, {
+        layerId: layerId ?? null,
+        onProgress: (event) => {
+          setProgressState((current) =>
+            current ? applyProgressEvent(current, event) : current
+          );
+        },
+      });
       await loadMeeting();
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to process meeting.';
+      setProgressState((current) => (current ? markProgressFailed(current, message) : current));
       await loadMeeting();
-      Alert.alert('Processing failed', error instanceof Error ? error.message : 'Unable to process meeting.');
+      Alert.alert('Processing failed', message);
     } finally {
       setIsBusy(false);
     }
@@ -360,12 +380,23 @@ export default function MeetingDetailScreen() {
           {meeting.errorMessage ? <Text style={styles.errorText}>{meeting.errorMessage}</Text> : null}
         </FadeInView>
 
-        <FadeInView style={styles.primaryActionWrap} delay={60}>
-          <Pressable style={styles.primaryButton} onPress={handleProcess} disabled={isBusy}>
-            <MaterialCommunityIcons name="text-box-search-outline" size={18} color={palette.paper} />
-            <Text style={styles.primaryButtonText}>{getMeetingDetailPrimaryActionLabel(isBusy)}</Text>
-          </Pressable>
-        </FadeInView>
+        {isBusy && progressState ? (
+          <FadeInView style={styles.primaryActionWrap} delay={60}>
+            <MeetingProcessingProgress state={progressState} />
+          </FadeInView>
+        ) : (
+          <FadeInView style={styles.primaryActionWrap} delay={60}>
+            {progressState && (progressState.qualityWarning || progressState.completed) ? (
+              <View style={styles.progressTrailing}>
+                <MeetingProcessingProgress state={progressState} />
+              </View>
+            ) : null}
+            <Pressable style={styles.primaryButton} onPress={handleProcess} disabled={isBusy}>
+              <MaterialCommunityIcons name="text-box-search-outline" size={18} color={palette.paper} />
+              <Text style={styles.primaryButtonText}>{getMeetingDetailPrimaryActionLabel(isBusy)}</Text>
+            </Pressable>
+          </FadeInView>
+        )}
 
         <FadeInView style={styles.secondaryActions} delay={90}>
           <Pressable style={styles.secondaryButton} onPress={handlePlaybackToggle}>
@@ -871,6 +902,10 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   primaryActionWrap: {
+    width: '100%',
+    gap: 12,
+  },
+  progressTrailing: {
     width: '100%',
   },
   secondaryActions: {

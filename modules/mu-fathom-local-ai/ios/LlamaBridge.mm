@@ -91,8 +91,11 @@ typedef NS_ENUM(NSInteger, LlamaBridgeErrorCode) {
   [self unload];
 
   llama_model_params modelParams = llama_model_default_params();
-  // Metal GPU offload: -1 means "all layers on GPU" when Metal backend is built.
+#ifdef GGML_USE_METAL
   modelParams.n_gpu_layers = 999;
+#else
+  modelParams.n_gpu_layers = 0;
+#endif
 
   _model = llama_model_load_from_file(desired.c_str(), modelParams);
   if (!_model) {

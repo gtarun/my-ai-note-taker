@@ -78,6 +78,7 @@ describe('settings presentation', () => {
         selectedSummaryProvider: 'openai',
         selectedTranscriptionProvider: 'openai',
         providers,
+        transcriptionLocale: 'en-US',
         deleteUploadedAudio: false,
         modelCatalogUrl: '',
       })

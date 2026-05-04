@@ -1,13 +1,34 @@
 import { requireOptionalNativeModule } from 'expo-modules-core';
 import { Platform } from 'react-native';
 
-import { ExtractionLayerField, LocalDeviceSupport, LocalModelEngine, SummaryPayload } from '../types';
+import {
+  ExtractionLayerField,
+  LocalDeviceSupport,
+  LocalModelEngine,
+  SummaryPayload,
+  TranscriptionLocale,
+} from '../types';
 
-const LOCAL_TRANSCRIPT_WINDOW = 8000;
-const LOCAL_TRANSCRIPT_OVERLAP = 500;
-export const IOS_LOCAL_TRANSCRIPTION_MODEL_ID = 'whisper-base';
+const LOCAL_TRANSCRIPT_WINDOW = 12000;
+const LOCAL_TRANSCRIPT_OVERLAP = 400;
+/** Catalog id for Apple's built-in SFSpeechRecognizer. Always-installed on
+ *  iOS — no download, no file on disk. Routed natively via the bridge. Keep
+ *  in sync with `APPLE_SPEECH_MODEL_ID` in `localModels.ts`. */
+export const APPLE_SPEECH_MODEL_ID = 'apple-speech-recognizer';
+/** Default iOS transcription model when nothing is selected or the existing
+ *  selection isn't available. Apple Speech is always available on iOS 13+, so
+ *  it makes the safest default. */
+export const IOS_LOCAL_TRANSCRIPTION_MODEL_ID = APPLE_SPEECH_MODEL_ID;
+/** Transcription engines the iOS native bridge knows how to dispatch to. Keep
+ *  in sync with `IOS_SUPPORTED_TRANSCRIPTION_MODEL_IDS` in `localModels.ts`
+ *  and the routing in `MuFathomLocalAIModule.swift`. */
+export const IOS_LOCAL_TRANSCRIPTION_MODEL_IDS = new Set([
+  APPLE_SPEECH_MODEL_ID,
+  'whisper-base',
+  'whisper-small',
+]);
 export const IOS_LOCAL_TRANSCRIPTION_MODEL_ERROR =
-  'Only whisper-base is supported for local transcription on iOS in this phase.';
+  'This local transcription model is not supported on iOS in this build. Install Whisper Base or Whisper Small from Local models.';
 export const IOS_LOCAL_TRANSCRIPTION_PLACEHOLDER_ERROR =
   'Local transcription returned placeholder text instead of spoken words. Try recording again, import a clearer M4A, WAV, or MP3 file, or switch transcription back to a cloud provider for this meeting.';
 export const IOS_LOCAL_SUMMARY_UNAVAILABLE_ERROR =
@@ -15,11 +36,119 @@ export const IOS_LOCAL_SUMMARY_UNAVAILABLE_ERROR =
 export const IOS_LOCAL_SUMMARY_FALLBACK_REQUIRED_ERROR =
   'Local summary and structured analysis are not available on iOS in this build, and no cloud summary provider is configured. Keep transcription local, then add a cloud provider like OpenAI for Summary and analysis in Settings.';
 
+type LiveTranscriptListener = (event: { transcript: string }) => void;
+type Subscription = { remove: () => void };
+
 type LocalNativeModule = {
   getDeviceSupport?: () => Promise<Partial<LocalDeviceSupport>>;
-  transcribe?: (params: { audioUri: string; modelId: string }) => Promise<string>;
+  transcribe?: (params: {
+    audioUri: string;
+    modelId: string;
+    /** BCP-47 locale for Apple Speech (e.g., "en-US", "hi-IN"). */
+    locale?: string;
+    /** ISO 639-1 code for whisper.cpp (e.g., "en", "hi", "pa"). Empty
+     *  string or undefined means "let whisper auto-detect language". */
+    language?: string;
+  }) => Promise<string>;
   summarize?: (params: { prompt: string; modelId: string; engine: string }) => Promise<string>;
+  /** Streaming transcription — see `LiveTranscriptionSession.swift`. */
+  startLiveTranscription?: (params: { locale?: string }) => Promise<void>;
+  stopLiveTranscription?: () => Promise<string>;
+  cancelLiveTranscription?: () => Promise<void>;
+  addListener?: (eventName: string, listener: LiveTranscriptListener) => Subscription;
 };
+
+/**
+ * Plan that the recording/processing layer follows for a given
+ * (model, locale) combination. Engines that can't satisfy the user's locale
+ * report `liveSupported: false` so the UI knows to skip the streaming card.
+ */
+export type TranscriptionPlan = {
+  /** What we send to the native bridge as `modelId`. */
+  modelId: string;
+  /** BCP-47 locale used when the dispatched engine is Apple Speech.
+   *  `null` means Apple Speech can't satisfy the requested locale. */
+  appleSpeechLocale: string | null;
+  /** Whisper language code (`en`, `hi`, `pa`, …) or null for auto-detect. */
+  whisperLanguage: string | null;
+  /** Whether live (streaming) partials are available for this plan. */
+  liveSupported: boolean;
+};
+
+/** Apple Speech offline-supported locales we expose in Settings.
+ *  iOS 17+ support is broader; this is the conservative intersection. */
+const APPLE_SPEECH_OFFLINE_LOCALES = new Set<string>(['en-US', 'hi-IN']);
+
+/** Map a TranscriptionLocale into a whisper language code. `null` = auto. */
+function localeToWhisperLanguage(locale: TranscriptionLocale): string | null {
+  switch (locale) {
+    case 'auto':
+      return null;
+    case 'en-US':
+      return 'en';
+    case 'hi-IN':
+      return 'hi';
+    case 'pa-IN':
+      return 'pa';
+  }
+}
+
+/**
+ * Resolve the best (model, engine, language) plan for the user's locale and
+ * what's installed on the device. Two principles:
+ *
+ * 1. If the user picked Apple Speech AND their locale is offline-supported,
+ *    keep Apple Speech (fastest, no download, no extra power draw).
+ * 2. Otherwise, fall back to whisper-small with the right language code or
+ *    auto-detect. Whisper-small is required for Punjabi and mixed-language;
+ *    we surface a clear error in the caller when it's not installed.
+ */
+export function resolveTranscriptionPlan(input: {
+  selectedModelId: string;
+  locale: TranscriptionLocale;
+  installedModelIds: string[];
+}): TranscriptionPlan {
+  const { selectedModelId, locale } = input;
+  const installed = new Set(input.installedModelIds);
+
+  const whisperLanguage = localeToWhisperLanguage(locale);
+
+  // Apple Speech path — only when the model is apple-speech AND the locale
+  // is in our offline-supported set.
+  if (
+    selectedModelId === APPLE_SPEECH_MODEL_ID &&
+    locale !== 'auto' &&
+    APPLE_SPEECH_OFFLINE_LOCALES.has(locale)
+  ) {
+    return {
+      modelId: APPLE_SPEECH_MODEL_ID,
+      appleSpeechLocale: locale,
+      whisperLanguage: null,
+      liveSupported: true,
+    };
+  }
+
+  // Whisper paths. Prefer whisper-small for non-English; fall back to whatever
+  // whisper variant is installed if the user explicitly picked one.
+  const preferredWhisper =
+    locale === 'en-US'
+      ? selectedModelId.startsWith('whisper-')
+        ? selectedModelId
+        : installed.has('whisper-small')
+          ? 'whisper-small'
+          : 'whisper-base'
+      : installed.has('whisper-small')
+        ? 'whisper-small'
+        : 'whisper-base';
+
+  return {
+    modelId: preferredWhisper,
+    appleSpeechLocale: null,
+    whisperLanguage,
+    // Live partials only via Apple Speech today; whisper.cpp doesn't stream.
+    liveSupported: false,
+  };
+}
 
 async function resolveSummaryEngine(modelId: string): Promise<LocalModelEngine> {
   // Lazy import: localModels transitively loads expo-file-system which is not
@@ -97,20 +226,35 @@ async function computeLocalDeviceSupport(): Promise<LocalDeviceSupport> {
   }
 }
 
-export async function transcribeLocalAudio(params: { audioUri: string; modelId: string }) {
+export async function transcribeLocalAudio(params: {
+  audioUri: string;
+  modelId: string;
+  /** BCP-47 locale for Apple Speech. */
+  locale?: string;
+  /** ISO 639-1 code for whisper.cpp (or null/undefined for auto-detect). */
+  language?: string | null;
+}) {
   const module = await requireLocalRuntime('transcription');
 
-  if (!params.modelId.trim()) {
+  const trimmedModelId = params.modelId.trim();
+  if (!trimmedModelId) {
     throw new Error('Pick an installed local transcription model in Settings first.');
   }
 
-  if (Platform.OS === 'ios' && params.modelId.trim() !== IOS_LOCAL_TRANSCRIPTION_MODEL_ID) {
+  if (Platform.OS === 'ios' && !IOS_LOCAL_TRANSCRIPTION_MODEL_IDS.has(trimmedModelId)) {
     throw new Error(IOS_LOCAL_TRANSCRIPTION_MODEL_ERROR);
   }
 
   let transcript: string | undefined;
   try {
-    transcript = await module.transcribe?.(params);
+    transcript = await module.transcribe?.({
+      audioUri: params.audioUri,
+      modelId: trimmedModelId,
+      locale: params.locale,
+      // Empty string sentinel means "auto-detect"; whisper.cpp interprets
+      // empty/null as enable-auto-detect.
+      language: params.language ?? '',
+    });
   } catch (error) {
     throw new Error(normalizeLocalTranscriptionError(error));
   }
@@ -120,7 +264,12 @@ export async function transcribeLocalAudio(params: { audioUri: string; modelId: 
   }
 
   const trimmedTranscript = transcript.trim();
-  validateLocalTranscript(trimmedTranscript);
+  // Page-placeholder hallucinations are a whisper.cpp-specific failure mode
+  // (the model spits out "page 1 page 2…" on quiet audio). Apple Speech
+  // doesn't produce them, so skip the validation when we know it's the source.
+  if (trimmedModelId !== APPLE_SPEECH_MODEL_ID) {
+    validateLocalTranscript(trimmedTranscript);
+  }
   return trimmedTranscript;
 }
 
@@ -135,16 +284,68 @@ export async function summarizeLocalTranscript(params: {
   }
 
   const engine = await resolveSummaryEngine(params.modelId);
+  return summarizeLocalTranscriptWithEngine(module, params.transcriptText, params.modelId, engine);
+}
+
+export async function summarizeAndExtractLocalTranscript(params: {
+  transcriptText: string;
+  modelId: string;
+  fields: ExtractionLayerField[];
+}): Promise<{ summary: SummaryPayload; extractedValues: Record<string, string> }> {
+  const module = await requireLocalRuntime('summary');
+
+  if (!params.modelId.trim()) {
+    throw new Error('Pick an installed local summary model in Settings first.');
+  }
+
+  if (!params.fields.length) {
+    return {
+      summary: await summarizeLocalTranscript(params),
+      extractedValues: {},
+    };
+  }
+
+  const engine = await resolveSummaryEngine(params.modelId);
   const chunks = chunkTranscript(params.transcriptText, LOCAL_TRANSCRIPT_WINDOW, LOCAL_TRANSCRIPT_OVERLAP);
 
   if (chunks.length <= 1) {
-    return runSummaryPass(module, buildFinalSummaryPrompt(params.transcriptText), params.modelId, engine);
+    return runCombinedSummaryExtractionPass(
+      module,
+      buildCombinedLocalAnalysisPrompt(params.transcriptText, params.fields),
+      params.modelId,
+      engine,
+      params.fields
+    );
+  }
+
+  return {
+    summary: await summarizeLocalTranscriptWithEngine(module, params.transcriptText, params.modelId, engine),
+    extractedValues: await extractLocalStructuredDataWithEngine(
+      module,
+      params.transcriptText,
+      params.modelId,
+      engine,
+      params.fields
+    ),
+  };
+}
+
+async function summarizeLocalTranscriptWithEngine(
+  module: LocalNativeModule,
+  transcriptText: string,
+  modelId: string,
+  engine: LocalModelEngine
+) {
+  const chunks = chunkTranscript(transcriptText, LOCAL_TRANSCRIPT_WINDOW, LOCAL_TRANSCRIPT_OVERLAP);
+
+  if (chunks.length <= 1) {
+    return runSummaryPass(module, buildFinalSummaryPrompt(transcriptText), modelId, engine);
   }
 
   const partialSummaries: SummaryPayload[] = [];
 
   for (const chunk of chunks) {
-    partialSummaries.push(await runSummaryPass(module, buildChunkSummaryPrompt(chunk), params.modelId, engine));
+    partialSummaries.push(await runSummaryPass(module, buildChunkSummaryPrompt(chunk), modelId, engine));
   }
 
   const combinedPayload = partialSummaries
@@ -159,7 +360,7 @@ export async function summarizeLocalTranscript(params: {
     )
     .join('\n\n');
 
-  return runSummaryPass(module, buildCombineSummaryPrompt(combinedPayload), params.modelId, engine);
+  return runSummaryPass(module, buildCombineSummaryPrompt(combinedPayload), modelId, engine);
 }
 
 export async function extractLocalStructuredData(params: {
@@ -178,16 +379,32 @@ export async function extractLocalStructuredData(params: {
   }
 
   const engine = await resolveSummaryEngine(params.modelId);
-  const rawValues = await runJsonObjectPass(
+  return extractLocalStructuredDataWithEngine(
     module,
-    buildLocalExtractionPrompt(params.transcriptText, params.fields),
+    params.transcriptText,
     params.modelId,
     engine,
-    params.fields.map((field) => field.id)
+    params.fields
+  );
+}
+
+async function extractLocalStructuredDataWithEngine(
+  module: LocalNativeModule,
+  transcriptText: string,
+  modelId: string,
+  engine: LocalModelEngine,
+  fields: ExtractionLayerField[]
+) {
+  const rawValues = await runJsonObjectPass(
+    module,
+    buildLocalExtractionPrompt(transcriptText, fields),
+    modelId,
+    engine,
+    fields.map((field) => field.id)
   );
 
   return Object.fromEntries(
-    params.fields.map((field) => [field.id, String(rawValues[field.id] ?? '').trim()])
+    fields.map((field) => [field.id, String(rawValues[field.id] ?? '').trim()])
   );
 }
 
@@ -248,6 +465,62 @@ async function runJsonObjectPass(
 
     return parseJsonObject(repaired);
   }
+}
+
+async function runCombinedSummaryExtractionPass(
+  module: LocalNativeModule,
+  prompt: string,
+  modelId: string,
+  engine: LocalModelEngine,
+  fields: ExtractionLayerField[]
+) {
+  const requiredKeys = ['summary', 'actionItems', 'decisions', 'followUps', 'extracted'];
+  const raw = await module.summarize?.({ prompt, modelId, engine });
+
+  if (!raw?.trim()) {
+    throw new Error('Local summary model returned no analysis content.');
+  }
+
+  try {
+    return parseCombinedSummaryExtractionPayload(raw, fields);
+  } catch {
+    const repaired = await module.summarize?.({
+      prompt: buildGenericRepairPrompt(raw, requiredKeys),
+      modelId,
+      engine,
+    });
+
+    if (!repaired?.trim()) {
+      throw new Error('Local combined analysis parsing failed and repair returned no content.');
+    }
+
+    return parseCombinedSummaryExtractionPayload(repaired, fields);
+  }
+}
+
+/**
+ * Returns true when the combined-analysis pass failed because the model output
+ * could not be parsed into the expected JSON shape. In that case the caller can
+ * fall back to the older two-pass (summary, then extraction) flow with simpler
+ * prompts. For setup/runtime errors (model not installed, runtime missing,
+ * audio normalization failed, etc.) the fallback would just hit the same error
+ * a second time, so callers should rethrow.
+ */
+export function isLocalCombinedAnalysisRetryable(error: unknown): boolean {
+  if (error instanceof SyntaxError) {
+    return true;
+  }
+
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message;
+  return (
+    /no analysis content/i.test(message) ||
+    /parsing failed/i.test(message) ||
+    /non-object JSON/i.test(message)
+  );
 }
 
 async function requireLocalRuntime(mode: 'transcription' | 'summary') {
@@ -415,6 +688,24 @@ function buildLocalExtractionPrompt(transcriptText: string, fields: ExtractionLa
   ].join('\n');
 }
 
+function buildCombinedLocalAnalysisPrompt(transcriptText: string, fields: ExtractionLayerField[]) {
+  const keys = fields.map((field) => field.id).join(', ');
+  const fieldLines = fields.map((field) => `- ${field.id}: ${field.title}. ${field.description}`);
+
+  return [
+    'You summarize a meeting transcript and extract structured fields for an offline mobile app.',
+    'Return valid JSON only with keys: summary, actionItems, decisions, followUps, extracted.',
+    `The extracted object must contain exactly these keys: ${keys}.`,
+    'Use empty strings for missing extracted values. Do not invent facts. Keep the summary compact.',
+    '',
+    'Fields:',
+    ...fieldLines,
+    '',
+    'Transcript:',
+    transcriptText,
+  ].join('\n');
+}
+
 function buildRepairPrompt(rawJson: string) {
   return [
     'Repair the following into valid JSON only.',
@@ -438,6 +729,27 @@ function buildGenericRepairPrompt(rawJson: string, requiredKeys: string[]) {
 function parseSummaryPayload(raw: string): SummaryPayload {
   const parsed = parseJsonObject(raw) as Partial<SummaryPayload>;
 
+  return normalizeSummaryPayload(parsed);
+}
+
+function parseCombinedSummaryExtractionPayload(
+  raw: string,
+  fields: ExtractionLayerField[]
+): { summary: SummaryPayload; extractedValues: Record<string, string> } {
+  const parsed = parseJsonObject(raw) as Partial<SummaryPayload> & {
+    extracted?: Record<string, unknown>;
+  };
+  const extracted = parsed.extracted && typeof parsed.extracted === 'object' ? parsed.extracted : {};
+
+  return {
+    summary: normalizeSummaryPayload(parsed),
+    extractedValues: Object.fromEntries(
+      fields.map((field) => [field.id, String(extracted[field.id] ?? '').trim()])
+    ),
+  };
+}
+
+function normalizeSummaryPayload(parsed: Partial<SummaryPayload>): SummaryPayload {
   return {
     summary: parsed.summary?.toString().trim() ?? '',
     actionItems: Array.isArray(parsed.actionItems)
@@ -456,11 +768,106 @@ function parseJsonObject(raw: string): Record<string, unknown> {
   const start = raw.indexOf('{');
   const end = raw.lastIndexOf('}');
   const json = start >= 0 && end > start ? raw.slice(start, end + 1) : raw;
-  const parsed = JSON.parse(json);
+  const parsed = parseJsonWithRepairableFormatting(json);
 
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error('Local model returned non-object JSON.');
   }
 
   return parsed as Record<string, unknown>;
+}
+
+function parseJsonWithRepairableFormatting(json: string) {
+  try {
+    return JSON.parse(json);
+  } catch (error) {
+    const withoutTrailingCommas = json.replace(/,\s*([}\]])/g, '$1');
+    if (withoutTrailingCommas !== json) {
+      return JSON.parse(withoutTrailingCommas);
+    }
+
+    throw error;
+  }
+}
+
+// ─── Live (streaming) transcription ──────────────────────────────────────────
+
+/**
+ * Returns true when the platform's native bridge can stream live partials
+ * during recording. Today: iOS only, and only when the bridge is linked into
+ * this build. Web and Android (no MediaPipe streaming hook) return false; the
+ * UI should fall back to post-stop transcription on those platforms.
+ */
+export function supportsLiveTranscription(): boolean {
+  if (Platform.OS !== 'ios') return false;
+  return Boolean(nativeModule?.startLiveTranscription);
+}
+
+/**
+ * Start a live transcription session. The native side taps the mic in
+ * parallel to whatever recorder is active, so it must be called near the
+ * point where audio recording starts to capture as much of the meeting as
+ * possible. Throws if a session is already running, if speech permission was
+ * denied, or if the locale doesn't support on-device recognition.
+ *
+ * Best-effort feature: callers should swallow the error and fall back to
+ * post-stop transcription rather than aborting the recording itself.
+ */
+export async function startLiveTranscription(params: { locale?: string } = {}): Promise<void> {
+  if (!nativeModule?.startLiveTranscription) {
+    throw new Error('Live transcription is not supported on this build.');
+  }
+  await nativeModule.startLiveTranscription({ locale: params.locale ?? 'en-US' });
+}
+
+/**
+ * Tear down the streaming session and resolve with the final transcript. If
+ * any audio is still buffered at the time of the call, the recognizer flushes
+ * it before resolving; expect the call to take ≲1s on a typical meeting.
+ */
+export async function stopLiveTranscription(): Promise<string> {
+  if (!nativeModule?.stopLiveTranscription) return '';
+  try {
+    return await nativeModule.stopLiveTranscription();
+  } catch (error) {
+    // Don't surface mid-stream errors as fatal — caller falls back to the
+    // saved-file transcribe path. Just swallow and return empty.
+    return '';
+  }
+}
+
+/**
+ * Discard any in-flight live transcription. Used when the user cancels a
+ * recording before saving.
+ */
+export async function cancelLiveTranscription(): Promise<void> {
+  if (!nativeModule?.cancelLiveTranscription) return;
+  try {
+    await nativeModule.cancelLiveTranscription();
+  } catch {
+    // Cancellation is best-effort; errors here aren't actionable.
+  }
+}
+
+/**
+ * Subscribe to live partial transcripts. Returns an unsubscribe function. The
+ * handler may be called many times per second on long recordings — keep it
+ * cheap (a single setState is fine).
+ */
+export function addLivePartialTranscriptListener(
+  handler: (transcript: string) => void
+): () => void {
+  if (!nativeModule?.addListener) {
+    return () => undefined;
+  }
+  const subscription = nativeModule.addListener('onLivePartialTranscript', (event) => {
+    handler(typeof event?.transcript === 'string' ? event.transcript : '');
+  });
+  return () => {
+    try {
+      subscription.remove();
+    } catch {
+      // best-effort
+    }
+  };
 }

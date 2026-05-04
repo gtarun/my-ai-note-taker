@@ -93,6 +93,17 @@ export async function initializeDatabase() {
       error_message TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS app_logs (
+      id TEXT PRIMARY KEY NOT NULL,
+      created_at TEXT NOT NULL,
+      level TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      message TEXT NOT NULL,
+      metadata_json TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_app_logs_created_at ON app_logs(created_at DESC);
+
     CREATE TABLE IF NOT EXISTS extraction_layers (
       id TEXT PRIMARY KEY NOT NULL,
       name TEXT NOT NULL,

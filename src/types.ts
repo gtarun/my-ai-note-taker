@@ -73,6 +73,7 @@ export type ProviderId =
   | 'together'
   | 'fireworks'
   | 'deepseek'
+  | 'nvidia'
   | 'custom'
   | 'local';
 
@@ -83,10 +84,25 @@ export type ProviderConfig = {
   summaryModel: string;
 };
 
+/**
+ * User's preferred transcription language. Drives both Apple Speech (which
+ * needs a full BCP-47 locale tag) and whisper.cpp (which needs an ISO 639-1
+ * code or null for auto-detect). The mapping happens in localInference.
+ *
+ * - 'auto'  → multilingual / mixed-language; routes to whisper-small with
+ *             detect_language=true. Apple Speech can't auto-detect, so live
+ *             transcription is unavailable for this option.
+ * - 'en-US' → English (US). Apple Speech default.
+ * - 'hi-IN' → Hindi. Apple Speech on iOS 17+, falls back to whisper-small.
+ * - 'pa-IN' → Punjabi. Apple Speech doesn't support it; routes to whisper-small.
+ */
+export type TranscriptionLocale = 'auto' | 'en-US' | 'hi-IN' | 'pa-IN';
+
 export type AppSettings = {
   selectedTranscriptionProvider: ProviderId;
   selectedSummaryProvider: ProviderId;
   providers: Record<ProviderId, ProviderConfig>;
+  transcriptionLocale: TranscriptionLocale;
   deleteUploadedAudio: boolean;
   modelCatalogUrl: string;
 };
@@ -136,7 +152,13 @@ export type CloudUserDataSnapshot = {
 
 export type LocalModelKind = 'transcription' | 'summary';
 
-export type LocalModelEngine = 'whisper.cpp' | 'mediapipe-llm' | 'litert-lm' | 'llama.cpp';
+export type LocalModelEngine =
+  | 'whisper.cpp'
+  | 'mediapipe-llm'
+  | 'litert-lm'
+  | 'llama.cpp'
+  /** Apple's built-in SFSpeechRecognizer running on-device. iOS only, no model file. */
+  | 'apple-speech';
 
 export type LocalModelPlatform = 'ios' | 'android';
 

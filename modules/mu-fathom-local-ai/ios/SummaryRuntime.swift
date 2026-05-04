@@ -5,6 +5,9 @@ import Foundation
 import MediaPipeTasksGenAI
 
 final class SummaryRuntime {
+  // See MuFathomLocalAIModule.maxSummaryTokens — 1024 leaves room for combined
+  // summary + extraction JSON and the JSON repair pass.
+  private let maxOutputTokens = 1024
   private let queue = DispatchQueue(label: "com.gtarun.mu-fathom.local-summary", qos: .userInitiated)
   private var cachedModelPath: String?
   private var cachedInference: LlmInference?
@@ -41,7 +44,7 @@ final class SummaryRuntime {
     }
 
     let options = LlmInference.Options(modelPath: modelPath)
-    options.maxTokens = 1024
+    options.maxTokens = maxOutputTokens
 
     let inference = try LlmInference(options: options)
     cachedModelPath = modelPath

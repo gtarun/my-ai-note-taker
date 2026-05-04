@@ -40,11 +40,12 @@ in a second copy.
 
 ## Metal backend
 
-`GGML_USE_METAL=1` is set in the podspec preprocessor definitions, and the
-`Metal`, `MetalKit`, `MetalPerformanceShaders`, and `Accelerate` frameworks
-are linked. Ensure the Metal shaders file (`ggml-metal.metal`) is included in
-the app bundle — Xcode auto-picks `.metal` files in source dirs, but you may
-need to verify after `npx expo prebuild`.
+The podspec links the `Metal`, `MetalKit`, `MetalPerformanceShaders`, and
+`Accelerate` frameworks, but `GGML_USE_METAL=1` should only be re-enabled once
+the vendored ggml tree includes the Metal backend headers and shaders. Ensure
+the Metal shaders file (`ggml-metal.metal`) is included in the app bundle —
+Xcode auto-picks `.metal` files in source dirs, but you may need to verify
+after `npx expo prebuild`.
 
 ## Fallback behavior
 

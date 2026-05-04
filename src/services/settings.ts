@@ -5,7 +5,7 @@ import { getDatabase } from '../db';
 import { AppSettings, ProviderConfig, ProviderId } from '../types';
 import { getAuthSession } from './account';
 import { fetchCloudUserDataSnapshot, mapBootstrapSnapshotToAppSettings, saveCloudSettings } from './cloudUserData';
-import { getLocalDeviceSupport } from './localInference';
+import { APPLE_SPEECH_MODEL_ID, getLocalDeviceSupport } from './localInference';
 import {
   defaultProviderConfigs,
   isProviderConfigured,
@@ -46,6 +46,7 @@ function getDefaultSettings(): AppSettings {
     selectedTranscriptionProvider: 'openai',
     selectedSummaryProvider: 'openai',
     providers: structuredClone(defaultProviderConfigs),
+    transcriptionLocale: 'en-US',
     deleteUploadedAudio: false,
     modelCatalogUrl: '',
   };
@@ -101,7 +102,15 @@ export async function applyOfflineSetupAutoConfig(params: {
 }) {
   const settings = await getAppSettings();
 
-  if (!settings.providers.local.transcriptionModel && params.preferredTranscriptionModelId) {
+  // Apple Speech is filled in as the iOS default by `normalizeAppSettings…`,
+  // so an empty value isn't the only "no real choice yet" signal we have to
+  // honor here. If the user just finished the offline-setup flow and asked for
+  // a specific whisper model, that's an explicit upgrade — override the default.
+  const hasPickedTranscriptionModel =
+    Boolean(settings.providers.local.transcriptionModel) &&
+    settings.providers.local.transcriptionModel !== APPLE_SPEECH_MODEL_ID;
+
+  if (!hasPickedTranscriptionModel && params.preferredTranscriptionModelId) {
     settings.providers.local.transcriptionModel = params.preferredTranscriptionModelId;
   }
 
@@ -176,6 +185,7 @@ export function sanitizeAppSettings(settings: AppSettings): AppSettings {
       'summary'
     ),
     providers,
+    transcriptionLocale: settings.transcriptionLocale ?? 'en-US',
     deleteUploadedAudio: settings.deleteUploadedAudio,
     modelCatalogUrl: settings.modelCatalogUrl.trim(),
   };
@@ -188,7 +198,7 @@ async function normalizeAppSettingsForCurrentDevice(settings: AppSettings): Prom
     sanitized.selectedTranscriptionProvider !== 'local' &&
     sanitized.selectedSummaryProvider !== 'local'
   ) {
-    return sanitized;
+    return defaultLocalTranscriptionModelForDevice(sanitized);
   }
 
   const support = await getLocalDeviceSupport();
@@ -197,7 +207,7 @@ async function normalizeAppSettingsForCurrentDevice(settings: AppSettings): Prom
     return sanitized;
   }
 
-  const next = { ...sanitized };
+  let next = { ...sanitized };
 
   if (next.selectedTranscriptionProvider === 'local' && !support.supportsTranscription) {
     next.selectedTranscriptionProvider = getFallbackCloudProviderId(next, 'transcription');
@@ -207,7 +217,34 @@ async function normalizeAppSettingsForCurrentDevice(settings: AppSettings): Prom
     next.selectedSummaryProvider = getFallbackCloudProviderId(next, 'summary');
   }
 
+  next = defaultLocalTranscriptionModelForDevice(next);
+
   return next;
+}
+
+/**
+ * On iOS, fall back to Apple's built-in SFSpeechRecognizer when the user hasn't
+ * picked a local transcription model. It needs no download, runs on the Neural
+ * Engine, and respects the privacy guarantee — making it the right default for
+ * fresh installs and for users who deleted their downloaded whisper model.
+ */
+function defaultLocalTranscriptionModelForDevice(settings: AppSettings): AppSettings {
+  if (Platform.OS !== 'ios') {
+    return settings;
+  }
+  if (settings.providers.local.transcriptionModel.trim()) {
+    return settings;
+  }
+  return {
+    ...settings,
+    providers: {
+      ...settings.providers,
+      local: {
+        ...settings.providers.local,
+        transcriptionModel: APPLE_SPEECH_MODEL_ID,
+      },
+    },
+  };
 }
 
 function buildProvidersFromRows(
@@ -308,6 +345,9 @@ async function readLegacySettings(defaultSettings: AppSettings) {
       legacySettings?.selectedTranscriptionProvider ?? defaultSettings.selectedTranscriptionProvider,
     selectedSummaryProvider: legacySettings?.selectedSummaryProvider ?? defaultSettings.selectedSummaryProvider,
     providers: legacyProviders,
+    transcriptionLocale:
+      (legacySettings as { transcriptionLocale?: AppSettings['transcriptionLocale'] } | null)?.transcriptionLocale ??
+      defaultSettings.transcriptionLocale,
     deleteUploadedAudio: legacySettings?.deleteUploadedAudio ?? defaultSettings.deleteUploadedAudio,
     modelCatalogUrl: legacySettings?.modelCatalogUrl?.trim?.() ?? defaultSettings.modelCatalogUrl,
   };
@@ -383,6 +423,7 @@ async function getLocalAppSettings(): Promise<AppSettings> {
       storedPreferences?.selected_transcription_provider ?? defaultSettings.selectedTranscriptionProvider,
     selectedSummaryProvider: storedPreferences?.selected_summary_provider ?? defaultSettings.selectedSummaryProvider,
     providers,
+    transcriptionLocale: defaultSettings.transcriptionLocale,
     deleteUploadedAudio:
       storedPreferences?.delete_uploaded_audio != null
         ? Boolean(storedPreferences.delete_uploaded_audio)

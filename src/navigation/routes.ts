@@ -2,6 +2,9 @@ export const APP_TABS_ROUTE = '/(tabs)' as const;
 export const RECORD_TAB_ROUTE = '/(tabs)/record' as const;
 export const SETTINGS_TAB_ROUTE = '/(tabs)/settings' as const;
 export const LAYERS_ROUTE = '/layers' as const;
+export const LOCAL_MODELS_ROUTE = '/local-models' as const;
+export const DEBUG_LOGS_ROUTE = '/debug' as const;
+export const ONBOARDING_ROUTE = '/onboarding' as const;
 
 export function getMeetingDetailRoute(meetingId: string) {
   return `/meetings/${meetingId}`;

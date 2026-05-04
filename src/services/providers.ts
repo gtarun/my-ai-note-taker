@@ -117,6 +117,23 @@ export const providerDefinitions: ProviderDefinition[] = [
     summaryModels: ['deepseek-chat', 'deepseek-reasoner'],
   },
   {
+    id: 'nvidia',
+    label: 'NVIDIA',
+    description: 'NVIDIA NIM API catalog. Free tier credits. OpenAI-compatible summary.',
+    supportsTranscription: false,
+    supportsSummary: true,
+    usesOpenAICompatibleApi: true,
+    apiKeyPlaceholder: 'nvapi-...',
+    baseUrlPlaceholder: 'https://integrate.api.nvidia.com/v1',
+    transcriptionModels: [],
+    summaryModels: [
+      'meta/llama-3.3-70b-instruct',
+      'meta/llama-3.1-8b-instruct',
+      'nvidia/llama-3.1-nemotron-70b-instruct',
+      'mistralai/mixtral-8x22b-instruct-v0.1',
+    ],
+  },
+  {
     id: 'custom',
     label: 'Custom',
     description: 'Bring your own OpenAI-compatible endpoint.',
@@ -194,6 +211,12 @@ export const defaultProviderConfigs: Record<ProviderId, ProviderConfig> = {
     baseUrl: 'https://api.deepseek.com/v1',
     transcriptionModel: '',
     summaryModel: 'deepseek-chat',
+  },
+  nvidia: {
+    apiKey: '',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    transcriptionModel: '',
+    summaryModel: 'meta/llama-3.3-70b-instruct',
   },
   custom: {
     apiKey: '',

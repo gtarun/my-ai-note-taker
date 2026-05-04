@@ -2,14 +2,24 @@ import ExpoModulesCore
 import Foundation
 
 public class MuFathomLocalAIModule: Module {
+  // Combined analysis prompts emit JSON with summary + extraction values, which can
+  // exceed 600 tokens on a multi-field layer. 1024 keeps headroom for that and for
+  // the JSON repair pass (also bounded by this limit).
+  private let maxSummaryTokens: Int32 = 1024
   private let whisperRuntime = WhisperRuntime()
   private let summaryRuntime = SummaryRuntime()
   private let llamaRuntime = LlamaRuntime()
+  private let speechRecognizerRuntime = SpeechRecognizerRuntime()
+  private let liveTranscriptionSession = LiveTranscriptionSession()
   private let modelResolver = LocalModelResolver()
   private let audioNormalizer = AudioNormalizer()
 
   public func definition() -> ModuleDefinition {
     Name("MuFathomLocalAI")
+
+    // Streaming transcription emits this event roughly each time the recognizer
+    // updates its hypothesis. JS subscribers display the running text live.
+    Events("onLivePartialTranscript")
 
     AsyncFunction("getDeviceSupport") {
       return [
@@ -20,6 +30,30 @@ public class MuFathomLocalAIModule: Module {
         "requiresCustomBuild": false,
         "reason": Self.supportReason
       ]
+    }
+
+    // ─── Live (streaming) transcription ──────────────────────────────────
+    // Drives Apple Speech off a parallel mic tap while expo-audio records to
+    // disk. By the time the user stops, the transcript is essentially done.
+
+    AsyncFunction("startLiveTranscription") { [weak self] (params: LiveTranscribeStartParams) in
+      guard let self = self else { return }
+      let locale = params.locale.trimmingCharacters(in: .whitespacesAndNewlines)
+      let resolvedLocale = locale.isEmpty ? "en-US" : locale
+      try await self.liveTranscriptionSession.start(locale: resolvedLocale) { [weak self] partial in
+        // Bounce to the main actor so JS subscribers see updates on the JS
+        // thread rather than whatever queue Speech is calling us back on.
+        self?.sendEvent("onLivePartialTranscript", ["transcript": partial])
+      }
+    }
+
+    AsyncFunction("stopLiveTranscription") { [weak self] () -> String in
+      guard let self = self else { return "" }
+      return try await self.liveTranscriptionSession.stop()
+    }
+
+    AsyncFunction("cancelLiveTranscription") { [weak self] in
+      self?.liveTranscriptionSession.cancel()
     }
 
     AsyncFunction("transcribe") { (params: LocalTranscribeParams) -> String in
@@ -33,9 +67,26 @@ public class MuFathomLocalAIModule: Module {
         throw Exception(name: "E_LOCAL_TRANSCRIBE_MODEL", description: "Missing local transcription model ID.")
       }
 
+      // Apple Speech path — system-provided, no model file on disk, ANE-accelerated.
+      // Used by default for English meetings on iOS 17+; whisper.cpp stays as the
+      // fallback for power users / non-English locales / older devices.
+      if modelId == SpeechRecognizerRuntime.modelId {
+        let locale = params.locale.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedLocale = locale.isEmpty ? "en-US" : locale
+        return try await speechRecognizerRuntime.transcribe(
+          audioUri: audioUri,
+          locale: resolvedLocale
+        )
+      }
+
       let modelPath = try modelResolver.resolveWhisperBasePath(for: modelId)
       let normalizedAudio = try audioNormalizer.normalizeForWhisper(inputUri: audioUri)
-      let transcript = try whisperRuntime.transcribe(samples: normalizedAudio, modelPath: modelPath)
+      let language = params.language.trimmingCharacters(in: .whitespacesAndNewlines)
+      let transcript = try whisperRuntime.transcribe(
+        samples: normalizedAudio,
+        modelPath: modelPath,
+        language: language
+      )
       let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
 
       guard !trimmedTranscript.isEmpty else {
@@ -64,7 +115,7 @@ public class MuFathomLocalAIModule: Module {
 
       switch engine {
       case "llama.cpp":
-        return try await llamaRuntime.generate(prompt: prompt, modelPath: modelPath, maxTokens: 1024)
+        return try await llamaRuntime.generate(prompt: prompt, modelPath: modelPath, maxTokens: maxSummaryTokens)
       case "mediapipe-llm", "litert-lm":
         return try summaryRuntime.summarize(prompt: prompt, modelPath: modelPath)
       default:
@@ -93,6 +144,22 @@ struct LocalTranscribeParams: Record {
 
   @Field
   var modelId: String = ""
+
+  /// BCP-47 locale tag for Apple Speech (e.g. `en-US`, `hi-IN`). Empty
+  /// string defaults to en-US.
+  @Field
+  var locale: String = ""
+
+  /// ISO 639-1 language code for whisper.cpp (e.g. `en`, `hi`, `pa`). Empty
+  /// string is the sentinel for "let whisper auto-detect language".
+  @Field
+  var language: String = ""
+}
+
+struct LiveTranscribeStartParams: Record {
+  /// BCP-47 locale tag for the streaming recognizer. Empty defaults to en-US.
+  @Field
+  var locale: String = ""
 }
 
 struct LocalSummarizeParams: Record {

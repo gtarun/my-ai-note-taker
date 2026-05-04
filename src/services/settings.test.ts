@@ -133,6 +133,7 @@ vi.mock('./cloudUserData', async () => {
 });
 
 vi.mock('./localInference', () => ({
+  APPLE_SPEECH_MODEL_ID: 'apple-speech-recognizer',
   getLocalDeviceSupport: mockGetLocalDeviceSupport,
 }));
 
@@ -180,6 +181,7 @@ describe('settings persistence', () => {
       selectedTranscriptionProvider: 'openai',
       selectedSummaryProvider: 'openai',
       providers: structuredClone(defaultProviderConfigs),
+      transcriptionLocale: 'en-US',
       deleteUploadedAudio: false,
       modelCatalogUrl: 'https://catalog.example.com',
     };
@@ -221,6 +223,7 @@ describe('settings persistence', () => {
 
     await expect(getAppSettings()).resolves.toMatchObject({
       selectedSummaryProvider: 'groq',
+      transcriptionLocale: 'en-US',
       deleteUploadedAudio: true,
       providers: {
         groq: expect.objectContaining({ apiKey: 'groq-key' }),
@@ -234,6 +237,7 @@ describe('settings persistence', () => {
       selectedTranscriptionProvider: 'local',
       selectedSummaryProvider: 'local',
       providers: structuredClone(defaultProviderConfigs),
+      transcriptionLocale: 'en-US',
       deleteUploadedAudio: false,
       modelCatalogUrl: '',
     };
@@ -298,6 +302,7 @@ describe('settings persistence', () => {
       selectedTranscriptionProvider: 'local',
       selectedSummaryProvider: 'local',
       providers: structuredClone(defaultProviderConfigs),
+      transcriptionLocale: 'en-US',
       deleteUploadedAudio: false,
       modelCatalogUrl: '',
     };

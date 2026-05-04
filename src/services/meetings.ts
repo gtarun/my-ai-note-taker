@@ -2,16 +2,19 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { DocumentPickerAsset } from 'expo-document-picker';
 
 import { getDatabase, mapMeetingRow } from '../db';
-import { SummaryPayload, type MeetingExtractionStatus, type MeetingRow } from '../types';
+import { SummaryPayload, type MeetingExtractionStatus, type MeetingRow, type ProviderId } from '../types';
 import { getAudioDirectory } from './bootstrap';
-import { extractStructuredData, summarizeTranscript, transcribeAudio } from './ai';
+import { extractStructuredData, summarizeAndExtractTranscript, summarizeTranscript, transcribeAudio } from './ai';
+import { addAppLog, runLoggedStep } from './appLogs';
 import { getExtractionLayer } from './extractionLayers';
 import { appendExtractionLayerRow } from './googleSheets';
-import { getInstalledModel } from './localModels';
+import { getInstalledModel, getInstalledModels } from './localModels';
 import {
   IOS_LOCAL_SUMMARY_FALLBACK_REQUIRED_ERROR,
   IOS_LOCAL_SUMMARY_UNAVAILABLE_ERROR,
   getLocalDeviceSupport,
+  isLocalCombinedAnalysisRetryable,
+  resolveTranscriptionPlan,
 } from './localInference';
 import { isProviderConfigured, providerDefinitions } from './providers';
 import { getAppSettings } from './settings';
@@ -20,7 +23,71 @@ type RecordingInput = {
   uri: string;
   title: string;
   durationMs: number;
+  /** Transcript captured live during recording. When set, processMeeting
+   *  skips the transcription stage and goes straight to summary. */
+  preTranscribedText?: string | null;
 };
+
+/**
+ * Progress events fired by `processMeeting` so the UI can render a live status
+ * card while processing runs. `state: 'started'` and `state: 'finished'` always
+ * come in pairs for each phase that actually executes.
+ *
+ * `transcription:finished` carries an optional `qualityWarning` when the
+ * produced transcript looks suspiciously short for the audio length — this
+ * commonly happens on iOS when whisper rejects most segments due to noise or
+ * config issues, and we want the user to see that fast.
+ */
+export type ProcessMeetingProgressEvent =
+  | { phase: 'preparing' }
+  | { phase: 'transcription'; state: 'started'; providerId: ProviderId; modelId: string }
+  | {
+      phase: 'transcription';
+      state: 'finished';
+      durationMs: number;
+      transcriptLength: number;
+      qualityWarning: string | null;
+    }
+  | {
+      phase: 'summary';
+      state: 'started';
+      providerId: ProviderId;
+      modelId: string;
+      combined: boolean;
+    }
+  | { phase: 'summary'; state: 'finished'; durationMs: number; combined: boolean }
+  | { phase: 'extraction'; state: 'started'; fieldCount: number }
+  | { phase: 'extraction'; state: 'finished' }
+  | { phase: 'complete' };
+
+export type ProcessMeetingOptions = {
+  layerId?: string | null;
+  onProgress?: (event: ProcessMeetingProgressEvent) => void;
+};
+
+/** Min characters per second of audio before we flag the transcript as short. */
+const TRANSCRIPT_QUALITY_MIN_CHARS_PER_SECOND = 4;
+/** Min audio duration before applying the quality heuristic — short clips are noisy. */
+const TRANSCRIPT_QUALITY_MIN_AUDIO_MS = 8000;
+
+function buildTranscriptQualityWarning(
+  transcriptLength: number,
+  audioDurationMs: number
+): string | null {
+  if (audioDurationMs < TRANSCRIPT_QUALITY_MIN_AUDIO_MS) {
+    return null;
+  }
+
+  const audioSeconds = audioDurationMs / 1000;
+  const charsPerSecond = transcriptLength / audioSeconds;
+
+  if (charsPerSecond >= TRANSCRIPT_QUALITY_MIN_CHARS_PER_SECOND) {
+    return null;
+  }
+
+  const seconds = Math.round(audioSeconds);
+  return `Transcript looks unusually short (${transcriptLength} characters for ${seconds}s of audio). The recording may be quiet, contain mostly silence, or the local model may have rejected segments. Try a clearer recording or switch to a cloud transcription provider for this meeting.`;
+}
 
 const AUDIO_READABILITY_ATTEMPTS = 3;
 const AUDIO_READABILITY_RETRY_MS = 150;
@@ -48,6 +115,14 @@ export async function createMeetingFromRecording(input: RecordingInput): Promise
     durationMs: input.durationMs,
     sourceType: 'recording',
   });
+  const preTranscript = input.preTranscribedText?.trim();
+  if (preTranscript) {
+    // Persist the live transcript immediately so processMeeting can skip
+    // straight to summary. The meeting status stays 'local_only' — the user
+    // still has to tap Run, and we want them to get a summary, not just a
+    // raw transcript.
+    await updateTranscript(id, preTranscript);
+  }
   return { id, audioUri };
 }
 
@@ -62,18 +137,55 @@ export async function createMeetingFromImport(asset: DocumentPickerAsset) {
   });
 }
 
-export async function processMeeting(id: string, options: { layerId?: string | null } = {}) {
+export async function processMeeting(id: string, options: ProcessMeetingOptions = {}) {
   const meeting = await getMeeting(id);
 
   if (!meeting) {
     throw new Error('Meeting not found.');
   }
 
+  // Wrap onProgress so caller errors can't tear down processing.
+  const emitProgress = (event: ProcessMeetingProgressEvent) => {
+    if (!options.onProgress) return;
+    try {
+      options.onProgress(event);
+    } catch {
+      // Progress is observation-only; never abort processing on listener errors.
+    }
+  };
+
+  emitProgress({ phase: 'preparing' });
+
+  await addAppLog({
+    scope: 'meeting.process',
+    message: 'Processing requested',
+    metadata: {
+      meetingId: id,
+      currentStatus: meeting.status,
+      layerId: options.layerId ?? null,
+      sourceType: meeting.sourceType,
+      durationMs: meeting.durationMs,
+    },
+  });
+
   const settings = await getAppSettings();
   const transcriptionProvider = settings.providers[settings.selectedTranscriptionProvider];
   const { providerId: summaryProviderId, provider: summaryProvider } =
     await resolveSummaryProviderForCurrentDevice(settings);
   const layer = options.layerId ? await getExtractionLayer(options.layerId) : null;
+  await addAppLog({
+    scope: 'meeting.process',
+    message: 'Resolved processing route',
+    metadata: {
+      meetingId: id,
+      transcriptionProviderId: settings.selectedTranscriptionProvider,
+      transcriptionModelId: transcriptionProvider.transcriptionModel,
+      summaryProviderId,
+      summaryModelId: summaryProvider.summaryModel,
+      layerId: layer?.id ?? null,
+      fieldCount: layer?.fields.length ?? 0,
+    },
+  });
 
   if (!isProviderConfigured(settings.selectedTranscriptionProvider, transcriptionProvider, 'transcription')) {
     throw new Error('Configure the selected transcription provider in Settings first.');
@@ -83,9 +195,35 @@ export async function processMeeting(id: string, options: { layerId?: string | n
     throw new Error('Configure the selected summary provider in Settings first.');
   }
 
+  // For local transcription, factor in the user's preferred locale to choose
+  // the right (model, engine, language) plan. May override the user's saved
+  // local model when their locale demands a multilingual whisper variant.
+  let resolvedTranscriptionModelId = transcriptionProvider.transcriptionModel;
+  let resolvedAppleSpeechLocale: string | null = null;
+  let resolvedWhisperLanguage: string | null = null;
+
   if (settings.selectedTranscriptionProvider === 'local') {
-    const installedModel = await getInstalledModel(transcriptionProvider.transcriptionModel);
+    const installed = await getInstalledModels();
+    const plan = resolveTranscriptionPlan({
+      selectedModelId: transcriptionProvider.transcriptionModel,
+      locale: settings.transcriptionLocale,
+      installedModelIds: installed.map((row) => row.id),
+    });
+    resolvedTranscriptionModelId = plan.modelId;
+    resolvedAppleSpeechLocale = plan.appleSpeechLocale;
+    resolvedWhisperLanguage = plan.whisperLanguage;
+
+    const installedModel = await getInstalledModel(plan.modelId);
     if (!installedModel || installedModel.status !== 'installed') {
+      // Tailor the error to the locale so the fix is obvious. For non-English
+      // we recommend whisper-small specifically.
+      const needsWhisperSmall =
+        plan.modelId === 'whisper-small' && settings.transcriptionLocale !== 'en-US';
+      if (needsWhisperSmall) {
+        throw new Error(
+          `${settings.transcriptionLocale === 'auto' ? 'Mixed-language' : settings.transcriptionLocale} transcription needs Whisper Small. Download it from Local models, then try again.`
+        );
+      }
       throw new Error('Download and install the selected local transcription model first.');
     }
   }
@@ -103,33 +241,242 @@ export async function processMeeting(id: string, options: { layerId?: string | n
 
   try {
     await ensureAudioFileReadable(meeting.audioUri);
-    await clearMeetingProcessingArtifacts(id);
-    await updateMeetingStatus(
-      id,
-      settings.selectedTranscriptionProvider === 'local' ? 'transcribing_local' : 'transcribing',
-      null
-    );
-    const transcriptText = await transcribeAudio({
-      providerId: settings.selectedTranscriptionProvider,
-      provider: transcriptionProvider,
-      audioUri: meeting.audioUri,
-    });
 
-    await updateTranscript(id, transcriptText);
-    await updateMeetingStatus(
-      id,
-      summaryProviderId === 'local' ? 'summarizing_local' : 'summarizing',
-      null
-    );
+    // If the live recognizer captured a transcript during recording AND this
+    // meeting hasn't been processed yet, reuse it instead of paying for a
+    // post-stop transcription pass. Re-runs (status !== 'local_only') always
+    // re-transcribe so the user can recover from a bad live capture.
+    const hasUsableLiveTranscript =
+      meeting.status === 'local_only' &&
+      typeof meeting.transcriptText === 'string' &&
+      meeting.transcriptText.trim().length > 0;
 
-    const summary = await summarizeTranscript({
+    let transcriptText: string;
+
+    if (hasUsableLiveTranscript) {
+      transcriptText = meeting.transcriptText!.trim();
+      // Don't clear the transcript — we're about to summarize it.
+      await updateMeetingStatus(
+        id,
+        summaryProviderId === 'local' ? 'summarizing_local' : 'summarizing',
+        null
+      );
+      emitProgress({
+        phase: 'transcription',
+        state: 'started',
+        providerId: 'local',
+        modelId: 'apple-speech-recognizer',
+      });
+      emitProgress({
+        phase: 'transcription',
+        state: 'finished',
+        durationMs: 0,
+        transcriptLength: transcriptText.length,
+        qualityWarning: buildTranscriptQualityWarning(transcriptText.length, meeting.durationMs),
+      });
+      await addAppLog({
+        scope: 'meeting.transcription',
+        message: 'Reused live transcript from recording',
+        metadata: {
+          meetingId: id,
+          transcriptLength: transcriptText.length,
+        },
+      });
+    } else {
+      await clearMeetingProcessingArtifacts(id);
+      await updateMeetingStatus(
+        id,
+        settings.selectedTranscriptionProvider === 'local' ? 'transcribing_local' : 'transcribing',
+        null
+      );
+      emitProgress({
+        phase: 'transcription',
+        state: 'started',
+        providerId: settings.selectedTranscriptionProvider,
+        modelId: resolvedTranscriptionModelId,
+      });
+      const transcriptionStartedAt = Date.now();
+      transcriptText = await runLoggedStep(
+        {
+          scope: 'meeting.transcription',
+          message: 'Transcription',
+          metadata: {
+            meetingId: id,
+            providerId: settings.selectedTranscriptionProvider,
+            modelId: resolvedTranscriptionModelId,
+            transcriptionLocale: settings.transcriptionLocale,
+          },
+        },
+        () =>
+          transcribeAudio({
+            providerId: settings.selectedTranscriptionProvider,
+            // Override the saved model with the resolved one when the locale
+            // demanded a multilingual whisper variant.
+            provider: {
+              ...transcriptionProvider,
+              transcriptionModel: resolvedTranscriptionModelId,
+            },
+            audioUri: meeting.audioUri,
+            appleSpeechLocale: resolvedAppleSpeechLocale,
+            whisperLanguage: resolvedWhisperLanguage,
+          })
+      );
+
+      const qualityWarning = buildTranscriptQualityWarning(transcriptText.length, meeting.durationMs);
+      if (qualityWarning) {
+        await addAppLog({
+          level: 'warn',
+          scope: 'meeting.transcription',
+          message: 'Transcript looks short for audio length',
+          metadata: {
+            meetingId: id,
+            transcriptLength: transcriptText.length,
+            audioDurationMs: meeting.durationMs,
+          },
+        });
+      }
+      emitProgress({
+        phase: 'transcription',
+        state: 'finished',
+        durationMs: Date.now() - transcriptionStartedAt,
+        transcriptLength: transcriptText.length,
+        qualityWarning,
+      });
+
+      await updateTranscript(id, transcriptText);
+      await updateMeetingStatus(
+        id,
+        summaryProviderId === 'local' ? 'summarizing_local' : 'summarizing',
+        null
+      );
+    }
+
+    if (layer && summaryProviderId === 'local') {
+      await saveMeetingExtractionResult(id, {
+        layerId: layer.id,
+        layerName: layer.name,
+        fields: layer.fields,
+        values: Object.fromEntries(layer.fields.map((field) => [field.id, ''])),
+        extractionStatus: 'extracting',
+        extractionErrorMessage: null,
+        syncStatus: 'not_synced',
+        syncErrorMessage: null,
+        syncedAt: null,
+        syncedRowId: null,
+      });
+
+      try {
+        emitProgress({
+          phase: 'summary',
+          state: 'started',
+          providerId: summaryProviderId,
+          modelId: summaryProvider.summaryModel,
+          combined: true,
+        });
+        const combinedStartedAt = Date.now();
+        const { summary, extractedValues } = await runLoggedStep(
+          {
+            scope: 'meeting.local-analysis',
+            message: 'Combined local summary and extraction',
+            metadata: {
+              meetingId: id,
+              providerId: summaryProviderId,
+              modelId: summaryProvider.summaryModel,
+              transcriptLength: transcriptText.length,
+              fieldCount: layer.fields.length,
+            },
+          },
+          () =>
+            summarizeAndExtractTranscript({
+              providerId: summaryProviderId,
+              provider: summaryProvider,
+              transcriptText,
+              fields: layer.fields,
+            })
+        );
+
+        await saveSummary(id, summary);
+        await updateMeetingStatus(id, 'ready', null);
+        await saveMeetingExtractionResult(id, {
+          layerId: layer.id,
+          layerName: layer.name,
+          fields: layer.fields,
+          values: extractedValues,
+          extractionStatus: 'ready',
+          extractionErrorMessage: null,
+          syncStatus: 'not_synced',
+          syncErrorMessage: null,
+          syncedAt: null,
+          syncedRowId: null,
+        });
+        emitProgress({
+          phase: 'summary',
+          state: 'finished',
+          durationMs: Date.now() - combinedStartedAt,
+          combined: true,
+        });
+        emitProgress({ phase: 'complete' });
+        await addAppLog({
+          scope: 'meeting.process',
+          message: 'Processing finished',
+          metadata: { meetingId: id, usedCombinedLocalAnalysis: true },
+        });
+        return;
+      } catch (combinedError) {
+        if (!isLocalCombinedAnalysisRetryable(combinedError)) {
+          // Setup/runtime errors (missing model, runtime unavailable, audio
+          // failure, etc.) will hit the same error in the two-pass flow. Rethrow
+          // so the user sees the real failure once instead of waiting twice.
+          throw combinedError;
+        }
+        await addAppLog({
+          level: 'warn',
+          scope: 'meeting.local-analysis',
+          message: 'Combined local analysis fell back to two-pass flow',
+          metadata: {
+            meetingId: id,
+            error: combinedError instanceof Error ? combinedError.message : String(combinedError),
+          },
+        });
+        // Fall through to the older two-pass flow if the compact local prompt is not accepted.
+      }
+    }
+
+    emitProgress({
+      phase: 'summary',
+      state: 'started',
       providerId: summaryProviderId,
-      provider: summaryProvider,
-      transcriptText,
+      modelId: summaryProvider.summaryModel,
+      combined: false,
     });
+    const summaryStartedAt = Date.now();
+    const summary = await runLoggedStep(
+      {
+        scope: 'meeting.summary',
+        message: 'Summary',
+        metadata: {
+          meetingId: id,
+          providerId: summaryProviderId,
+          modelId: summaryProvider.summaryModel,
+          transcriptLength: transcriptText.length,
+        },
+      },
+      () =>
+        summarizeTranscript({
+          providerId: summaryProviderId,
+          provider: summaryProvider,
+          transcriptText,
+        })
+    );
 
     await saveSummary(id, summary);
     await updateMeetingStatus(id, 'ready', null);
+    emitProgress({
+      phase: 'summary',
+      state: 'finished',
+      durationMs: Date.now() - summaryStartedAt,
+      combined: false,
+    });
 
     if (layer) {
       await saveMeetingExtractionResult(id, {
@@ -146,12 +493,27 @@ export async function processMeeting(id: string, options: { layerId?: string | n
       });
 
       try {
-        const extractedValues = await extractStructuredData({
-          providerId: summaryProviderId,
-          provider: summaryProvider,
-          transcriptText,
-          fields: layer.fields,
-        });
+        emitProgress({ phase: 'extraction', state: 'started', fieldCount: layer.fields.length });
+        const extractedValues = await runLoggedStep(
+          {
+            scope: 'meeting.extraction',
+            message: 'Structured extraction',
+            metadata: {
+              meetingId: id,
+              providerId: summaryProviderId,
+              modelId: summaryProvider.summaryModel,
+              transcriptLength: transcriptText.length,
+              fieldCount: layer.fields.length,
+            },
+          },
+          () =>
+            extractStructuredData({
+              providerId: summaryProviderId,
+              provider: summaryProvider,
+              transcriptText,
+              fields: layer.fields,
+            })
+        );
 
         await saveMeetingExtractionResult(id, {
           layerId: layer.id,
@@ -165,6 +527,7 @@ export async function processMeeting(id: string, options: { layerId?: string | n
           syncedAt: null,
           syncedRowId: null,
         });
+        emitProgress({ phase: 'extraction', state: 'finished' });
       } catch (error) {
         await saveMeetingExtractionResult(id, {
           layerId: layer.id,
@@ -180,8 +543,23 @@ export async function processMeeting(id: string, options: { layerId?: string | n
         });
       }
     }
+    emitProgress({ phase: 'complete' });
+    await addAppLog({
+      scope: 'meeting.process',
+      message: 'Processing finished',
+      metadata: { meetingId: id },
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown processing error.';
+    await addAppLog({
+      level: 'error',
+      scope: 'meeting.process',
+      message: 'Processing failed',
+      metadata: {
+        meetingId: id,
+        error: message,
+      },
+    });
     await updateMeetingStatus(id, 'failed', message);
     throw error;
   }

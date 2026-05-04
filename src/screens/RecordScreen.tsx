@@ -45,7 +45,7 @@ export default function RecordScreen() {
     });
   }, []);
 
-  const { phase, titleDraft, durationMillis } = sessionSnapshot;
+  const { phase, titleDraft, durationMillis, liveTranscript, liveTranscriptionEnabled } = sessionSnapshot;
 
   const handleRecordToggle = async () => {
     if (phase === 'recording') {
@@ -133,6 +133,25 @@ export default function RecordScreen() {
           </SurfaceCard>
         </FadeInView>
 
+        {liveTranscriptionEnabled && phase === 'recording' ? (
+          <FadeInView delay={100}>
+            <SurfaceCard muted style={styles.liveTranscriptCard}>
+              <View style={styles.liveTranscriptHeader}>
+                <View style={styles.liveDot} />
+                <Text style={styles.liveTranscriptLabel}>LIVE — ON DEVICE</Text>
+              </View>
+              <Text
+                style={styles.liveTranscriptText}
+                accessibilityLabel={
+                  liveTranscript ? `Live transcript: ${liveTranscript}` : 'Listening for speech'
+                }
+              >
+                {liveTranscript || 'Listening — speak naturally; the transcript stays on this device.'}
+              </Text>
+            </SurfaceCard>
+          </FadeInView>
+        ) : null}
+
         <FadeInView delay={140}>
           <SurfaceCard muted style={styles.noticeGap}>
             <SectionHeading title={getNoticeTitle()} />
@@ -196,5 +215,34 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     fontSize: 15,
     marginTop: 4,
+  },
+  liveTranscriptCard: {
+    gap: 10,
+    borderLeftWidth: 2,
+    borderLeftColor: palette.accent,
+  },
+  liveTranscriptHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: palette.accent,
+  },
+  liveTranscriptLabel: {
+    color: palette.accent,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 11,
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
+  },
+  liveTranscriptText: {
+    color: palette.ink,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 15,
+    lineHeight: 22,
   },
 });

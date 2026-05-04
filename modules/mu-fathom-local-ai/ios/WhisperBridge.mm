@@ -212,6 +212,8 @@ NSString * CollectTranscriptText(struct whisper_context * context) {
   NSMutableString * transcript = [NSMutableString string];
   const int segmentCount = whisper_full_n_segments(context);
 
+  NSLog(@"%s: whisper produced %d segments", __func__, segmentCount);
+
   for (int index = 0; index < segmentCount; ++index) {
     const char * segmentText = whisper_full_get_segment_text(context, index);
     if (segmentText == nullptr) {
@@ -220,6 +222,10 @@ NSString * CollectTranscriptText(struct whisper_context * context) {
 
     NSString * segment = [NSString stringWithUTF8String:segmentText];
     if (segment.length > 0) {
+      // Log a short preview of each segment so failure modes are visible without
+      // exporting the full transcript. Only the first 60 chars to keep noise low.
+      NSString * preview = segment.length > 60 ? [segment substringToIndex:60] : segment;
+      NSLog(@"%s: segment %d: %@", __func__, index, preview);
       [transcript appendString:segment];
     }
   }
@@ -231,6 +237,7 @@ NSString * TranscribeNormalizedSamples(
   const float * samples,
   int sampleCount,
   NSString * modelPath,
+  NSString * language,
   NSError ** error
 ) {
   NSFileManager * fileManager = [NSFileManager defaultManager];
@@ -269,6 +276,13 @@ NSString * TranscribeNormalizedSamples(
     }
   } contextGuard = {context};
 
+  NSLog(
+    @"%s: whisper context loaded — multilingual=%d, n_vocab=%d",
+    __func__,
+    whisper_is_multilingual(context),
+    whisper_n_vocab(context)
+  );
+
   whisper_full_params params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
   params.n_threads = static_cast<int>(std::max(1u, std::min(4u, std::thread::hardware_concurrency())));
   params.translate = false;
@@ -280,8 +294,42 @@ NSString * TranscribeNormalizedSamples(
   params.print_realtime = false;
   params.print_timestamps = false;
   params.token_timestamps = false;
-  params.language = "auto";
-  params.detect_language = false;
+
+  // Language config:
+  //   - empty/whitespace `language` → auto-detect (used for "Mixed" mode in
+  //     Settings). This requires the multilingual model variant; whisper.cpp
+  //     will language-ID on the first 30s window then transcribe.
+  //   - explicit ISO 639-1 (`en`, `hi`, `pa`, …) → fixed language, no
+  //     detection step.
+  //
+  // Earlier we hard-coded `en` after a failed auto-detect attempt on quiet
+  // audio. The fix: only enable detection when the caller explicitly asked
+  // for it via empty `language`, and rely on the multilingual model
+  // (whisper-small handles this much better than whisper-base).
+  std::string trimmedLanguage = language.length > 0
+    ? std::string([[language stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] UTF8String])
+    : std::string();
+  static std::string sLanguageStorage;
+  if (trimmedLanguage.empty()) {
+    params.language = nullptr;
+    params.detect_language = true;
+  } else {
+    sLanguageStorage = trimmedLanguage;
+    params.language = sLanguageStorage.c_str();
+    params.detect_language = false;
+  }
+
+  NSLog(
+    @"%s: whisper params — language=%s, detect_language=%d",
+    __func__,
+    params.language ? params.language : "<auto>",
+    params.detect_language
+  );
+
+  // Leave whisper's default thresholds in place. Lowered thresholds were
+  // intended to keep more segments but in practice combined with the language
+  // detection failure to drop output entirely. Defaults: no_speech_thold=0.6,
+  // logprob_thold=-1.0, entropy_thold=2.4.
 
   const double durationSeconds = static_cast<double>(sampleCount) / 16000.0;
   double sumSquares = 0.0;
@@ -337,6 +385,7 @@ NSString * TranscribeNormalizedSamples(
 
 + (nullable NSString *)transcribeSamples:(NSData *)sampleData
                                modelPath:(NSString *)modelPath
+                                language:(NSString *)language
                                     error:(NSError * _Nullable * _Nullable)error {
   if (!ValidateNormalizedFloatSamples(sampleData, error)) {
     return nil;
@@ -344,11 +393,12 @@ NSString * TranscribeNormalizedSamples(
 
   const float * samples = static_cast<const float *>(sampleData.bytes);
   const int sampleCount = static_cast<int>(sampleData.length / sizeof(float));
-  return TranscribeNormalizedSamples(samples, sampleCount, modelPath, error);
+  return TranscribeNormalizedSamples(samples, sampleCount, modelPath, language ?: @"", error);
 }
 
 + (nullable NSString *)transcribeFileAtPath:(NSString *)audioPath
                                   modelPath:(NSString *)modelPath
+                                   language:(NSString *)language
                                       error:(NSError * _Nullable * _Nullable)error {
   NSFileManager * fileManager = [NSFileManager defaultManager];
   if (audioPath.length == 0 || ![fileManager fileExistsAtPath:audioPath]) {
@@ -376,7 +426,7 @@ NSString * TranscribeNormalizedSamples(
     return nil;
   }
 
-  return TranscribeNormalizedSamples(samples.data(), static_cast<int>(samples.size()), modelPath, error);
+  return TranscribeNormalizedSamples(samples.data(), static_cast<int>(samples.size()), modelPath, language ?: @"", error);
 }
 
 @end

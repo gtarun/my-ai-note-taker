@@ -4,8 +4,9 @@ import { Platform } from 'react-native';
 import { ExtractionLayerField, ProviderConfig, ProviderId, SummaryPayload } from '../types';
 import {
   IOS_LOCAL_TRANSCRIPTION_MODEL_ERROR,
-  IOS_LOCAL_TRANSCRIPTION_MODEL_ID,
+  IOS_LOCAL_TRANSCRIPTION_MODEL_IDS,
   extractLocalStructuredData,
+  summarizeAndExtractLocalTranscript,
   summarizeLocalTranscript,
   transcribeLocalAudio,
 } from './localInference';
@@ -15,6 +16,12 @@ type TranscribeParams = {
   providerId: ProviderId;
   provider: ProviderConfig;
   audioUri: string;
+  /** BCP-47 locale (e.g. "en-US", "hi-IN") for Apple Speech.
+   *  Optional; native side defaults to en-US. */
+  appleSpeechLocale?: string | null;
+  /** ISO 639-1 code (e.g. "en", "hi", "pa") for whisper.cpp.
+   *  null/undefined enables whisper auto-detect. */
+  whisperLanguage?: string | null;
 };
 
 type SummarizeParams = {
@@ -29,6 +36,8 @@ type ExtractParams = {
   transcriptText: string;
   fields: ExtractionLayerField[];
 };
+
+type SummarizeAndExtractParams = ExtractParams;
 
 const summaryJsonSchema = {
   type: 'object',
@@ -56,7 +65,7 @@ export async function transcribeAudio(params: TranscribeParams) {
   if (
     params.providerId === 'local' &&
     Platform.OS === 'ios' &&
-    params.provider.transcriptionModel.trim() !== IOS_LOCAL_TRANSCRIPTION_MODEL_ID
+    !IOS_LOCAL_TRANSCRIPTION_MODEL_IDS.has(params.provider.transcriptionModel.trim())
   ) {
     throw new Error(IOS_LOCAL_TRANSCRIPTION_MODEL_ERROR);
   }
@@ -65,6 +74,8 @@ export async function transcribeAudio(params: TranscribeParams) {
     return transcribeLocalAudio({
       audioUri: params.audioUri,
       modelId: params.provider.transcriptionModel,
+      locale: params.appleSpeechLocale ?? undefined,
+      language: params.whisperLanguage,
     });
   }
 
@@ -130,6 +141,33 @@ export async function extractStructuredData(params: ExtractParams): Promise<Reco
   }
 
   return normalizeExtractedValues(rawValues, params.fields);
+}
+
+export async function summarizeAndExtractTranscript(params: SummarizeAndExtractParams): Promise<{
+  summary: SummaryPayload;
+  extractedValues: Record<string, string>;
+}> {
+  if (!params.fields.length) {
+    return {
+      summary: await summarizeTranscript(params),
+      extractedValues: {},
+    };
+  }
+
+  if (params.providerId === 'local') {
+    return summarizeAndExtractLocalTranscript({
+      transcriptText: params.transcriptText,
+      modelId: params.provider.summaryModel,
+      fields: params.fields,
+    });
+  }
+
+  const [summary, extractedValues] = await Promise.all([
+    summarizeTranscript(params),
+    extractStructuredData(params),
+  ]);
+
+  return { summary, extractedValues };
 }
 
 async function transcribeOpenAICompatible(provider: ProviderConfig, audioUri: string) {

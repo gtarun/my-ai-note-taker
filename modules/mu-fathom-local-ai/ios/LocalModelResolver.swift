@@ -2,24 +2,55 @@ import ExpoModulesCore
 import Foundation
 
 struct LocalModelResolver {
-  private static let supportedTranscriptionModelId = "whisper-base"
+  /// Whisper variants the iOS bridge accepts. Keep in sync with
+  /// `IOS_SUPPORTED_TRANSCRIPTION_MODEL_IDS` in `localModels.ts` and
+  /// `IOS_LOCAL_TRANSCRIPTION_MODEL_IDS` in `localInference.ts`.
+  private static let supportedTranscriptionModelIds: Set<String> = [
+    "whisper-base",
+    "whisper-small",
+  ]
+
+  /// Map of catalog id → ggml file name pattern shipped on Hugging Face.
+  /// Used as a legacy fallback when older installs stored the file by its
+  /// upstream name instead of the catalog id.
+  private static let legacyFileNames: [String: String] = [
+    "whisper-base": "ggml-base.bin",
+    "whisper-small": "ggml-small.bin",
+  ]
 
   func resolveWhisperBasePath(for modelId: String) throws -> String {
-    guard modelId == Self.supportedTranscriptionModelId else {
+    let trimmedModelId = modelId.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    guard Self.supportedTranscriptionModelIds.contains(trimmedModelId) else {
+      let supported = Self.supportedTranscriptionModelIds.sorted().joined(separator: ", ")
       throw Exception(
         name: "E_LOCAL_TRANSCRIBE_MODEL_UNSUPPORTED",
-        description: "Only whisper-base is supported for local transcription on iOS in this phase."
+        description:
+          "This local transcription model is not supported on iOS in this build. Install one of: \(supported)."
       )
     }
 
     let modelsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
       .appendingPathComponent("models", isDirectory: true)
-    let candidateURLs = [
-      modelsDirectory.appendingPathComponent("\(modelId).bin"),
-      modelsDirectory.appendingPathComponent("ggml-base.bin"),
-      modelsDirectory.appendingPathComponent(modelId, isDirectory: true).appendingPathComponent("\(modelId).bin"),
-      modelsDirectory.appendingPathComponent(modelId, isDirectory: true).appendingPathComponent("ggml-base.bin"),
+    let legacyName = Self.legacyFileNames[trimmedModelId]
+
+    var candidateURLs: [URL] = [
+      // Default path used by the JS download code: models/{modelId}.bin
+      modelsDirectory.appendingPathComponent("\(trimmedModelId).bin"),
+      modelsDirectory.appendingPathComponent(trimmedModelId, isDirectory: true)
+        .appendingPathComponent("\(trimmedModelId).bin"),
     ]
+
+    // Legacy/upstream filename fallbacks (e.g. ggml-base.bin) for installs that
+    // predate the catalog-id naming convention.
+    if let legacyName {
+      candidateURLs.append(modelsDirectory.appendingPathComponent(legacyName))
+      candidateURLs.append(
+        modelsDirectory
+          .appendingPathComponent(trimmedModelId, isDirectory: true)
+          .appendingPathComponent(legacyName)
+      )
+    }
 
     if let installedModelURL = candidateURLs.first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
       return installedModelURL.path
@@ -27,7 +58,7 @@ struct LocalModelResolver {
 
     throw Exception(
       name: "E_LOCAL_TRANSCRIBE_MODEL_MISSING",
-      description: "whisper-base is not installed in the app documents/models directory."
+      description: "\(trimmedModelId) is not installed in the app documents/models directory."
     )
   }
 

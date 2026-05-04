@@ -129,6 +129,9 @@ export function mapBootstrapSnapshotToAppSettings(snapshot: CloudUserDataSnapsho
     deleteUploadedAudio: snapshot.preferences.deleteUploadedAudio,
     modelCatalogUrl: snapshot.preferences.modelCatalogUrl.trim(),
     providers,
+    // Cloud sync doesn't track this yet — it's a per-device preference for now.
+    // The local cache fills it from getDefaultSettings before persisting.
+    transcriptionLocale: 'en-US',
   };
 }
 
