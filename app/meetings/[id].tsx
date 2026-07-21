@@ -32,11 +32,14 @@ import { ScreenBackground } from '../../src/components/ScreenBackground';
 import {
   PillButton,
   PressableScale,
+  SegmentedTabs,
   SkeletonParagraph,
   Waveform,
 } from '../../src/components/ui';
 import {
+  MEETING_DELETE_WARNING,
   MEETING_DETAIL_TITLE_ACTION_SLOT_MIN_WIDTH,
+  buildMeetingShareText,
   getExtractionSyncLabel,
   getMeetingDetailActionItemsCopyText,
   getMeetingDetailDecisionsCopyText,
@@ -47,6 +50,7 @@ import {
   getMeetingDetailSummaryCopyText,
   getMeetingDetailTitleDraftState,
   getMeetingDetailTranscriptCopyText,
+  getMeetingStatusLabel,
   getPlaybackActionLabel,
   getProviderSetupDestination,
 } from '../../src/features/meetings/detailPresentation';
@@ -66,6 +70,10 @@ import {
   saveMeetingExtractionValues,
   syncMeetingExtractionResult,
 } from '../../src/services/meetings';
+import {
+  buildTranscriptTabs,
+  type TranscriptTabId,
+} from '../../src/features/meetings/englishRendering';
 import type { ExtractionLayer, MeetingRow, SummaryPayload } from '../../src/types';
 import { elevation, radii, spacing, type, typography } from '../../src/theme';
 import { formatDuration, formatTimestamp } from '../../src/utils/format';
@@ -91,6 +99,10 @@ export default function MeetingDetailScreen() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isLayerPickerVisible, setIsLayerPickerVisible] = useState(false);
   const [copiedSection, setCopiedSection] = useState<CopyableMeetingSection | null>(null);
+  // 'english' is the default: it is the version most people can read. When no
+  // English rendering exists, buildTranscriptTabs returns verbatim only and the
+  // active-tab lookup falls back to it.
+  const [transcriptTabId, setTranscriptTabId] = useState<TranscriptTabId>('english');
   const [progressState, setProgressState] = useState<MeetingProcessingProgressState | null>(null);
   const player = useAudioPlayer(meeting?.audioUri ?? null);
   const playerStatus = useAudioPlayerStatus(player);
@@ -229,7 +241,12 @@ export default function MeetingDetailScreen() {
 
     await Share.share({
       title: meeting.title,
-      message: buildShareText(meeting),
+      message: buildMeetingShareText({
+      title: meeting.title,
+      summary: parseSummary(meeting.summaryJson),
+      transcriptText: meeting.transcriptText,
+      transcriptEnglish: meeting.transcriptEnglish,
+    }),
     });
   };
 
@@ -254,7 +271,7 @@ export default function MeetingDetailScreen() {
       return;
     }
 
-    Alert.alert('Delete recording?', 'This removes the audio file, transcript, summary, and extracted data from this device.', [
+    Alert.alert('Delete recording?', MEETING_DELETE_WARNING, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -381,7 +398,15 @@ export default function MeetingDetailScreen() {
   const summaryCopyText = getMeetingDetailSummaryCopyText(summary);
   const actionItemsCopyText = getMeetingDetailActionItemsCopyText(summary);
   const decisionsCopyText = getMeetingDetailDecisionsCopyText(summary);
-  const transcriptCopyText = getMeetingDetailTranscriptCopyText(meeting.transcriptText);
+  const transcriptTabs = buildTranscriptTabs(meeting.transcriptText, meeting.transcriptEnglish);
+  // Falls back to the first tab whenever the active one disappears — re-running
+  // analysis clears the English rendering, and a dangling selection would show
+  // an empty section.
+  const activeTranscriptTab =
+    transcriptTabs.find((tab) => tab.id === transcriptTabId) ?? transcriptTabs[0] ?? null;
+  const transcriptCopyText = activeTranscriptTab
+    ? activeTranscriptTab.text
+    : getMeetingDetailTranscriptCopyText(meeting.transcriptText);
   const extractionRows =
     extraction?.fields.map((field) => ({
       id: field.id,
@@ -438,12 +463,21 @@ export default function MeetingDetailScreen() {
             {formatTimestamp(meeting.createdAt)}
             {meeting.durationMs ? ` • ${formatDuration(meeting.durationMs)}` : ''}
           </Text>
-          <View style={styles.statusWrap}>
-            <View style={styles.statusRow}>
-              <StatusIcon status={meeting.status} />
-              <Text style={styles.status}>Status: {meeting.status.replace(/_/g, ' ')}</Text>
+          {/*
+            Only while there is nothing better to show. During a run the
+            progress card below states the phase, and after a successful one the
+            sections themselves are the evidence — "Status: ready" above a
+            screen full of summary and transcript is a label for something the
+            reader can already see.
+          */}
+          {isBusy || meeting.status === 'ready' ? null : (
+            <View style={styles.statusWrap}>
+              <View style={styles.statusRow}>
+                <StatusIcon status={meeting.status} />
+                <Text style={styles.status}>{getMeetingStatusLabel(meeting.status)}</Text>
+              </View>
             </View>
-          </View>
+          )}
           {meeting.errorMessage ? <Text style={styles.errorText}>{meeting.errorMessage}</Text> : null}
         </FadeInView>
 
@@ -465,16 +499,14 @@ export default function MeetingDetailScreen() {
           </FadeInView>
         )}
 
+        {/*
+          The "Play recording" button that used to sit here was the second of
+          two controls for the same audio — the Recording section at the bottom
+          has a real transport with a waveform scrubber and timecodes. One of
+          them had to go, and a button that only toggles play/pause is the
+          lesser of the two.
+        */}
         <FadeInView style={styles.secondaryActions} delay={90}>
-          <Pressable style={styles.secondaryButton} onPress={handlePlaybackToggle}>
-            <Feather
-              name={playerStatus.playing ? 'pause-circle' : 'play-circle'}
-              size={17}
-              color={palette.ink}
-            />
-            <Text style={styles.secondaryButtonText}>{getPlaybackActionLabel(playerStatus.playing)}</Text>
-          </Pressable>
-
           <Pressable style={styles.secondaryButton} onPress={handleShare}>
             <Feather name="share-2" size={17} color={palette.ink} />
             <Text style={styles.secondaryButtonText}>Share</Text>
@@ -655,7 +687,31 @@ export default function MeetingDetailScreen() {
           isCopied={copiedSection === 'transcript'}
           onCopyPress={() => handleCopySection('transcript', transcriptCopyText)}
         >
-          <Text style={styles.transcriptText}>{transcriptCopyText}</Text>
+          {/*
+            Copy follows the visible tab. Copying the verbatim Hindi while the
+            English is on screen would be a quiet way to paste the wrong thing
+            into an email.
+          */}
+          <SegmentedTabs
+            options={transcriptTabs.map((tab) => ({ id: tab.id, label: tab.label }))}
+            activeId={activeTranscriptTab?.id ?? 'verbatim'}
+            onChange={(id) => setTranscriptTabId(id as TranscriptTabId)}
+            accessibilityLabel="Transcript version"
+          />
+
+          {isBusy && !meeting.transcriptText ? (
+            <SkeletonParagraph lines={6} />
+          ) : (
+            <Text style={styles.transcriptText}>
+              {activeTranscriptTab?.text || 'No transcript yet.'}
+            </Text>
+          )}
+
+          {activeTranscriptTab?.id === 'english' ? (
+            <Text style={styles.tabNote}>
+              Translated and tidied by AI. Check the exact words before quoting anyone.
+            </Text>
+          ) : null}
         </Section>
 
         <Section title="Recording" delay={240}>
@@ -705,9 +761,7 @@ export default function MeetingDetailScreen() {
 
         <FadeInView style={styles.dangerZone} delay={270}>
           <Text style={styles.dangerZoneTitle}>Delete meeting</Text>
-          <Text style={styles.dangerZoneBody}>
-            This permanently removes the audio file, transcript, summary, and extracted data from this device.
-          </Text>
+          <Text style={styles.dangerZoneBody}>{MEETING_DELETE_WARNING}</Text>
           <Pressable style={styles.dangerButton} onPress={handleDelete} disabled={isDeleting}>
             <Feather name="trash-2" size={16} color={palette.danger} />
             <Text style={styles.dangerButtonText}>{isDeleting ? 'Deleting…' : 'Delete meeting'}</Text>
@@ -865,23 +919,6 @@ function parseSummary(summaryJson: string | null): SummaryPayload | null {
   }
 }
 
-function buildShareText(meeting: MeetingRow) {
-  const summary = parseSummary(meeting.summaryJson);
-  const actionItems = summary?.actionItems?.length
-    ? summary.actionItems.map((item) => `- ${item}`).join('\n')
-    : '- None';
-
-  return `${meeting.title}
-
-Summary
-${summary?.summary || 'No summary yet.'}
-
-Action items
-${actionItems}
-
-Transcript
-${meeting.transcriptText || 'No transcript yet.'}`;
-}
 
 function getMeetingDetailScreenOptions(
   headerPresentation: ReturnType<typeof getMeetingDetailHeaderPresentation>,
@@ -1221,6 +1258,11 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   listText: {
     color: palette.ink,
     ...type.body,
+  },
+  tabNote: {
+    ...typography.body,
+    ...type.caption,
+    color: palette.faintInk,
   },
   transcriptText: {
     color: palette.ink,

@@ -51,6 +51,9 @@ export type MeetingRow = {
   sourceType: 'recording' | 'import';
   status: MeetingStatus;
   transcriptText: string | null;
+  /** Clean English reading of `transcriptText`, produced during Analyze.
+   *  null means it was never generated — not that it came back empty. */
+  transcriptEnglish: string | null;
   summaryJson: string | null;
   summaryShort: string | null;
   errorMessage: string | null;

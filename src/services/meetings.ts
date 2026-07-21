@@ -2,9 +2,22 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { DocumentPickerAsset } from 'expo-document-picker';
 
 import { getDatabase, mapMeetingRow } from '../db';
-import { SummaryPayload, type MeetingExtractionStatus, type MeetingRow, type ProviderId } from '../types';
+import { splitTranscriptIntoChunks } from '../features/meetings/englishRendering';
+import {
+  SummaryPayload,
+  type MeetingExtractionStatus,
+  type MeetingRow,
+  type ProviderConfig,
+  type ProviderId,
+} from '../types';
 import { getAudioDirectory } from './bootstrap';
-import { extractStructuredData, summarizeAndExtractTranscript, summarizeTranscript, transcribeAudio } from './ai';
+import {
+  extractStructuredData,
+  summarizeAndExtractTranscript,
+  summarizeTranscript,
+  transcribeAudio,
+  translateTranscriptToEnglish,
+} from './ai';
 import { addAppLog, runLoggedStep } from './appLogs';
 import { getExtractionLayer } from './extractionLayers';
 import { appendExtractionLayerRow } from './googleSheets';
@@ -56,6 +69,8 @@ export type ProcessMeetingProgressEvent =
       combined: boolean;
     }
   | { phase: 'summary'; state: 'finished'; durationMs: number; combined: boolean }
+  | { phase: 'english'; state: 'started'; chunkCount: number }
+  | { phase: 'english'; state: 'finished' }
   | { phase: 'extraction'; state: 'started'; fieldCount: number }
   | { phase: 'extraction'; state: 'finished' }
   | { phase: 'complete' };
@@ -428,6 +443,13 @@ export async function processMeeting(id: string, options: ProcessMeetingOptions 
           durationMs: Date.now() - combinedStartedAt,
           combined: true,
         });
+        await generateEnglishTranscript(
+          id,
+          transcriptText,
+          summaryProviderId,
+          summaryProvider,
+          emitProgress
+        );
         emitProgress({ phase: 'complete' });
         await addAppLog({
           scope: 'meeting.process',
@@ -490,6 +512,8 @@ export async function processMeeting(id: string, options: ProcessMeetingOptions 
       durationMs: Date.now() - summaryStartedAt,
       combined: false,
     });
+
+    await generateEnglishTranscript(id, transcriptText, summaryProviderId, summaryProvider, emitProgress);
 
     if (layer) {
       await saveMeetingExtractionResult(id, {
@@ -805,6 +829,10 @@ async function replaceTranscriptAndClearStaleSummary(id: string, transcriptText:
   await db.runAsync(
     `UPDATE meetings SET
       transcript_text = ?,
+      -- Derived from the transcript being replaced, so it is stale by
+      -- definition. Leaving it would show an English tab describing a
+      -- conversation the verbatim tab no longer contains.
+      transcript_english = NULL,
       summary_json = NULL,
       summary_short = NULL,
       error_message = NULL,
@@ -821,6 +849,90 @@ async function replaceTranscriptAndClearStaleSummary(id: string, transcriptText:
       updated_at = ?
     WHERE id = ?`,
     transcriptText,
+    new Date().toISOString(),
+    id
+  );
+}
+
+/**
+ * Produce and store the clean English reading of the transcript.
+ *
+ * Deliberately swallows its own failure. By the time this runs the transcript
+ * and summary are already saved and the meeting is 'ready' — the English
+ * rendering is a second view of work that already succeeded, so a rate limit or
+ * a dropped connection here must not turn a usable meeting into a failed one.
+ * The error goes to the log and the section falls back to a single tab.
+ *
+ * Skipped for local providers: this build has no on-device summary runtime on
+ * iOS, so there is nothing to translate with.
+ */
+async function generateEnglishTranscript(
+  id: string,
+  transcriptText: string,
+  summaryProviderId: ProviderId,
+  summaryProvider: ProviderConfig,
+  emitProgress: (event: ProcessMeetingProgressEvent) => void
+): Promise<void> {
+  if (!shouldGenerateEnglishTranscript(summaryProviderId)) {
+    return;
+  }
+
+  const chunkCount = splitTranscriptIntoChunks(transcriptText).length;
+
+  if (chunkCount === 0) {
+    return;
+  }
+
+  try {
+    emitProgress({ phase: 'english', state: 'started', chunkCount });
+    const english = await runLoggedStep(
+      {
+        scope: 'meeting.english',
+        message: 'English transcript',
+        metadata: {
+          meetingId: id,
+          providerId: summaryProviderId,
+          modelId: summaryProvider.summaryModel,
+          transcriptLength: transcriptText.length,
+          chunkCount,
+        },
+      },
+      () =>
+        translateTranscriptToEnglish({
+          providerId: summaryProviderId,
+          provider: summaryProvider,
+          transcriptText,
+        })
+    );
+
+    if (english.trim()) {
+      await saveEnglishTranscript(id, english.trim());
+    }
+
+    emitProgress({ phase: 'english', state: 'finished' });
+  } catch (error) {
+    await addAppLog({
+      level: 'warn',
+      scope: 'meeting.english',
+      message: 'English transcript failed; keeping the verbatim transcript only',
+      metadata: {
+        meetingId: id,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+    emitProgress({ phase: 'english', state: 'finished' });
+  }
+}
+
+export function shouldGenerateEnglishTranscript(summaryProviderId: ProviderId): boolean {
+  return summaryProviderId !== 'local';
+}
+
+async function saveEnglishTranscript(id: string, englishText: string) {
+  const db = getDatabase();
+  await db.runAsync(
+    'UPDATE meetings SET transcript_english = ?, updated_at = ? WHERE id = ?',
+    englishText,
     new Date().toISOString(),
     id
   );

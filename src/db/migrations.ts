@@ -97,6 +97,31 @@ export const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: 4,
+    name: 'english renderings of transcript and summary',
+    /*
+     * A meeting held in Hindi or Punjabi produced a transcript nobody outside
+     * the room could read and a summary in whatever language the model felt
+     * like — the prompt never said. These hold the English rendering alongside
+     * the original rather than replacing it, because the verbatim words are the
+     * record and a translation is an interpretation of it.
+     *
+     * Nullable with no default: null means "not generated", which is different
+     * from an empty string meaning "generated and came back empty".
+     */
+    up: async (ctx) => {
+      const columns: Array<[string, string]> = [
+        ['transcript_english', 'TEXT'],
+        ['summary_original_json', 'TEXT'],
+        ['detected_language', 'TEXT'],
+      ];
+
+      for (const [name, definition] of columns) {
+        await addColumnIfMissing(ctx, 'meetings', name, definition);
+      }
+    },
+  },
 ];
 
 export function getLatestSchemaVersion(): number {

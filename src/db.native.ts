@@ -215,6 +215,7 @@ export function mapMeetingRow(row: Record<string, unknown>): MeetingRow {
     sourceType: row.source_type === 'import' ? 'import' : 'recording',
     status: (row.status as MeetingRow['status']) ?? 'local_only',
     transcriptText: row.transcript_text ? String(row.transcript_text) : null,
+    transcriptEnglish: row.transcript_english ? String(row.transcript_english) : null,
     summaryJson: row.summary_json ? String(row.summary_json) : null,
     summaryShort: row.summary_short ? String(row.summary_short) : null,
     errorMessage: row.error_message ? String(row.error_message) : null,

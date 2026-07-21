@@ -2,6 +2,7 @@ export * from './EditorialHero';
 export * from './PillButton';
 export * from './PressableScale';
 export * from './SectionHeading';
+export * from './SegmentedTabs';
 export * from './Skeleton';
 export * from './StatusChip';
 export * from './SurfaceCard';

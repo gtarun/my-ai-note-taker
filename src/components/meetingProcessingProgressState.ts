@@ -2,7 +2,7 @@ import { providerMap } from '../services/providers';
 import type { ProcessMeetingProgressEvent } from '../services/meetings';
 import type { ProviderId } from '../types';
 
-export type StagePhase = 'transcription' | 'summary' | 'extraction';
+export type StagePhase = 'transcription' | 'summary' | 'english' | 'extraction';
 
 export type StageState = 'pending' | 'active' | 'done' | 'failed';
 
@@ -31,6 +31,12 @@ export function createInitialProgressState({
     { phase: 'transcription', label: 'Transcription', state: 'pending', startedAt: null, finishedDurationMs: null, detail: null },
     { phase: 'summary', label: 'Summary', state: 'pending', startedAt: null, finishedDurationMs: null, detail: null },
   ];
+  /*
+   * The English stage is deliberately absent here. Whether it runs depends on
+   * the resolved summary provider, which this caller does not know — and a
+   * stage listed as pending that never starts reads as a stall rather than as
+   * an absence. It is inserted by applyProgressEvent when it actually begins.
+   */
   if (hasLayer) {
     stages.push({
       phase: 'extraction',
@@ -75,7 +81,19 @@ export function applyProgressEvent(
   }
 
   const phase = event.phase;
-  const stages = state.stages.map((stage) => {
+
+  /*
+   * The English pass only exists on cloud routes, and the screen that builds
+   * the initial state cannot tell in advance. Inserting the stage on its first
+   * event means it appears exactly when it starts running — and never on a
+   * route where it does not.
+   */
+  const knownStages =
+    phase === 'english' && !state.stages.some((stage) => stage.phase === 'english')
+      ? insertEnglishStage(state.stages)
+      : state.stages;
+
+  const stages = knownStages.map((stage) => {
     if (stage.phase !== phase) return stage;
 
     if (event.state === 'started') {
@@ -86,7 +104,9 @@ export function applyProgressEvent(
         detail:
           event.phase === 'extraction'
             ? `${event.fieldCount} field${event.fieldCount === 1 ? '' : 's'}`
-            : stageDetailFromProvider(event.providerId, event.modelId),
+            : event.phase === 'english'
+              ? `${event.chunkCount} part${event.chunkCount === 1 ? '' : 's'}`
+              : stageDetailFromProvider(event.providerId, event.modelId),
       };
     }
 
@@ -94,7 +114,9 @@ export function applyProgressEvent(
       ...stage,
       state: 'done' as StageState,
       finishedDurationMs:
-        event.phase === 'extraction' ? stage.finishedDurationMs : event.durationMs,
+        event.phase === 'extraction' || event.phase === 'english'
+          ? stage.finishedDurationMs
+          : event.durationMs,
     };
   });
 
@@ -116,6 +138,25 @@ export function applyProgressEvent(
   }
 
   return { ...state, stages };
+}
+
+/** Places the English stage after Summary, where it runs. */
+function insertEnglishStage(stages: StageInfo[]): StageInfo[] {
+  const englishStage: StageInfo = {
+    phase: 'english',
+    label: 'English transcript',
+    state: 'pending',
+    startedAt: null,
+    finishedDurationMs: null,
+    detail: null,
+  };
+  const summaryIndex = stages.findIndex((stage) => stage.phase === 'summary');
+
+  if (summaryIndex === -1) {
+    return [...stages, englishStage];
+  }
+
+  return [...stages.slice(0, summaryIndex + 1), englishStage, ...stages.slice(summaryIndex + 1)];
 }
 
 export function markProgressFailed(

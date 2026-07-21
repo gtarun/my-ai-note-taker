@@ -141,3 +141,54 @@ describe('markProgressFailed', () => {
     expect(next.stages[0].state).toBe('failed');
   });
 });
+
+describe('the English transcript stage', () => {
+  /*
+   * The screen that builds the initial state cannot tell whether this pass will
+   * run — it depends on the resolved summary provider. So the stage is not
+   * listed up front; it appears on its first event and never appears at all on
+   * a route that skips it.
+   */
+  it('is absent until it actually starts', () => {
+    const state = createInitialProgressState({ hasLayer: false });
+
+    expect(state.stages.map((stage) => stage.phase)).toEqual(['transcription', 'summary']);
+  });
+
+  it('appears directly after Summary when it begins', () => {
+    const state = applyProgressEvent(createInitialProgressState({ hasLayer: true }), {
+      phase: 'english',
+      state: 'started',
+      chunkCount: 3,
+    });
+
+    expect(state.stages.map((stage) => stage.phase)).toEqual([
+      'transcription',
+      'summary',
+      'english',
+      'extraction',
+    ]);
+    const english = state.stages.find((stage) => stage.phase === 'english');
+    expect(english?.state).toBe('active');
+    expect(english?.detail).toBe('3 parts');
+  });
+
+  it('is inserted only once across its start and finish', () => {
+    let state = createInitialProgressState({ hasLayer: false });
+    state = applyProgressEvent(state, { phase: 'english', state: 'started', chunkCount: 1 });
+    state = applyProgressEvent(state, { phase: 'english', state: 'finished' });
+
+    expect(state.stages.filter((stage) => stage.phase === 'english')).toHaveLength(1);
+    expect(state.stages.find((stage) => stage.phase === 'english')?.state).toBe('done');
+  });
+
+  it('says "1 part" rather than "1 parts" for a short meeting', () => {
+    const state = applyProgressEvent(createInitialProgressState({ hasLayer: false }), {
+      phase: 'english',
+      state: 'started',
+      chunkCount: 1,
+    });
+
+    expect(state.stages.find((stage) => stage.phase === 'english')?.detail).toBe('1 part');
+  });
+});

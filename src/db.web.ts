@@ -54,6 +54,7 @@ type MeetingStorageRow = {
   source_type: 'recording' | 'import';
   status: MeetingRow['status'];
   transcript_text: string | null;
+  transcript_english: string | null;
   summary_json: string | null;
   summary_short: string | null;
   error_message: string | null;
@@ -404,6 +405,7 @@ const db = {
         source_type: params[6] === 'import' ? 'import' : 'recording',
         status: (params[7] as MeetingRow['status']) ?? 'local_only',
         transcript_text: null,
+        transcript_english: null,
         summary_json: null,
         summary_short: null,
         error_message: null,
@@ -643,6 +645,16 @@ const db = {
       return;
     }
 
+    if (source.includes('SET transcript_english = ?, updated_at = ?')) {
+      const meeting = state.meetings.find((row) => row.id === params[2]);
+      if (meeting) {
+        meeting.transcript_english = String(params[0]);
+        meeting.updated_at = String(params[1]);
+        writeState(state);
+      }
+      return;
+    }
+
     if (source.includes('SET transcript_text = ?, updated_at = ?')) {
       const meeting = state.meetings.find((row) => row.id === params[2]);
       if (meeting) {
@@ -657,6 +669,7 @@ const db = {
       const meeting = state.meetings.find((row) => row.id === params[2]);
       if (meeting) {
         meeting.transcript_text = String(params[0]);
+        meeting.transcript_english = null;
         meeting.summary_json = null;
         meeting.summary_short = null;
         meeting.error_message = null;
@@ -759,6 +772,7 @@ export function mapMeetingRow(row: Record<string, unknown>): MeetingRow {
     sourceType: row.source_type === 'import' ? 'import' : 'recording',
     status: (row.status as MeetingRow['status']) ?? 'local_only',
     transcriptText: row.transcript_text ? String(row.transcript_text) : null,
+    transcriptEnglish: row.transcript_english ? String(row.transcript_english) : null,
     summaryJson: row.summary_json ? String(row.summary_json) : null,
     summaryShort: row.summary_short ? String(row.summary_short) : null,
     errorMessage: row.error_message ? String(row.error_message) : null,

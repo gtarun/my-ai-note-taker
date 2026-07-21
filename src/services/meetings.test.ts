@@ -10,6 +10,7 @@ type MeetingRecord = {
   source_type: 'recording' | 'import';
   status: string;
   transcript_text: string | null;
+  transcript_english: string | null;
   summary_json: string | null;
   summary_short: string | null;
   error_message: string | null;
@@ -34,6 +35,7 @@ const summarizeTranscript = vi.fn(async () => ({
   decisions: [],
   followUps: [],
 }));
+const translateTranscriptToEnglish = vi.fn(async () => 'English reading of the meeting.');
 const fileSystemCopyAsync = vi.fn(async () => undefined);
 const fileSystemGetInfoAsync = vi.fn(async (_uri?: string) => ({ exists: false }));
 const fileSystemReadAsStringAsync = vi.fn(async () => '');
@@ -122,6 +124,7 @@ beforeEach(() => {
   summarizeTranscript.mockClear();
   extractStructuredData.mockClear();
   summarizeAndExtractTranscript.mockClear();
+  translateTranscriptToEnglish.mockClear();
   getAppSettingsMock.mockClear();
   getAppSettingsMock.mockImplementation(async () => ({
     selectedTranscriptionProvider: 'openai',
@@ -179,6 +182,7 @@ beforeEach(() => {
     source_type: 'recording',
     status: 'local_only',
     transcript_text: null,
+    transcript_english: null,
     summary_json: null,
     summary_short: null,
     error_message: null,
@@ -230,6 +234,15 @@ vi.mock('../db', () => ({
         return;
       }
 
+      if (source.includes('SET transcript_english = ?, updated_at = ?')) {
+        const meeting = meetingState.get(String(params[2]));
+        if (meeting) {
+          meeting.transcript_english = String(params[0]);
+          meeting.updated_at = String(params[1]);
+        }
+        return;
+      }
+
       if (source.includes('SET transcript_text = ?, updated_at = ?')) {
         const meeting = meetingState.get(String(params[2]));
         if (meeting) {
@@ -253,6 +266,7 @@ vi.mock('../db', () => ({
         const meeting = meetingState.get(String(params[2]));
         if (meeting) {
           meeting.transcript_text = String(params[0]);
+          meeting.transcript_english = null;
           meeting.summary_json = null;
           meeting.summary_short = null;
           meeting.error_message = null;
@@ -320,6 +334,7 @@ vi.mock('../db', () => ({
     sourceType: row.source_type === 'import' ? 'import' : 'recording',
     status: row.status,
     transcriptText: row.transcript_text ? String(row.transcript_text) : null,
+    transcriptEnglish: row.transcript_english ? String(row.transcript_english) : null,
     summaryJson: row.summary_json ? String(row.summary_json) : null,
     summaryShort: row.summary_short ? String(row.summary_short) : null,
     errorMessage: row.error_message ? String(row.error_message) : null,
@@ -345,6 +360,7 @@ vi.mock('./ai', () => ({
   summarizeTranscript,
   summarizeAndExtractTranscript,
   extractStructuredData,
+  translateTranscriptToEnglish,
 }));
 
 vi.mock('./settings', () => ({
@@ -917,15 +933,59 @@ describe('meeting processing with extraction layers', () => {
       },
     });
 
-    // openai (cloud) provider, no layer → transcription + summary, no extraction.
+    // openai (cloud) provider, no layer → transcription + summary + the English
+    // reading pass, no extraction.
     expect(events).toEqual([
       'preparing',
       'transcription:started',
       'transcription:finished',
       'summary:started',
       'summary:finished',
+      'english:started',
+      'english:finished',
       'complete',
     ]);
+  });
+
+  test('keeps the meeting usable when the English pass fails', async () => {
+    /*
+     * The English rendering runs after the transcript and summary are already
+     * saved and the meeting is 'ready'. It is a second view of work that
+     * already succeeded, so a rate limit or a dropped connection must not turn
+     * a finished meeting into a failed one — the section just falls back to a
+     * single verbatim tab.
+     */
+    fileSystemGetInfoAsync.mockImplementation(async () => ({ exists: true, size: 128 }));
+    fileSystemReadAsStringAsync.mockImplementation(async () => 'YQ==');
+    vi.mocked(translateTranscriptToEnglish).mockRejectedValueOnce(new Error('429 rate limited'));
+
+    const { processMeeting, getMeeting } = await import('./meetings');
+
+    await expect(processMeeting('meeting-1')).resolves.not.toThrow();
+
+    const meeting = await getMeeting('meeting-1');
+    expect(meeting?.status).toBe('ready');
+    expect(meeting?.transcriptText).toBeTruthy();
+    expect(meeting?.transcriptEnglish).toBeNull();
+  });
+
+  test('stores the English reading alongside the verbatim transcript', async () => {
+    fileSystemGetInfoAsync.mockImplementation(async () => ({ exists: true, size: 128 }));
+    fileSystemReadAsStringAsync.mockImplementation(async () => 'YQ==');
+    vi.mocked(translateTranscriptToEnglish).mockResolvedValueOnce(
+      'We need to review the vendor contract before Friday.'
+    );
+
+    const { processMeeting, getMeeting } = await import('./meetings');
+    await processMeeting('meeting-1');
+
+    const meeting = await getMeeting('meeting-1');
+    // Both survive: the verbatim words are the record, the English is a reading
+    // of it, and replacing one with the other would lose the original.
+    expect(meeting?.transcriptText).toBeTruthy();
+    expect(meeting?.transcriptEnglish).toBe(
+      'We need to review the vendor contract before Friday.'
+    );
   });
 
   test('flags a transcript-quality warning when output is suspiciously short', async () => {

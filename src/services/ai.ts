@@ -10,6 +10,7 @@ import {
   summarizeLocalTranscript,
   transcribeLocalAudio,
 } from './localInference';
+import { splitTranscriptIntoChunks } from '../features/meetings/englishRendering';
 import { fetchWithRetry } from './http';
 import { providerMap } from './providers';
 
@@ -592,8 +593,14 @@ function buildSummaryMessages(transcriptText: string) {
   return [
     {
       role: 'system',
+      /*
+       * The output language used to go unmentioned, so a Hindi or Punjabi
+       * meeting produced a summary in whichever language the model preferred
+       * that run — sometimes English, sometimes not, sometimes a mix inside one
+       * bullet. Saying it plainly is the whole fix.
+       */
       content:
-        'You turn meeting transcripts into short, useful structured notes. Be concrete. Do not invent facts.',
+        'You turn meeting transcripts into short, useful structured notes. Be concrete. Do not invent facts. Always write the notes in English, even when the transcript is in another language; translate names of things but leave people\'s names as spoken.',
     },
     {
       role: 'user',
@@ -603,6 +610,175 @@ Transcript:
 ${transcriptText}`,
     },
   ];
+}
+
+const TRANSLATION_SYSTEM_PROMPT =
+  'You produce a clean English reading version of a meeting transcript. Translate everything into natural English, including Hindi, Punjabi, and code-mixed speech. Remove filler words, stutters, and false starts, and fix obvious transcription noise. Do not summarise, do not skip anything anyone said, and do not invent content. Keep speaker labels if the transcript has them. Reply with the transcript text only — no preamble, no commentary, no markdown fences.';
+
+/**
+ * Render a transcript as clean English, one chunk at a time.
+ *
+ * Chunked because a translation's output is about as long as its input, so a
+ * full meeting would run into the response ceiling long before the context
+ * limit — and a response cut off at the ceiling looks like a transcript that
+ * simply ends mid-sentence, which is worse than a visible failure.
+ *
+ * Chunks run in sequence rather than in parallel: providers rate-limit, and a
+ * 429 partway through a parallel fan-out would leave a hole in the middle of
+ * the transcript.
+ */
+export async function translateTranscriptToEnglish(params: SummarizeParams): Promise<string> {
+  const chunks = splitTranscriptIntoChunks(params.transcriptText);
+
+  if (!chunks.length) {
+    return '';
+  }
+
+  const rendered: string[] = [];
+
+  for (const chunk of chunks) {
+    rendered.push(await translateChunk(params, chunk));
+  }
+
+  return rendered.join('\n\n').trim();
+}
+
+async function translateChunk(params: SummarizeParams, chunk: string): Promise<string> {
+  const definition = providerMap[params.providerId];
+
+  if (params.providerId === 'anthropic') {
+    return callAnthropicText(params.provider, TRANSLATION_SYSTEM_PROMPT, chunk);
+  }
+
+  if (params.providerId === 'gemini') {
+    return callGeminiText(params.provider, TRANSLATION_SYSTEM_PROMPT, chunk);
+  }
+
+  if (!definition.supportsSummary) {
+    throw new Error(`${definition.label} cannot produce an English transcript.`);
+  }
+
+  return callOpenAICompatibleText(
+    params.provider,
+    params.providerId,
+    TRANSLATION_SYSTEM_PROMPT,
+    chunk
+  );
+}
+
+async function callOpenAICompatibleText(
+  provider: ProviderConfig,
+  providerId: ProviderId,
+  systemPrompt: string,
+  userContent: string
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${provider.apiKey}`,
+    'Content-Type': 'application/json',
+  };
+
+  if (providerId === 'openrouter') {
+    headers['HTTP-Referer'] = 'https://mu-fathom.local';
+    headers['X-Title'] = 'mu-fathom';
+  }
+
+  const response = await fetchWithRetry(buildUrl(provider.baseUrl, '/chat/completions'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: provider.summaryModel,
+      temperature: 0.1,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userContent },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  const payload = (await response.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const content = payload.choices?.[0]?.message?.content;
+
+  if (!content) {
+    throw new Error('The summary provider returned no English transcript.');
+  }
+
+  return content.trim();
+}
+
+async function callAnthropicText(
+  provider: ProviderConfig,
+  systemPrompt: string,
+  userContent: string
+) {
+  const response = await fetchWithRetry(buildUrl(provider.baseUrl, '/messages'), {
+    method: 'POST',
+    headers: {
+      'x-api-key': provider.apiKey,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: provider.summaryModel,
+      max_tokens: 8000,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userContent }],
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  const payload = (await response.json()) as { content?: Array<{ text?: string }> };
+  const content = payload.content?.map((part) => part.text ?? '').join('').trim();
+
+  if (!content) {
+    throw new Error('Anthropic returned no English transcript.');
+  }
+
+  return content;
+}
+
+async function callGeminiText(
+  provider: ProviderConfig,
+  systemPrompt: string,
+  userContent: string
+) {
+  const response = await fetchWithRetry(
+    `${buildUrl(provider.baseUrl, '')}/models/${provider.summaryModel}:generateContent?key=${encodeURIComponent(provider.apiKey)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: 'user', parts: [{ text: userContent }] }],
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  const payload = (await response.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+  const content = payload.candidates?.[0]?.content?.parts
+    ?.map((part) => part.text ?? '')
+    .join('')
+    .trim();
+
+  if (!content) {
+    throw new Error('Gemini returned no English transcript.');
+  }
+
+  return content;
 }
 
 function buildExtractionMessages(transcriptText: string, fields: ExtractionLayerField[]) {

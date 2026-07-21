@@ -2,7 +2,10 @@ import { describe, expect, it, test } from 'vitest';
 
 import { SummaryPayload } from '../../types';
 import {
+  MEETING_DELETE_WARNING,
   MEETING_DETAIL_TITLE_ACTION_SLOT_MIN_WIDTH,
+  buildMeetingShareText,
+  getMeetingStatusLabel,
   getProviderSetupDestination,
   MEETING_DETAIL_SECTION_ORDER,
   getExtractionSyncLabel,
@@ -178,5 +181,82 @@ describe('getProviderSetupDestination', () => {
     expect(getProviderSetupDestination('The request timed out after 120s.')).toBeNull();
     expect(getProviderSetupDestination('429 Too Many Requests')).toBeNull();
     expect(getProviderSetupDestination('Unable to process meeting.')).toBeNull();
+  });
+});
+
+describe('buildMeetingShareText', () => {
+  const summary: SummaryPayload = {
+    summary: 'Reviewed the vendor contract.',
+    actionItems: ['Send the draft tonight'],
+    decisions: ['Renew for one year'],
+    followUps: [],
+  };
+
+  it('formats each section exactly as the copy buttons do', () => {
+    /*
+     * Share used to be a second, independent implementation of the same
+     * formatting — so a change to how action items read when copied left the
+     * shared version behind. Sharing the helpers is the fix; this is the check
+     * that they stay shared.
+     */
+    const shared = buildMeetingShareText({
+      title: 'Vendor sync',
+      summary,
+      transcriptText: 'Raw words.',
+      transcriptEnglish: null,
+    });
+
+    expect(shared).toContain(getMeetingDetailSummaryCopyText(summary));
+    expect(shared).toContain(getMeetingDetailActionItemsCopyText(summary));
+    expect(shared).toContain(getMeetingDetailDecisionsCopyText(summary));
+    expect(shared).toContain(getMeetingDetailTranscriptCopyText('Raw words.'));
+  });
+
+  it('includes both transcripts when an English rendering exists', () => {
+    const shared = buildMeetingShareText({
+      title: 'Vendor sync',
+      summary,
+      transcriptText: 'वेंडर कॉन्ट्रैक्ट देखना है।',
+      transcriptEnglish: 'We need to review the vendor contract.',
+    });
+
+    // The English leads because it is what a recipient can read, but the
+    // verbatim record still goes with it — sharing must not quietly drop the
+    // original words.
+    expect(shared).toContain('Transcript (English)');
+    expect(shared).toContain('Transcript (exact words)');
+    expect(shared.indexOf('Transcript (English)')).toBeLessThan(
+      shared.indexOf('Transcript (exact words)')
+    );
+    expect(shared).toContain('वेंडर कॉन्ट्रैक्ट देखना है।');
+  });
+
+  it('uses a single unlabelled transcript block when there is no translation', () => {
+    const shared = buildMeetingShareText({
+      title: 'Vendor sync',
+      summary,
+      transcriptText: 'Raw words.',
+      transcriptEnglish: null,
+    });
+
+    expect(shared).toContain('Transcript\nRaw words.');
+    expect(shared).not.toContain('Transcript (English)');
+  });
+});
+
+describe('meeting status copy', () => {
+  it('reads as a state rather than a database value', () => {
+    expect(getMeetingStatusLabel('local_only')).toBe('Not analyzed yet');
+    expect(getMeetingStatusLabel('transcribing_local')).toBe('Transcribing on device…');
+    expect(getMeetingStatusLabel('failed')).toBe('Analysis failed');
+  });
+
+  it('degrades readably for a status it has never seen', () => {
+    expect(getMeetingStatusLabel('some_new_state')).toBe('some new state');
+  });
+
+  it('states what deletion removes in exactly one place', () => {
+    expect(MEETING_DELETE_WARNING).toContain('audio file');
+    expect(MEETING_DELETE_WARNING).toContain('transcript');
   });
 });
