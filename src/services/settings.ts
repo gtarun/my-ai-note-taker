@@ -159,32 +159,12 @@ export function sanitizeAppSettings(settings: AppSettings): AppSettings {
     ])
   ) as Record<ProviderId, ProviderConfig>;
 
-  const availableTranscriptionProviders = providerDefinitions
-    .filter(
-      (definition) =>
-        definition.supportsTranscription &&
-        isProviderConfigured(definition.id, providers[definition.id], 'transcription')
-    )
-    .map((definition) => definition.id);
-
-  const availableSummaryProviders = providerDefinitions
-    .filter(
-      (definition) =>
-        definition.supportsSummary && isProviderConfigured(definition.id, providers[definition.id], 'summary')
-    )
-    .map((definition) => definition.id);
-
   return {
     selectedTranscriptionProvider: resolveSelectedProvider(
       settings.selectedTranscriptionProvider,
-      availableTranscriptionProviders,
       'transcription'
     ),
-    selectedSummaryProvider: resolveSelectedProvider(
-      settings.selectedSummaryProvider,
-      availableSummaryProviders,
-      'summary'
-    ),
+    selectedSummaryProvider: resolveSelectedProvider(settings.selectedSummaryProvider, 'summary'),
     providers,
     transcriptionLocale: settings.transcriptionLocale ?? 'en-US',
     deleteUploadedAudio: settings.deleteUploadedAudio,
@@ -273,29 +253,39 @@ function buildProvidersFromRows(
   ) as Record<ProviderId, ProviderConfig>;
 }
 
-function resolveSelectedProvider(
-  providerId: ProviderId,
-  configuredProviderIds: ProviderId[],
-  mode: 'transcription' | 'summary'
-) {
-  if (configuredProviderIds.includes(providerId)) {
-    return providerId;
-  }
-
-  const fallback = configuredProviderIds[0];
-
-  if (fallback) {
-    return fallback;
-  }
+/**
+ * Repair an incoherent provider selection — and nothing else.
+ *
+ * "Can this provider do the job" and "does the user have credentials for it"
+ * are different questions, and only the first one belongs here. This used to
+ * reroute any unconfigured provider to the first configured one, which read as
+ * defensive but deadlocked the settings screen: it re-sanitizes the in-progress
+ * form on every render, so choosing OpenAI snapped back to Local before the
+ * user could reach the "Add API key" button that renders only for the selected
+ * provider. On a fresh iOS install that is every user, because Apple Speech
+ * needs no download and therefore makes Local configured from first launch.
+ *
+ * Letting an unconfigured selection stand costs nothing: processMeeting checks
+ * isProviderConfigured before it does any work and fails with a message that
+ * points back here.
+ */
+function resolveSelectedProvider(providerId: ProviderId, mode: 'transcription' | 'summary') {
+  const definition = providerMap[providerId];
 
   if (
-    (mode === 'transcription' && providerMap[providerId]?.supportsTranscription) ||
-    (mode === 'summary' && providerMap[providerId]?.supportsSummary)
+    (mode === 'transcription' && definition?.supportsTranscription) ||
+    (mode === 'summary' && definition?.supportsSummary)
   ) {
     return providerId;
   }
 
-  return 'openai';
+  // The provider has no endpoint for this job at all, so this is not something
+  // the user can fix by adding a key. Fall back to one that does.
+  const fallback = providerDefinitions.find((candidate) =>
+    mode === 'transcription' ? candidate.supportsTranscription : candidate.supportsSummary
+  );
+
+  return fallback?.id ?? 'openai';
 }
 
 function getFallbackCloudProviderId(settings: AppSettings, mode: 'transcription' | 'summary'): ProviderId {

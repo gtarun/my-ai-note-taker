@@ -451,12 +451,16 @@ function ModelCatalogList({
           const progress = downloadProgress[item.id];
           const setupStatus = offlineSetupStatusByModel[item.id];
           const isActivelyDownloading = activeDownloadIds.has(item.id);
-          // Hashing a several-hundred-megabyte model in JS is slow enough that
-          // the bar would otherwise sit at 100% looking hung.
+          /*
+           * The check now runs against the download host before any bytes are
+           * fetched, so it is a brief pause at the start rather than a long one
+           * at the end — and it carries no percentage, because there is no
+           * progress to report on a single small request.
+           */
           const isVerifying = downloadPhase[item.id] === 'verifying';
           const downloadLabel = isActivelyDownloading
             ? isVerifying
-              ? `Verifying ${Math.round((progress ?? 0) * 100)}%`
+              ? 'Checking…'
               : `Downloading ${Math.round((progress ?? 0) * 100)}%`
             : setupStatus === 'downloading' ||
                 setupStatus === 'paused_offline' ||

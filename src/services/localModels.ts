@@ -1,4 +1,3 @@
-import { Buffer } from 'buffer';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 
@@ -11,11 +10,9 @@ import {
   LocalModelStatus,
   ModelCatalogItem,
 } from '../types';
-import { Sha256 } from '../utils/sha256';
 import { fetchWithRetry } from './http';
 
 const MODEL_DIR = `${FileSystem.documentDirectory}models`;
-const SHA256_CHUNK_BYTES = 256 * 1024;
 const HUGGING_FACE_BASE_URL = 'https://huggingface.co';
 const activeModelDownloadIds = new Set<string>();
 /** Catalog id for Apple's built-in SFSpeechRecognizer.
@@ -409,6 +406,19 @@ async function downloadModelOnce(
     throw new Error('Not enough free space available for this model download.');
   }
 
+  // Check the catalog against the host before spending the user's bandwidth,
+  // not after. A stale entry used to be discovered at the very end of a 488 MB
+  // download; now it costs one small JSON request.
+  options?.onPhase?.('verifying');
+  const upstreamCheck = checkUpstreamMatchesCatalog(
+    catalogItem,
+    await fetchUpstreamArtifactMetadata(catalogItem.downloadUrl)
+  );
+
+  if (!upstreamCheck.ok) {
+    throw new Error(upstreamCheck.reason);
+  }
+
   await ensureModelDirectory();
 
   const targetUri = buildModelFileUri(catalogItem);
@@ -452,18 +462,17 @@ async function downloadModelOnce(
       throw new Error('Downloaded model file was not found on disk.');
     }
 
-    if (catalogItem.sizeBytes > 0 && info.size && Math.abs(info.size - catalogItem.sizeBytes) > 2048) {
-      throw new Error('Downloaded model size does not match the catalog entry.');
-    }
-
-    if (catalogItem.sha256.trim()) {
-      options?.onPhase?.('verifying');
-      const digest = await computeFileSha256(result.uri, (progress) => {
-        options?.onProgress?.(progress);
-      });
-      if (digest !== catalogItem.sha256.trim().toLowerCase()) {
-        throw new Error('Downloaded model checksum did not match the catalog entry.');
-      }
+    /*
+     * Exact, not approximate. The old ±2048 tolerance existed to absorb the
+     * checksum pass that followed it; with the digest verified upstream before
+     * the download, a byte count that disagrees at all means the write was
+     * truncated or interrupted, and a partial GGML file fails later in
+     * whisper.cpp with a far less obvious error than this one.
+     */
+    if (catalogItem.sizeBytes > 0 && info.size !== catalogItem.sizeBytes) {
+      throw new Error(
+        'The download finished with the wrong number of bytes, so the file is incomplete. Check your connection and free space, then try again.'
+      );
     }
 
     const installedRow = buildInstalledRow(catalogItem, {
@@ -657,6 +666,111 @@ function buildHuggingFaceDownloadUrl(modelId: string, fileName: string) {
   return `${buildHuggingFaceModelUrl(modelId)}/resolve/main/${fileName}?download=true`;
 }
 
+/**
+ * Pull the sha256 and byte size Hugging Face publishes for a repo file.
+ *
+ * The same digest also rides on the `x-linked-etag` header of the download
+ * URL's 302, but that hop is unreachable from React Native — its fetch is
+ * backed by XHR, which follows redirects itself and never exposes the
+ * intermediate response. The tree API is a plain JSON GET, so it works
+ * everywhere and costs one small request.
+ *
+ * Returns null whenever the answer is anything other than a confident match:
+ * a non-Hugging-Face host, a non-LFS file, a network failure. Callers treat
+ * null as "unknown", never as "mismatch".
+ */
+export async function fetchUpstreamArtifactMetadata(
+  downloadUrl: string
+): Promise<{ sha256: string; sizeBytes: number } | null> {
+  const match = downloadUrl.match(
+    /^https:\/\/huggingface\.co\/([^/]+\/[^/]+)\/resolve\/([^/]+)\/(.+?)(?:\?|$)/
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  const [, repo, revision, filePath] = match;
+
+  try {
+    const response = await fetchWithRetry(
+      `${HUGGING_FACE_BASE_URL}/api/models/${repo}/tree/${revision}`,
+      { headers: { Accept: 'application/json' }, timeoutMs: 15_000, attempts: 2 }
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const entries = (await response.json()) as Array<{
+      path?: string;
+      size?: number;
+      lfs?: { oid?: string; size?: number } | null;
+    }>;
+
+    const entry = Array.isArray(entries)
+      ? entries.find((candidate) => candidate.path === decodeURIComponent(filePath))
+      : undefined;
+    const oid = entry?.lfs?.oid;
+    const size = entry?.lfs?.size ?? entry?.size;
+
+    if (typeof oid !== 'string' || !/^[0-9a-f]{64}$/.test(oid) || typeof size !== 'number') {
+      return null;
+    }
+
+    return { sha256: oid, sizeBytes: size };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Compare what the catalog promises against what the host is actually serving.
+ *
+ * This runs *before* the download rather than after, which is the whole point:
+ * a catalog entry that has drifted from upstream is caught in a few hundred
+ * milliseconds instead of after half a gigabyte has crossed the user's
+ * connection.
+ *
+ * What it does not do is hash the bytes that landed on disk. Doing that would
+ * need a native sha256-over-file primitive, and none of the installed Expo
+ * modules expose one — the previous implementation hashed in pure JS at roughly
+ * 9 MB/s under Node's JIT and considerably worse under Hermes, which turned
+ * "verifying" into a five-minute freeze on Whisper Small. Truncated and
+ * interrupted writes, the failure this realistically guards against, are caught
+ * by the exact size check after the download instead.
+ */
+export function checkUpstreamMatchesCatalog(
+  catalogItem: Pick<ModelCatalogItem, 'sha256' | 'sizeBytes'>,
+  upstream: { sha256: string; sizeBytes: number } | null
+): { ok: true } | { ok: false; reason: string } {
+  const expectedSha = catalogItem.sha256.trim().toLowerCase();
+
+  // Nothing to compare against: either the catalog omits a digest or the host
+  // does not publish one. Silence here is not evidence of a problem.
+  if (!upstream || !expectedSha) {
+    return { ok: true };
+  }
+
+  if (upstream.sha256 !== expectedSha) {
+    return {
+      ok: false,
+      reason:
+        'The file on the download host no longer matches this catalog entry. Update the app or the model catalog before downloading.',
+    };
+  }
+
+  if (catalogItem.sizeBytes > 0 && upstream.sizeBytes !== catalogItem.sizeBytes) {
+    return {
+      ok: false,
+      reason:
+        'The download host reports a different file size than this catalog entry. Update the app or the model catalog before downloading.',
+    };
+  }
+
+  return { ok: true };
+}
+
 function inferFileExtension(downloadUrl: string, engine: ModelCatalogItem['engine']) {
   const urlPath = downloadUrl.split('?')[0] ?? '';
   const match = urlPath.match(/\.[a-zA-Z0-9]+$/);
@@ -686,31 +800,6 @@ function getCurrentModelPlatform(support?: LocalDeviceSupport | null): LocalMode
   }
 
   return Platform.OS === 'android' ? 'android' : 'ios';
-}
-
-async function computeFileSha256(uri: string, onProgress?: (progress: number) => void) {
-  const fileInfo = await FileSystem.getInfoAsync(uri);
-
-  if (!fileInfo.exists || !fileInfo.size) {
-    throw new Error('Downloaded file is missing or empty.');
-  }
-
-  const hasher = new Sha256();
-  let position = 0;
-
-  while (position < fileInfo.size) {
-    const base64Chunk = await FileSystem.readAsStringAsync(uri, {
-      encoding: FileSystem.EncodingType.Base64,
-      position,
-      length: Math.min(SHA256_CHUNK_BYTES, fileInfo.size - position),
-    });
-
-    hasher.update(Uint8Array.from(Buffer.from(base64Chunk, 'base64')));
-    position += Math.min(SHA256_CHUNK_BYTES, fileInfo.size - position);
-    onProgress?.(position / fileInfo.size);
-  }
-
-  return hasher.digestHex().toLowerCase();
 }
 
 async function safeDeleteFile(uri: string) {

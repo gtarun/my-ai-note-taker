@@ -254,6 +254,60 @@ describe('settings persistence', () => {
     expect(sanitized.selectedSummaryProvider).toBe('local');
   });
 
+  test('lets the user select a provider they have not configured yet', () => {
+    /*
+     * The settings screen re-sanitizes the in-progress form on every render, so
+     * anything sanitize rewrites is a selection the user physically cannot make.
+     *
+     * Rerouting an unconfigured provider to the first configured one deadlocked
+     * the screen: picking OpenAI snapped straight back to Local, and the "Add
+     * API key" button only renders for the *selected* provider — so the one
+     * action that would make OpenAI configured was unreachable. A fresh iOS
+     * install lands here every time, because Apple Speech makes Local the only
+     * configured transcription provider from the very first launch.
+     *
+     * Selecting a provider and having credentials for it are separate steps.
+     * processMeeting already refuses to run an unconfigured provider, so the
+     * guarantee survives without holding the picker hostage.
+     */
+    const settings: AppSettings = {
+      selectedTranscriptionProvider: 'openai',
+      selectedSummaryProvider: 'openai',
+      providers: structuredClone(defaultProviderConfigs),
+      transcriptionLocale: 'en-US',
+      deleteUploadedAudio: false,
+      modelCatalogUrl: '',
+    };
+
+    // Local is configured (Apple Speech needs no download); OpenAI has no key.
+    settings.providers.local.transcriptionModel = 'apple-speech-recognizer';
+    settings.providers.openai.apiKey = '';
+
+    const sanitized = sanitizeAppSettings(settings);
+
+    expect(sanitized.selectedTranscriptionProvider).toBe('openai');
+    expect(sanitized.selectedSummaryProvider).toBe('openai');
+  });
+
+  test('still rejects a provider that cannot do the job at all', () => {
+    // Anthropic has no transcription endpoint, so this is not a missing-key
+    // problem the user can fix — the selection is incoherent and gets repaired.
+    const settings: AppSettings = {
+      selectedTranscriptionProvider: 'anthropic',
+      selectedSummaryProvider: 'anthropic',
+      providers: structuredClone(defaultProviderConfigs),
+      transcriptionLocale: 'en-US',
+      deleteUploadedAudio: false,
+      modelCatalogUrl: '',
+    };
+
+    const sanitized = sanitizeAppSettings(settings);
+
+    expect(sanitized.selectedTranscriptionProvider).not.toBe('anthropic');
+    // Summary is squarely within what Anthropic does, so that one stands.
+    expect(sanitized.selectedSummaryProvider).toBe('anthropic');
+  });
+
   test('fills empty local transcription config after a ready session', async () => {
     await applyOfflineSetupAutoConfig({
       bundleId: 'starter',
