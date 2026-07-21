@@ -29,7 +29,12 @@ import {
   markProgressFailed,
 } from '../../src/components/MeetingProcessingProgress';
 import { ScreenBackground } from '../../src/components/ScreenBackground';
-import { PillButton } from '../../src/components/ui';
+import {
+  PillButton,
+  PressableScale,
+  SkeletonParagraph,
+  Waveform,
+} from '../../src/components/ui';
 import {
   MEETING_DETAIL_TITLE_ACTION_SLOT_MIN_WIDTH,
   getExtractionSyncLabel,
@@ -62,7 +67,7 @@ import {
   syncMeetingExtractionResult,
 } from '../../src/services/meetings';
 import type { ExtractionLayer, MeetingRow, SummaryPayload } from '../../src/types';
-import { elevation, palette } from '../../src/theme';
+import { elevation, palette, radii, spacing, type, typography } from '../../src/theme';
 import { formatDuration, formatTimestamp } from '../../src/utils/format';
 
 export default function MeetingDetailScreen() {
@@ -512,7 +517,13 @@ export default function MeetingDetailScreen() {
           isCopied={copiedSection === 'summary'}
           onCopyPress={() => handleCopySection('summary', summaryCopyText)}
         >
-          <Text style={styles.bodyText}>{summaryCopyText}</Text>
+          {isBusy && !summary ? (
+            // Shaped like the paragraph that is coming, so the eye already
+            // knows where to wait.
+            <SkeletonParagraph lines={4} />
+          ) : (
+            <Text style={styles.bodyText}>{summaryCopyText}</Text>
+          )}
         </Section>
 
         <Section
@@ -645,13 +656,48 @@ export default function MeetingDetailScreen() {
         </Section>
 
         <Section title="Recording" delay={240}>
-          <Text style={styles.bodyText}>
-            {playerStatus.playing ? 'Playing now.' : 'Ready to play.'}
-            {playerStatus.duration ? ` Total length: ${formatDuration(playerStatus.duration * 1000)}` : ''}
-          </Text>
-          <Text style={styles.bodyText}>
-            Current position: {formatDuration(playerStatus.currentTime * 1000)}
-          </Text>
+          {/*
+            Was two lines of prose describing playback state. The audio is the
+            source of everything else on this screen, so it gets drawn: a
+            waveform acting as a scrub track, with the played portion lit and
+            the rest dimmed.
+          */}
+          <View style={styles.player}>
+            <PressableScale
+              onPress={handlePlaybackToggle}
+              accessibilityLabel={getPlaybackActionLabel(playerStatus.playing)}
+              style={styles.playerButton}
+            >
+              <Feather
+                name={playerStatus.playing ? 'pause' : 'play'}
+                size={18}
+                color={palette.paper}
+                style={playerStatus.playing ? undefined : styles.playIconNudge}
+              />
+            </PressableScale>
+
+            <View style={styles.playerTrack}>
+              <Waveform
+                bars={40}
+                height={36}
+                level={playerStatus.playing ? 0.75 : 0.4}
+                color={palette.accent}
+                progress={
+                  playerStatus.duration > 0
+                    ? playerStatus.currentTime / playerStatus.duration
+                    : 0
+                }
+              />
+              <View style={styles.playerTimes}>
+                <Text style={styles.playerTime}>
+                  {formatDuration(playerStatus.currentTime * 1000)}
+                </Text>
+                <Text style={styles.playerTime}>
+                  {formatDuration((playerStatus.duration || meeting.durationMs / 1000) * 1000)}
+                </Text>
+              </View>
+            </View>
+          </View>
         </Section>
 
         <FadeInView style={styles.dangerZone} delay={270}>
@@ -849,6 +895,26 @@ function getMeetingDetailScreenOptions(
 }
 
 const styles = StyleSheet.create({
+  player: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+    paddingTop: spacing.xs,
+  },
+  playerButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 999,
+    backgroundColor: palette.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  /** Optical centring — a play triangle reads left-heavy in a circle. */
+  playIconNudge: { marginLeft: 2 },
+  playerTrack: { flex: 1, gap: spacing.xs },
+  playerTimes: { flexDirection: 'row', justifyContent: 'space-between' },
+  playerTime: { ...typography.mono, ...type.caption, color: palette.faintInk },
+
   safeArea: {
     flex: 1,
     backgroundColor: palette.paper,

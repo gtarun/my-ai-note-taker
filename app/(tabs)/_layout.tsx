@@ -6,7 +6,7 @@ import { ProfileAvatarButton } from '../../src/components/ProfileAvatarButton';
 import { APP_TABS } from '../../src/navigation/tabs';
 import { getAuthSession } from '../../src/services/account';
 import type { AuthSession } from '../../src/types';
-import { palette, typography } from '../../src/theme';
+import { palette, type, typography } from '../../src/theme';
 
 export default function TabLayout() {
   const [session, setSession] = useState<AuthSession | null>(null);
@@ -46,25 +46,28 @@ export default function TabLayout() {
           />
         ),
         headerStyle: { backgroundColor: palette.paper },
+        headerShadowVisible: false,
         headerTintColor: palette.ink,
         headerTitleStyle: {
           color: palette.ink,
-          fontSize: 18,
-          ...typography.heading,
+          ...typography.headingSans,
+          ...type.heading,
         },
         sceneStyle: { backgroundColor: palette.paper },
         tabBarActiveTintColor: palette.accent,
-        tabBarInactiveTintColor: palette.mutedInk,
+        tabBarInactiveTintColor: palette.faintInk,
         tabBarStyle: {
           backgroundColor: palette.paper,
-          borderTopColor: palette.line,
+          // A hairline, not a rule — the old border read as a hard edge under
+          // every screen.
+          borderTopColor: palette.lineSoft,
           height: 78,
           paddingTop: 8,
           paddingBottom: 10,
         },
         tabBarLabelStyle: {
-          fontFamily: typography.label.fontFamily,
-          fontSize: 12,
+          ...typography.label,
+          ...type.caption,
         },
       }}
     >
@@ -74,6 +77,7 @@ export default function TabLayout() {
           name={tab.name}
           options={{
             title: tab.title,
+            headerTitle: tab.showHeaderTitle ? tab.title : '',
             tabBarLabel: tab.label,
             tabBarIcon: ({ color, size }) => <Feather name={tab.icon} size={size} color={color} />,
           }}
