@@ -42,6 +42,14 @@ type RecordingSessionSnapshot = {
   /** True when the platform supports streaming partials and JS is subscribed.
    *  Used by the UI to decide whether to render the live caption pane. */
   liveTranscriptionEnabled: boolean;
+  /**
+   * Current input level, 0–1, smoothed. Drives the recording waveform.
+   *
+   * Derived from the recorder's dBFS metering, which the recorder has always
+   * produced and the app previously discarded — leaving the recording screen
+   * with no evidence that the microphone was open.
+   */
+  inputLevel: number;
 };
 
 type Listener = (snapshot: RecordingSessionSnapshot) => void;
@@ -53,6 +61,8 @@ type SaveResult = {
 };
 
 type RecorderLike = Pick<AudioRecorder, 'currentTime' | 'uri' | 'prepareToRecordAsync' | 'record' | 'stop'> & {
+  /** Optional so existing test doubles keep working without a metering stub. */
+  getStatus?: () => { metering?: number | null } | null;
   url?: string | null;
 };
 
@@ -82,6 +92,28 @@ type RecordingSessionDeps = LiveTranscriptionDeps & {
 
 export type { RecordingSessionSnapshot, SaveResult };
 
+/**
+ * Converts the recorder's dBFS metering into a 0–1 level suitable for a meter.
+ *
+ * Metering is logarithmic and mostly lives in the top of its range for speech,
+ * so a linear mapping leaves the bars nearly flat. Anything at or below
+ * SILENCE_FLOOR_DB reads as silence; above that the curve is eased so ordinary
+ * conversation uses most of the height.
+ */
+const SILENCE_FLOOR_DB = -50;
+
+export function meteringToLevel(metering: number | null | undefined): number {
+  if (metering == null || !Number.isFinite(metering)) {
+    return 0;
+  }
+
+  // Some platforms report 0 as "no signal yet" rather than "clipping".
+  const clamped = Math.min(0, Math.max(SILENCE_FLOOR_DB, metering));
+  const normalized = (clamped - SILENCE_FLOOR_DB) / -SILENCE_FLOOR_DB;
+
+  return Math.min(1, Math.max(0, Math.pow(normalized, 1.6)));
+}
+
 function getDefaultTitle(now: () => number) {
   const iso = new Date(now()).toISOString().slice(0, 16).replace('T', ' ');
   return `Recording ${iso}`;
@@ -91,7 +123,13 @@ function createDefaultDeps(): RecordingSessionDeps {
   return {
     requestRecordingPermissionsAsync,
     setAudioModeAsync,
-    createRecorder: () => new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY),
+    createRecorder: () =>
+      new AudioModule.AudioRecorder({
+        ...RecordingPresets.HIGH_QUALITY,
+        // Without this the recorder reports no metering and the waveform has
+        // nothing real to draw.
+        isMeteringEnabled: true,
+      }),
     createMeetingFromRecording,
     uploadMeetingRecordingIfConfigured,
     supportsLiveTranscription,
@@ -121,6 +159,7 @@ export function createRecordingSession(overrides: Partial<RecordingSessionDeps> 
     titleDraft: '',
     durationMillis: 0,
     errorMessage: null,
+    inputLevel: 0,
     liveTranscript: '',
     liveTranscriptionEnabled: false,
   };
@@ -260,15 +299,31 @@ export function createRecordingSession(overrides: Partial<RecordingSessionDeps> 
 
   function startPolling() {
     stopPolling();
+    // 100ms: fast enough that the meter tracks speech, slow enough that it
+    // costs nothing. The clock only needs to change ten times less often, but
+    // reading both here keeps a single timer.
     pollHandle = deps.setInterval(() => {
       if (!recorder) {
         return;
       }
 
+      let inputLevel = snapshot.inputLevel;
+
+      try {
+        const metering = recorder.getStatus?.()?.metering;
+        const next = meteringToLevel(metering);
+        // Attack fast, release slow — a meter that drops instantly on every
+        // pause looks broken rather than responsive.
+        inputLevel = next > inputLevel ? next : inputLevel * 0.72 + next * 0.28;
+      } catch {
+        // Metering is decorative; never let it interrupt a recording.
+      }
+
       updateSnapshot({
         durationMillis: Math.max(0, Math.round(recorder.currentTime * 1000)),
+        inputLevel,
       });
-    }, 500);
+    }, 100);
   }
 
   function getCurrentTitle() {
@@ -362,6 +417,7 @@ export function createRecordingSession(overrides: Partial<RecordingSessionDeps> 
           phase: 'recording',
           durationMillis: 0,
           errorMessage: null,
+          inputLevel: 0,
           liveTranscript: '',
         });
         startPolling();
@@ -440,6 +496,7 @@ export function createRecordingSession(overrides: Partial<RecordingSessionDeps> 
           titleDraft: '',
           durationMillis: 0,
           errorMessage: null,
+          inputLevel: 0,
           liveTranscript: '',
           liveTranscriptionEnabled: false,
         });

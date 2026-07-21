@@ -710,3 +710,47 @@ describe('recording session service', () => {
     });
   });
 });
+
+describe('meteringToLevel', () => {
+  test('treats missing or non-finite metering as silence', async () => {
+    const { meteringToLevel } = await import('./recordingSession');
+
+    expect(meteringToLevel(null)).toBe(0);
+    expect(meteringToLevel(undefined)).toBe(0);
+    expect(meteringToLevel(Number.NaN)).toBe(0);
+  });
+
+  test('maps the dBFS floor to silence and 0 dB to full scale', async () => {
+    const { meteringToLevel } = await import('./recordingSession');
+
+    expect(meteringToLevel(-50)).toBe(0);
+    expect(meteringToLevel(-160)).toBe(0);
+    expect(meteringToLevel(0)).toBe(1);
+  });
+
+  test('rises monotonically between the floor and full scale', async () => {
+    const { meteringToLevel } = await import('./recordingSession');
+    const samples = [-50, -40, -30, -20, -10, 0].map(meteringToLevel);
+
+    expect(samples).toEqual([...samples].sort((a, b) => a - b));
+    expect(new Set(samples).size).toBe(samples.length);
+  });
+
+  test('keeps every value inside 0 and 1', async () => {
+    const { meteringToLevel } = await import('./recordingSession');
+
+    for (const db of [-200, -50, -25, -5, 0, 12]) {
+      const level = meteringToLevel(db);
+      expect(level).toBeGreaterThanOrEqual(0);
+      expect(level).toBeLessThanOrEqual(1);
+    }
+  });
+
+  test('leaves conversational levels visible rather than flat', async () => {
+    // Speech sits high in the dBFS range, so a linear mapping would leave the
+    // meter barely moving. Normal talking should use a real part of the height.
+    const { meteringToLevel } = await import('./recordingSession');
+
+    expect(meteringToLevel(-20)).toBeGreaterThan(0.3);
+  });
+});

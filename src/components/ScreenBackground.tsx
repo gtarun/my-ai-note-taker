@@ -1,43 +1,24 @@
 import { StyleSheet, View } from 'react-native';
 
-import { ambient } from '../theme';
+import { palette } from '../theme';
 
+/**
+ * The page ground.
+ *
+ * This used to render three static translucent circles behind every screen —
+ * decoration that carried no meaning, responded to nothing, and was the first
+ * thing that dated the interface. The ground is now just the paper colour, so
+ * the content and the single accent are the only things asking for attention.
+ *
+ * Kept as a component rather than deleted so there is still one place to change
+ * if the ground ever gains a texture or gradient.
+ */
 export function ScreenBackground() {
-  return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <View style={styles.topBlob} />
-      <View style={styles.sideBlob} />
-      <View style={styles.bottomBlob} />
-    </View>
-  );
+  return <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.ground]} />;
 }
 
 const styles = StyleSheet.create({
-  topBlob: {
-    position: 'absolute',
-    top: -90,
-    right: -40,
-    width: 220,
-    height: 220,
-    borderRadius: 999,
-    backgroundColor: ambient.topBlob,
-  },
-  sideBlob: {
-    position: 'absolute',
-    top: 200,
-    left: -60,
-    width: 140,
-    height: 140,
-    borderRadius: 999,
-    backgroundColor: ambient.sideBlob,
-  },
-  bottomBlob: {
-    position: 'absolute',
-    bottom: -40,
-    right: 20,
-    width: 180,
-    height: 180,
-    borderRadius: 999,
-    backgroundColor: ambient.bottomBlob,
+  ground: {
+    backgroundColor: palette.paper,
   },
 });

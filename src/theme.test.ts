@@ -1,63 +1,106 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
-import { ambient, palette, radii, resolveTypography, typography } from './theme';
+// theme.ts uses Platform.select for the iOS serif; importing the real module
+// pulls React Native's Flow-typed entry point into the transform.
+vi.mock('react-native', () => ({
+  Platform: {
+    OS: 'ios',
+    select: (options: Record<string, unknown>) =>
+      'ios' in options ? options.ios : options.default,
+  },
+}));
 
-describe('editorial theme contract', () => {
-  test('exposes the approved cool-tone palette', () => {
-    expect(palette.paper).toBe('#f7fafc');
-    expect(palette.card).toBe('#ffffff');
-    expect(palette.cardMuted).toBe('#eff4f7');
-    expect(palette.cardUtility).toBe('#e8eff2');
-    expect(palette.ink).toBe('#2b3437');
-    expect(palette.mutedInk).toBe('#576064');
-    expect(palette.accent).toBe('#0f57d0');
-    expect(palette.accentStrong).toBe('#4e83fe');
-    expect(palette.accentSoft).toBe('#d8e3fa');
-    expect(palette.tertiary).toBe('#685781');
-    expect(palette.tertiarySoft).toBe('#e4ceff');
-    expect(palette.line).toBe('#aab3b7');
+import {
+  elevation,
+  getPalette,
+  motion,
+  palette,
+  radii,
+  resolveTypography,
+  spacing,
+  type,
+  typography,
+} from './theme';
+
+describe('design tokens', () => {
+  test('grounds the interface in warm neutrals rather than cold blue-grey', () => {
+    // The previous palette paired #f7fafc paper with a generic SaaS blue. The
+    // neutral is now chosen — pulled warm and slightly green so it sits under
+    // the viridian accent instead of fighting it.
+    expect(palette.paper).toBe('#f4f2ec');
+    expect(palette.ink).toBe('#141a19');
+    expect(palette.accent).toBe('#0b6e5f');
   });
 
-  test('exposes semantic radius + typography tokens', () => {
-    expect(radii.card).toBe(24);
-    expect(radii.pill).toBe(999);
-    expect(typography.display.fontFamily).toBe('Manrope_800ExtraBold');
-    expect(typography.heading.fontFamily).toBe('Manrope_700Bold');
-    expect(typography.body.fontFamily).toBe('Inter_400Regular');
-    expect(typography.label.fontFamily).toBe('Inter_600SemiBold');
+  test('reserves the lit accent so saturation stays earned', () => {
+    // The system rule: nothing in the interface may be brighter than the audio
+    // currently coming in. `accentLit` exists only for an open microphone.
+    expect(palette.accentLit).toBe('#12a184');
+    expect(palette.accentLit).not.toBe(palette.accent);
   });
 
-  test('resolves typography with custom fonts when they are available', () => {
-    const resolvedTypography = resolveTypography(true);
-
-    expect(resolvedTypography.display.fontFamily).toBe(typography.display.fontFamily);
-    expect(resolvedTypography.heading.fontFamily).toBe(typography.heading.fontFamily);
-    expect(resolvedTypography.body.fontFamily).toBe(typography.body.fontFamily);
-    expect(resolvedTypography.label.fontFamily).toBe(typography.label.fontFamily);
+  test('keeps clay distinct from the accent so record always means record', () => {
+    expect(palette.clay).toBe('#c2603c');
+    expect(palette.clay).not.toBe(palette.accent);
   });
 
-  test('resolves safe system typography fallbacks when custom fonts are unavailable', () => {
-    const resolvedTypography = resolveTypography(false);
+  test('ships a dark palette so the switch is wiring, not a redesign', () => {
+    const dark = getPalette('dark');
+    const light = getPalette('light');
 
-    expect(resolvedTypography.display.fontFamily).toBeUndefined();
-    expect(resolvedTypography.display.fontWeight).toBe('800');
-    expect(resolvedTypography.heading.fontFamily).toBeUndefined();
-    expect(resolvedTypography.heading.fontWeight).toBe('700');
-    expect(resolvedTypography.body.fontFamily).toBeUndefined();
-    expect(resolvedTypography.body.fontWeight).toBe('400');
-    expect(resolvedTypography.label.fontFamily).toBeUndefined();
-    expect(resolvedTypography.label.fontWeight).toBe('600');
+    expect(dark.paper).not.toBe(light.paper);
+    expect(dark.ink).not.toBe(light.ink);
+    // Both grounds need a legible accent, so dark brightens rather than reusing.
+    expect(dark.accent).toBe('#37d6a8');
+    expect(light.paper).toBe('#f4f2ec');
   });
 
-  test('keeps transitional palette aliases stable for legacy screens', () => {
+  test('exposes three elevation weights so depth has to be chosen', () => {
+    // One shadow previously applied to all 71 cards, which meant a hero and a
+    // toggle row sat at the same visual depth.
+    expect(elevation.flat.shadowOpacity).toBe(0);
+    expect(elevation.raised.shadowOpacity).toBeLessThan(elevation.floating.shadowOpacity);
+    expect(elevation.raised.shadowRadius).toBeLessThan(elevation.floating.shadowRadius);
+  });
+
+  test('exposes a type scale rather than per-screen font sizes', () => {
+    expect(type.display.fontSize).toBeGreaterThan(type.title.fontSize);
+    expect(type.title.fontSize).toBeGreaterThan(type.heading.fontSize);
+    expect(type.heading.fontSize).toBeGreaterThan(type.body.fontSize);
+    expect(type.body.fontSize).toBeGreaterThan(type.caption.fontSize);
+    // Display sizes get negative tracking; small text does not.
+    expect(type.display.letterSpacing).toBeLessThan(0);
+  });
+
+  test('uses tabular figures for timers so digits do not jitter', () => {
+    expect(typography.mono.fontVariant).toContain('tabular-nums');
+  });
+
+  test('exposes a spacing ramp on a 4pt base', () => {
+    const ramp = [spacing.xs, spacing.sm, spacing.md, spacing.lg, spacing.xl, spacing.xxl];
+
+    expect(ramp).toEqual([...ramp].sort((a, b) => a - b));
+    expect(ramp.every((step) => step % 4 === 0)).toBe(true);
+  });
+
+  test('caps the list stagger so long lists do not cascade', () => {
+    // Every card previously animated on every focus, including on return.
+    expect(motion.stagger.maxItems).toBeLessThanOrEqual(6);
+    expect(motion.press.scale).toBeLessThan(1);
+  });
+
+  test('falls back to system faces when the serif is unavailable', () => {
+    const fallback = resolveTypography(false);
+
+    expect(fallback.display.fontFamily).toBeUndefined();
+    expect(fallback.display.fontWeight).toBe('700');
+    expect(fallback.body.fontWeight).toBe('400');
+  });
+
+  test('keeps legacy aliases alive while screens migrate', () => {
     expect(palette.cardStrong).toBe(palette.cardMuted);
     expect(palette.accentMist).toBe(palette.accentSoft);
     expect(palette.lineStrong).toBe(palette.line);
-  });
-
-  test('exposes ambient background tokens for editorial chrome', () => {
-    expect(ambient.topBlob).toBe('rgba(78, 131, 254, 0.10)');
-    expect(ambient.sideBlob).toBe('rgba(104, 87, 129, 0.08)');
-    expect(ambient.bottomBlob).toBe('rgba(15, 87, 208, 0.05)');
+    expect(radii.pill).toBe(999);
   });
 });
