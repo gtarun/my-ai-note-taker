@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { palette, radii, typography } from '../../theme';
+import { radii, typography } from '../../theme';
 import { StatusChip } from './StatusChip';
 import { SurfaceCard } from './SurfaceCard';
 import { useThemedStyles, type Palette } from '../../hooks/useTheme';

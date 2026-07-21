@@ -33,7 +33,7 @@ import { SETTINGS_TAB_ROUTE } from '../src/navigation/routes';
 import { getLocalDeviceSupport } from '../src/services/localInference';
 import { markOnboardingSeen } from '../src/services/onboarding';
 import { getAppSettings, saveAppSettings } from '../src/services/settings';
-import { palette, radii, spacing, type, typography } from '../src/theme';
+import { radii, spacing, type, typography } from '../src/theme';
 import { useTheme, useThemedStyles, type Palette } from '../src/hooks/useTheme';
 
 type FeatherIconName = ComponentProps<typeof Feather>['name'];

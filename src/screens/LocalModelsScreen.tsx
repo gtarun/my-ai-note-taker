@@ -39,7 +39,7 @@ import {
   updateOfflineSetupProgress,
 } from '../services/offlineSetupSession';
 import { getAppSettings, saveAppSettings } from '../services/settings';
-import { palette, radii, type, typography } from '../theme';
+import { radii, type, typography } from '../theme';
 import type {
   AppSettings,
   InstalledModelRow,

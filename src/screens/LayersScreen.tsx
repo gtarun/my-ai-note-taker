@@ -36,7 +36,7 @@ import {
   searchSpreadsheets,
 } from '../services/googleSheets';
 import type { ExtractionLayer, SpreadsheetBrowserSpreadsheet } from '../types';
-import { palette, radii, type, typography } from '../theme';
+import { radii, type, typography } from '../theme';
 import { useTheme, useThemedStyles, type Palette } from '../hooks/useTheme';
 
 export default function LayersScreen() {

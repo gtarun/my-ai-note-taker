@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 
-import { motion, palette } from '../../theme';
+import { motion } from '../../theme';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { PressableScale } from './PressableScale';
-import { useThemedStyles, type Palette } from '../../hooks/useTheme';
+import { useTheme, useThemedStyles, type Palette } from '../../hooks/useTheme';
 
 /**
  * The record control.
@@ -33,6 +33,7 @@ export function RecordButton({
   const morph = useRef(new Animated.Value(isRecording ? 1 : 0)).current;
   const pulse = useRef(new Animated.Value(0)).current;
   const reduceMotion = useReducedMotion();
+  const palette = useTheme();
   const styles = useThemedStyles(makeStyles);
 
   useEffect(() => {

@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { palette, typography } from '../../theme';
+import { typography } from '../../theme';
 import { useThemedStyles, type Palette } from '../../hooks/useTheme';
 
 export function SectionHeading({

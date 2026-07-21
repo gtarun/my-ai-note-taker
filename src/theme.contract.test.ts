@@ -79,4 +79,39 @@ describe('theme contract', () => {
     expect(offenders, `Use a palette token so the colour follows the theme:\n${offenders.join('\n')}`)
       .toEqual([]);
   });
+
+  it('never imports the static palette into a component file', () => {
+    /*
+     * `theme.ts` exports a `palette` bound to the light scheme, for the tokens
+     * that genuinely cannot be hooks — the Expo Router tab bar config, say.
+     * Inside a component it is a trap: it type-checks, renders, and quietly
+     * paints light colours on a dark screen.
+     *
+     * That is not hypothetical. Every component in the app carried this import
+     * while shadowing it with `useTheme()`, so it read as harmless — until
+     * three components used it in JSX without the shadow and shipped a
+     * near-white skeleton bar on a near-black page, a light-viridian avatar
+     * icon on a dark card, and a record button ignoring its dark fill. Deleting
+     * the imports turned all three from invisible into compile errors.
+     */
+    const offenders: string[] = [];
+
+    for (const path of sourceFiles()) {
+      if (!/\.tsx$/.test(path)) {
+        continue;
+      }
+
+      const contents = readFileSync(path, 'utf8');
+      const themeImport = contents.match(/import\s*\{([^}]*)\}\s*from\s*'[^']*theme'/);
+
+      if (themeImport?.[1]?.split(',').some((name) => name.trim() === 'palette')) {
+        offenders.push(`${path}  imports the static light palette`);
+      }
+    }
+
+    expect(
+      offenders,
+      `Call useTheme() or useThemedStyles() instead — the static palette is always light:\n${offenders.join('\n')}`
+    ).toEqual([]);
+  });
 });

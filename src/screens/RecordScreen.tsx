@@ -37,7 +37,7 @@ import {
 import { getMeetingDetailRoute } from '../navigation/routes';
 import { MICROPHONE_PERMISSION_ERROR, recordingSession } from '../services/recordingSession';
 import { formatDuration } from '../utils/format';
-import { palette, radii, spacing, type, typography } from '../theme';
+import { radii, spacing, type, typography } from '../theme';
 import { useTheme, useThemedStyles, type Palette } from '../hooks/useTheme';
 
 export default function RecordScreen() {

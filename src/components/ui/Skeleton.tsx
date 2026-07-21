@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
-import { motion, palette, radii, spacing } from '../../theme';
+import { motion, radii, spacing } from '../../theme';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
-import { useThemedStyles, type Palette } from '../../hooks/useTheme';
+import { useTheme, useThemedStyles, type Palette } from '../../hooks/useTheme';
 
 /**
  * Loading placeholders shaped like the content that is coming.
@@ -25,6 +25,7 @@ export function Skeleton({
 }) {
   const pulse = useRef(new Animated.Value(0)).current;
   const reduceMotion = useReducedMotion();
+  const palette = useTheme();
 
   useEffect(() => {
     if (reduceMotion) {

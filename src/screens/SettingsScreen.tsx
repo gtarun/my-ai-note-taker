@@ -45,7 +45,7 @@ import { getLegalConfig } from '../services/legal';
 import { getInstalledModels, getInstalledModelsForKind } from '../services/localModels';
 import { defaultProviderConfigs, providerDefinitions, providerMap } from '../services/providers';
 import { getAppSettings, sanitizeAppSettings, saveAppSettings } from '../services/settings';
-import { palette, radii, spacing, type, typography } from '../theme';
+import { radii, spacing, type, typography } from '../theme';
 import type {
   AppSettings,
   InstalledModelRow,

@@ -25,7 +25,7 @@ import {
   getAppLogs,
   type AppLogEntry,
 } from '../services/appLogs';
-import { palette, radii, type, typography } from '../theme';
+import { radii, type, typography } from '../theme';
 import { useTheme, useThemedStyles, type Palette } from '../hooks/useTheme';
 
 const LOG_LIMIT = 200;

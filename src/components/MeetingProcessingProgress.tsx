@@ -2,7 +2,7 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
-import { palette, radii, type, typography } from '../theme';
+import { radii, type, typography } from '../theme';
 import type { MeetingProcessingProgressState, StageInfo } from './meetingProcessingProgressState';
 import { useTheme, useThemedStyles, type Palette } from '../hooks/useTheme';
 

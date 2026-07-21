@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
-import { elevation, palette, radii, spacing } from '../../theme';
+import { elevation, radii, spacing } from '../../theme';
 import { useThemedStyles, type Palette } from '../../hooks/useTheme';
 
 /**

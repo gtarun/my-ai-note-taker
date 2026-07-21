@@ -1,6 +1,5 @@
 import { StyleSheet, View } from 'react-native';
 
-import { palette } from '../theme';
 import { useThemedStyles, type Palette } from '../hooks/useTheme';
 
 /**

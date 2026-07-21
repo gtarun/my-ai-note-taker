@@ -38,7 +38,7 @@ import {
 } from '../src/services/account';
 import { getLegalConfig } from '../src/services/legal';
 import { AuthSession } from '../src/types';
-import { elevation, palette, radii, type, typography } from '../src/theme';
+import { elevation, radii, type, typography } from '../src/theme';
 import { useTheme, useThemedStyles, type Palette } from '../src/hooks/useTheme';
 
 WebBrowser.maybeCompleteAuthSession();

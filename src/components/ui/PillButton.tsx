@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { palette, radii, spacing, type, typography } from '../../theme';
+import { radii, spacing, type, typography } from '../../theme';
 import { PressableScale } from './PressableScale';
 import { useThemedStyles, type Palette } from '../../hooks/useTheme';
 

@@ -16,7 +16,7 @@ import { useEffect, useState } from 'react';
 import { bootstrapApp } from '../src/services/bootstrap';
 import { getHasSeenOnboarding } from '../src/services/onboarding';
 import { getStartupPresentation } from '../src/startup';
-import { palette, resolveTypography } from '../src/theme';
+import { resolveTypography } from '../src/theme';
 import { shouldPresentOnboarding } from '../src/onboarding/model';
 import { useTheme, useThemedStyles, type Palette } from '../src/hooks/useTheme';
 

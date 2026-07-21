@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PillButton, StatusChip } from '../../components/ui';
-import { palette, radii, type, typography } from '../../theme';
+import { radii, type, typography } from '../../theme';
 import { providerMap } from '../../services/providers';
 import type { ProviderConfig, ProviderId } from '../../types';
 import { FieldGroup, Label, ModelDropdown, PlainInput, ProviderIcon } from './SharedControls';

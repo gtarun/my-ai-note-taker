@@ -2,8 +2,8 @@ import { Feather } from '@expo/vector-icons';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { getProfileInitials } from '../features/account/presentation';
-import { palette, radii, typography } from '../theme';
-import { useThemedStyles, type Palette } from '../hooks/useTheme';
+import { radii, typography } from '../theme';
+import { useTheme, useThemedStyles, type Palette } from '../hooks/useTheme';
 
 export function ProfileAvatarButton({
   name,
@@ -16,6 +16,7 @@ export function ProfileAvatarButton({
   avatarUrl: string | null | undefined;
   onPress: () => void;
 }) {
+  const palette = useTheme();
   const styles = useThemedStyles(makeStyles);
   const initials = getProfileInitials({
     name: name ?? null,

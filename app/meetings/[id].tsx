@@ -67,7 +67,7 @@ import {
   syncMeetingExtractionResult,
 } from '../../src/services/meetings';
 import type { ExtractionLayer, MeetingRow, SummaryPayload } from '../../src/types';
-import { elevation, palette, radii, spacing, type, typography } from '../../src/theme';
+import { elevation, radii, spacing, type, typography } from '../../src/theme';
 import { formatDuration, formatTimestamp } from '../../src/utils/format';
 import { useTheme, useThemedStyles, type Palette } from '../../src/hooks/useTheme';
 

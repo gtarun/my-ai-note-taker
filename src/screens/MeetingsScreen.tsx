@@ -39,7 +39,7 @@ import { getAuthSession } from '../services/account';
 import { createMeetingFromImport, listMeetings } from '../services/meetings';
 import { dismissOfflineSetup, getOfflineSetupSession } from '../services/offlineSetupSession';
 import type { AuthSession, MeetingRow, OfflineSetupSession } from '../types';
-import { elevation, motion, palette, radii, spacing, type, typography } from '../theme';
+import { elevation, motion, radii, spacing, type, typography } from '../theme';
 import { formatDuration, formatTimestamp } from '../utils/format';
 import { useTheme, useThemedStyles, type Palette } from '../hooks/useTheme';
 
