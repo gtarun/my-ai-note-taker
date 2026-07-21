@@ -10,6 +10,7 @@ import {
   summarizeLocalTranscript,
   transcribeLocalAudio,
 } from './localInference';
+import { fetchWithRetry } from './http';
 import { providerMap } from './providers';
 
 type TranscribeParams = {
@@ -180,7 +181,7 @@ async function transcribeOpenAICompatible(provider: ProviderConfig, audioUri: st
     type: getAudioMimeType(fileName),
   } as never);
 
-  const response = await fetch(buildUrl(provider.baseUrl, '/audio/transcriptions'), {
+  const response = await fetchWithRetry(buildUrl(provider.baseUrl, '/audio/transcriptions'), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${provider.apiKey}`,
@@ -207,7 +208,7 @@ async function transcribeWithOpenRouter(provider: ProviderConfig, audioUri: stri
     encoding: FileSystem.EncodingType.Base64,
   });
 
-  const response = await fetch(buildUrl(provider.baseUrl, '/chat/completions'), {
+  const response = await fetchWithRetry(buildUrl(provider.baseUrl, '/chat/completions'), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${provider.apiKey}`,
@@ -282,7 +283,7 @@ async function summarizeWithOpenAICompatible(
     headers['X-Title'] = 'mu-fathom';
   }
 
-  const response = await fetch(buildUrl(provider.baseUrl, '/chat/completions'), {
+  const response = await fetchWithRetry(buildUrl(provider.baseUrl, '/chat/completions'), {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -321,7 +322,7 @@ async function summarizeWithOpenAICompatible(
 }
 
 async function summarizeWithAnthropic(provider: ProviderConfig, transcriptText: string) {
-  const response = await fetch(buildUrl(provider.baseUrl, '/messages'), {
+  const response = await fetchWithRetry(buildUrl(provider.baseUrl, '/messages'), {
     method: 'POST',
     headers: {
       'x-api-key': provider.apiKey,
@@ -363,7 +364,7 @@ ${transcriptText}`,
 
 async function summarizeWithGemini(provider: ProviderConfig, transcriptText: string) {
   const baseUrl = provider.baseUrl.replace(/\/$/, '');
-  const response = await fetch(
+  const response = await fetchWithRetry(
     `${baseUrl}/models/${provider.summaryModel}:generateContent?key=${encodeURIComponent(provider.apiKey)}`,
     {
       method: 'POST',
@@ -429,7 +430,7 @@ async function extractWithOpenAICompatible(
     headers['X-Title'] = 'mu-fathom';
   }
 
-  const response = await fetch(buildUrl(provider.baseUrl, '/chat/completions'), {
+  const response = await fetchWithRetry(buildUrl(provider.baseUrl, '/chat/completions'), {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -471,7 +472,7 @@ async function extractWithAnthropic(
   transcriptText: string,
   fields: ExtractionLayerField[]
 ) {
-  const response = await fetch(buildUrl(provider.baseUrl, '/messages'), {
+  const response = await fetchWithRetry(buildUrl(provider.baseUrl, '/messages'), {
     method: 'POST',
     headers: {
       'x-api-key': provider.apiKey,
@@ -514,7 +515,7 @@ async function extractWithGemini(
   fields: ExtractionLayerField[]
 ) {
   const baseUrl = provider.baseUrl.replace(/\/$/, '');
-  const response = await fetch(
+  const response = await fetchWithRetry(
     `${baseUrl}/models/${provider.summaryModel}:generateContent?key=${encodeURIComponent(provider.apiKey)}`,
     {
       method: 'POST',

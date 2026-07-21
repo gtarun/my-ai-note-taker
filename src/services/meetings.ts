@@ -168,6 +168,20 @@ export async function processMeeting(id: string, options: ProcessMeetingOptions 
     },
   });
 
+  // Preflight failures happen before any state is mutated, so the meeting keeps
+  // its current status rather than being marked failed — but they still need to
+  // reach the log, otherwise a user reporting "nothing happens when I tap
+  // Analyze" leaves no trace to debug.
+  const failPreflight = async (message: string): Promise<never> => {
+    await addAppLog({
+      level: 'error',
+      scope: 'meeting.process',
+      message: 'Processing preflight failed',
+      metadata: { meetingId: id, error: message },
+    });
+    throw new Error(message);
+  };
+
   const settings = await getAppSettings();
   const transcriptionProvider = settings.providers[settings.selectedTranscriptionProvider];
   const { providerId: summaryProviderId, provider: summaryProvider } =
@@ -188,11 +202,11 @@ export async function processMeeting(id: string, options: ProcessMeetingOptions 
   });
 
   if (!isProviderConfigured(settings.selectedTranscriptionProvider, transcriptionProvider, 'transcription')) {
-    throw new Error('Configure the selected transcription provider in Settings first.');
+    await failPreflight('Configure the selected transcription provider in Settings first.');
   }
 
   if (!isProviderConfigured(summaryProviderId, summaryProvider, 'summary')) {
-    throw new Error('Configure the selected summary provider in Settings first.');
+    await failPreflight('Configure the selected summary provider in Settings first.');
   }
 
   // For local transcription, factor in the user's preferred locale to choose
@@ -220,23 +234,23 @@ export async function processMeeting(id: string, options: ProcessMeetingOptions 
       const needsWhisperSmall =
         plan.modelId === 'whisper-small' && settings.transcriptionLocale !== 'en-US';
       if (needsWhisperSmall) {
-        throw new Error(
+        await failPreflight(
           `${settings.transcriptionLocale === 'auto' ? 'Mixed-language' : settings.transcriptionLocale} transcription needs Whisper Small. Download it from Local models, then try again.`
         );
       }
-      throw new Error('Download and install the selected local transcription model first.');
+      await failPreflight('Download and install the selected local transcription model first.');
     }
   }
 
   if (summaryProviderId === 'local') {
     const installedModel = await getInstalledModel(summaryProvider.summaryModel);
     if (!installedModel || installedModel.status !== 'installed') {
-      throw new Error('Download and install the selected local summary model first.');
+      await failPreflight('Download and install the selected local summary model first.');
     }
   }
 
   if (options.layerId && !layer) {
-    throw new Error('Selected extraction layer no longer exists.');
+    await failPreflight('Selected extraction layer no longer exists.');
   }
 
   try {
@@ -283,7 +297,6 @@ export async function processMeeting(id: string, options: ProcessMeetingOptions 
         },
       });
     } else {
-      await clearMeetingProcessingArtifacts(id);
       await updateMeetingStatus(
         id,
         settings.selectedTranscriptionProvider === 'local' ? 'transcribing_local' : 'transcribing',
@@ -343,7 +356,7 @@ export async function processMeeting(id: string, options: ProcessMeetingOptions 
         qualityWarning,
       });
 
-      await updateTranscript(id, transcriptText);
+      await replaceTranscriptAndClearStaleSummary(id, transcriptText);
       await updateMeetingStatus(
         id,
         summaryProviderId === 'local' ? 'summarizing_local' : 'summarizing',
@@ -769,10 +782,17 @@ async function updateTranscript(id: string, transcriptText: string) {
   );
 }
 
-async function clearMeetingProcessingArtifacts(id: string) {
+/**
+ * Writes a freshly produced transcript and retires the summary it invalidates in
+ * one statement. Re-runs used to null the transcript and summary up front, so a
+ * failed retry left the user with nothing where they previously had working
+ * notes. Now the old result survives until a new transcript replaces it.
+ */
+async function replaceTranscriptAndClearStaleSummary(id: string, transcriptText: string) {
   const db = getDatabase();
   await db.runAsync(
-    'UPDATE meetings SET transcript_text = NULL, summary_json = NULL, summary_short = NULL, error_message = NULL, updated_at = ? WHERE id = ?',
+    'UPDATE meetings SET transcript_text = ?, summary_json = NULL, summary_short = NULL, error_message = NULL, updated_at = ? WHERE id = ?',
+    transcriptText,
     new Date().toISOString(),
     id
   );

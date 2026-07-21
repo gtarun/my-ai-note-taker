@@ -29,6 +29,7 @@ import {
   markProgressFailed,
 } from '../../src/components/MeetingProcessingProgress';
 import { ScreenBackground } from '../../src/components/ScreenBackground';
+import { PillButton } from '../../src/components/ui';
 import {
   MEETING_DETAIL_TITLE_ACTION_SLOT_MIN_WIDTH,
   getExtractionSyncLabel,
@@ -59,10 +60,14 @@ import { elevation, palette } from '../../src/theme';
 import { formatDuration, formatTimestamp } from '../../src/utils/format';
 
 export default function MeetingDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id: string | string[] }>();
+  // The generic above is an assertion, not a runtime guarantee — a deep link can
+  // deliver `id` as an array, which would otherwise be bound directly into SQL.
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const [meeting, setMeeting] = useState<MeetingRow | null>(null);
   const [availableLayers, setAvailableLayers] = useState<ExtractionLayer[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [draftTitle, setDraftTitle] = useState('');
   const [extractionDraftValues, setExtractionDraftValues] = useState<Record<string, string>>({});
@@ -92,11 +97,19 @@ export default function MeetingDetailScreen() {
       return;
     }
 
-    const [data, layers] = await Promise.all([getMeeting(id), listExtractionLayers()]);
-    setMeeting(data);
-    setAvailableLayers(layers);
-    setDraftTitle(data?.title ?? '');
-    setHasLoaded(true);
+    try {
+      const [data, layers] = await Promise.all([getMeeting(id), listExtractionLayers()]);
+      setMeeting(data);
+      setAvailableLayers(layers);
+      setDraftTitle(data?.title ?? '');
+      setLoadError(null);
+    } catch (error) {
+      // Without this the spinner below never resolves, because setHasLoaded was
+      // unreachable on the throw path.
+      setLoadError(error instanceof Error ? error.message : 'Unable to load this meeting.');
+    } finally {
+      setHasLoaded(true);
+    }
   }, [id]);
 
   useEffect(() => {
@@ -109,7 +122,14 @@ export default function MeetingDetailScreen() {
       return;
     }
     loadedAudioUriRef.current = audioUri;
-    player.replace(audioUri);
+    try {
+      // expo-audio throws if the file moved or was deleted out from under the
+      // row. Playback is secondary here — the transcript and summary still
+      // render, so a missing file must not take the whole screen down.
+      player.replace(audioUri);
+    } catch {
+      loadedAudioUriRef.current = null;
+    }
   }, [meeting?.audioUri, player]);
 
   useEffect(() => {
@@ -290,6 +310,20 @@ export default function MeetingDetailScreen() {
         <Stack.Screen options={screenOptions} />
         <ActivityIndicator size="large" color={palette.ink} />
       </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <Stack.Screen options={screenOptions} />
+        <ScreenBackground />
+        <View style={styles.centered}>
+          <Text style={styles.notFoundTitle}>Couldn’t open this meeting</Text>
+          <Text style={styles.notFoundBody}>{loadError}</Text>
+          <PillButton label="Try again" onPress={() => void loadMeeting()} />
+        </View>
+      </SafeAreaView>
     );
   }
 

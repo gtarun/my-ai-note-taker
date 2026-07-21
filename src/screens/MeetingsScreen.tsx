@@ -3,9 +3,11 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Pressable,
+  RefreshControl,
   SafeAreaView,
   StyleSheet,
   Text,
@@ -45,14 +47,27 @@ export default function HomeScreen() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [offlineSetup, setOfflineSetup] = useState<OfflineSetupSession | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const loadMeetings = useCallback(async () => {
-    const [data, setupSession] = await Promise.all([
-      listMeetings(),
-      getOfflineSetupSession(),
-    ]);
-    setMeetings(data);
-    setOfflineSetup(setupSession);
+    // A throw here used to leave the list at [] forever, so a database error
+    // rendered as the "No meetings yet" empty state — the worst possible lie to
+    // show someone whose recordings are still on disk.
+    try {
+      const [data, setupSession] = await Promise.all([
+        listMeetings(),
+        getOfflineSetupSession(),
+      ]);
+      setMeetings(data);
+      setOfflineSetup(setupSession);
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Unable to load your meetings.');
+    } finally {
+      setHasLoaded(true);
+    }
 
     try {
       const storedSession = await getAuthSession();
@@ -64,7 +79,7 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadMeetings();
+      void loadMeetings();
     }, [loadMeetings])
   );
 
@@ -245,19 +260,44 @@ export default function HomeScreen() {
             );
           }}
           ListEmptyComponent={
-            <SurfaceCard muted style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>{emptyCopy.title}</Text>
-              <Text style={styles.emptyBody}>{emptyCopy.body}</Text>
-              <View style={styles.emptyActions}>
-                <PillButton label="New recording" onPress={() => router.push(RECORD_TAB_ROUTE)} />
-                <PillButton
-                  label={importButtonLabel}
-                  onPress={handleImport}
-                  variant="secondary"
-                  disabled={isImporting}
-                />
+            !hasLoaded ? (
+              <View style={styles.listLoading}>
+                <ActivityIndicator color={palette.ink} />
               </View>
-            </SurfaceCard>
+            ) : loadError ? (
+              <SurfaceCard muted style={styles.emptyState}>
+                <Text style={styles.emptyTitle}>Couldn’t load your meetings</Text>
+                <Text style={styles.emptyBody}>{loadError}</Text>
+                <View style={styles.emptyActions}>
+                  <PillButton label="Try again" onPress={() => void loadMeetings()} />
+                </View>
+              </SurfaceCard>
+            ) : (
+              <SurfaceCard muted style={styles.emptyState}>
+                <Text style={styles.emptyTitle}>{emptyCopy.title}</Text>
+                <Text style={styles.emptyBody}>{emptyCopy.body}</Text>
+                <View style={styles.emptyActions}>
+                  <PillButton label="New recording" onPress={() => router.push(RECORD_TAB_ROUTE)} />
+                  <PillButton
+                    label={importButtonLabel}
+                    onPress={handleImport}
+                    variant="secondary"
+                    disabled={isImporting}
+                  />
+                </View>
+              </SurfaceCard>
+            )
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={async () => {
+                setIsRefreshing(true);
+                await loadMeetings();
+                setIsRefreshing(false);
+              }}
+              tintColor={palette.ink}
+            />
           }
         />
       </View>
@@ -466,6 +506,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     paddingVertical: 24,
+  },
+  listLoading: {
+    alignItems: 'center',
+    paddingVertical: 48,
   },
   emptyTitle: {
     color: palette.ink,

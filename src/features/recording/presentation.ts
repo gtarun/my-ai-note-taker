@@ -92,7 +92,8 @@ export function getButtonDisabled(phase: RecordingPhase): boolean {
   return phase === 'saving';
 }
 
-export function getButtonIconName(phase: RecordingPhase): string {
+/** Narrowed to a literal union so it satisfies MaterialCommunityIcons' name prop. */
+export function getButtonIconName(phase: RecordingPhase): 'stop-circle-outline' | 'microphone-outline' {
   switch (phase) {
     case 'recording':
       return 'stop-circle-outline';

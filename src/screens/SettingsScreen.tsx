@@ -2,6 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Platform,
   Pressable,
@@ -90,6 +91,7 @@ export default function SettingsScreen() {
   const [deviceSupport, setDeviceSupport] = useState<LocalDeviceSupport | null>(null);
   const [editingProviderId, setEditingProviderId] = useState<ProviderId | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     void hydrate();
@@ -104,13 +106,21 @@ export default function SettingsScreen() {
   );
 
   async function hydrate() {
-    const settings = await getAppSettings();
-    setForm(sanitizeAppSettings(settings));
+    // Any throw here used to leave `form` null forever, pinning the screen on
+    // the "Loading settings…" text with no way back.
+    try {
+      const settings = await getAppSettings();
+      setForm(sanitizeAppSettings(settings));
 
-    const [support, models] = await Promise.all([getLocalDeviceSupport(), getInstalledModels()]);
-    setDeviceSupport(support);
-    setInstalledModels(models);
-    setHasLoadedInstalledModels(true);
+      const [support, models] = await Promise.all([getLocalDeviceSupport(), getInstalledModels()]);
+      setDeviceSupport(support);
+      setInstalledModels(models);
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Unable to load your settings.');
+    } finally {
+      setHasLoadedInstalledModels(true);
+    }
   }
 
   const installedTranscriptionModels = useMemo(
@@ -162,7 +172,17 @@ export default function SettingsScreen() {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.loading}>
-          <Text style={styles.loadingText}>Loading settings…</Text>
+          {loadError ? (
+            <>
+              <Text style={styles.loadingText}>{loadError}</Text>
+              <PillButton label="Try again" onPress={() => void hydrate()} />
+            </>
+          ) : (
+            <>
+              <ActivityIndicator color={palette.ink} />
+              <Text style={styles.loadingText}>Loading settings…</Text>
+            </>
+          )}
         </View>
       </SafeAreaView>
     );
@@ -652,7 +672,7 @@ function NavRow({
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: palette.paper },
   container: { padding: 20, gap: 18, paddingBottom: 48 },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 24 },
   loadingText: { color: palette.mutedInk, fontFamily: typography.body.fontFamily, fontSize: 15 },
   body: {
     color: palette.mutedInk,

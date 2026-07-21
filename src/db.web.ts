@@ -638,26 +638,16 @@ const db = {
 
     if (
       source.includes(
-        'SET transcript_text = NULL, summary_json = NULL, summary_short = NULL, error_message = NULL, updated_at = ?'
+        'SET transcript_text = ?, summary_json = NULL, summary_short = NULL, error_message = NULL, updated_at = ?'
       )
     ) {
-      const meeting = state.meetings.find((row) => row.id === params[1]);
+      const meeting = state.meetings.find((row) => row.id === params[2]);
       if (meeting) {
-        meeting.transcript_text = null;
+        meeting.transcript_text = String(params[0]);
         meeting.summary_json = null;
         meeting.summary_short = null;
         meeting.error_message = null;
-        meeting.selected_layer_id = null;
-        meeting.extraction_layer_name = null;
-        meeting.extraction_fields_json = null;
-        meeting.extraction_values_json = null;
-        meeting.extraction_status = null;
-        meeting.extraction_error_message = null;
-        meeting.extraction_sync_status = null;
-        meeting.extraction_sync_error_message = null;
-        meeting.extraction_synced_at = null;
-        meeting.extraction_synced_row_id = null;
-        meeting.updated_at = String(params[0]);
+        meeting.updated_at = String(params[1]);
         writeState(state);
       }
       return;

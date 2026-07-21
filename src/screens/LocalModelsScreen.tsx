@@ -70,6 +70,7 @@ export default function LocalModelsScreen() {
   const [isRefreshingCatalog, setIsRefreshingCatalog] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [activeDownloadIds, setActiveDownloadIds] = useState<Set<string>>(() => new Set());
+  const [loadError, setLoadError] = useState<string | null>(null);
   const activeDownloadIdsRef = useRef(new Set<string>());
 
   const setActiveDownload = (modelId: string, isActive: boolean) => {
@@ -86,17 +87,22 @@ export default function LocalModelsScreen() {
   }, []);
 
   async function hydrate() {
-    const [nextSettings, support, models, setupSession] = await Promise.all([
-      getAppSettings(),
-      getLocalDeviceSupport(),
-      getInstalledModels(),
-      getOfflineSetupSession(),
-    ]);
-    setSettings(nextSettings);
-    setDeviceSupport(support);
-    setInstalledModels(models);
-    setOfflineSetup(setupSession);
-    await refreshCatalog(nextSettings.modelCatalogUrl);
+    try {
+      const [nextSettings, support, models, setupSession] = await Promise.all([
+        getAppSettings(),
+        getLocalDeviceSupport(),
+        getInstalledModels(),
+        getOfflineSetupSession(),
+      ]);
+      setSettings(nextSettings);
+      setDeviceSupport(support);
+      setInstalledModels(models);
+      setOfflineSetup(setupSession);
+      setLoadError(null);
+      await refreshCatalog(nextSettings.modelCatalogUrl);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Unable to load local models.');
+    }
   }
 
   const installedTranscriptionModels = useMemo(
@@ -285,6 +291,16 @@ export default function LocalModelsScreen() {
             ]}
           />
         </FadeInView>
+
+        {loadError ? (
+          <FadeInView delay={20}>
+            <SurfaceCard muted style={styles.runtimeCard}>
+              <Text style={styles.modelTitle}>Couldn’t load local models</Text>
+              <Text style={styles.modelMeta}>{loadError}</Text>
+              <PillButton label="Try again" onPress={() => void hydrate()} variant="secondary" />
+            </SurfaceCard>
+          </FadeInView>
+        ) : null}
 
         <FadeInView delay={30}>
           <SurfaceCard muted style={styles.runtimeCard}>

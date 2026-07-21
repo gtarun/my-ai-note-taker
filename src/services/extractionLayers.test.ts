@@ -274,6 +274,84 @@ describe('extraction layers service', () => {
     ]);
   });
 
+  test('keeps local layers when a cloud sync fails mid-flight', async () => {
+    const { listExtractionLayers, saveExtractionLayer } = await import('./extractionLayers');
+
+    const created = await saveExtractionLayer({
+      requestToken: 'request-token-offline',
+      name: 'Leads',
+      fields: [{ id: 'company', title: 'Company', description: '' }],
+    });
+
+    // Now sign in and have the cloud list blow up. The local cache is the
+    // user's only copy at this point, so it must survive.
+    mockGetAuthSession.mockResolvedValue({ accessToken: 'token', user: { id: 'user-1' } });
+    mockListCloudExtractionLayers.mockRejectedValue(new Error('Network request failed'));
+
+    await expect(listExtractionLayers()).resolves.toMatchObject([{ id: created.id }]);
+    expect(layerRows).toHaveLength(1);
+  });
+
+  test('keeps local layers when the incoming cloud payload is malformed', async () => {
+    const { listExtractionLayers, saveExtractionLayer } = await import('./extractionLayers');
+
+    const existing = await saveExtractionLayer({
+      requestToken: 'request-token-malformed',
+      name: 'Leads',
+      fields: [{ id: 'company', title: 'Company', description: '' }],
+    });
+
+    mockGetAuthSession.mockResolvedValue({ accessToken: 'token', user: { id: 'user-1' } });
+    // A layer with no fields fails validation partway through the write phase.
+    // The old delete-then-write order had already destroyed every local layer
+    // by this point, leaving the user with nothing.
+    mockListCloudExtractionLayers.mockResolvedValue([
+      {
+        id: 'layer-broken',
+        name: 'Broken',
+        spreadsheetId: null,
+        spreadsheetTitle: null,
+        sheetTitle: null,
+        createdAt: '2026-04-16T00:00:00.000Z',
+        updatedAt: '2026-04-16T00:00:00.000Z',
+        fields: [],
+      },
+    ]);
+
+    await listExtractionLayers();
+
+    expect(layerRows.map((row) => row.id)).toContain(existing.id);
+  });
+
+  test('replaces local layers without dropping ones the cloud still has', async () => {
+    const { listExtractionLayers, saveExtractionLayer } = await import('./extractionLayers');
+
+    const kept = await saveExtractionLayer({
+      requestToken: 'request-token-kept',
+      name: 'Leads',
+      fields: [{ id: 'company', title: 'Company', description: '' }],
+    });
+
+    mockGetAuthSession.mockResolvedValue({ accessToken: 'token', user: { id: 'user-1' } });
+    mockListCloudExtractionLayers.mockResolvedValue([
+      {
+        id: kept.id,
+        name: 'Leads',
+        spreadsheetId: null,
+        spreadsheetTitle: null,
+        sheetTitle: null,
+        createdAt: kept.createdAt,
+        updatedAt: kept.updatedAt,
+        fields: [{ id: 'company', title: 'Company', description: '' }],
+      },
+    ]);
+
+    await listExtractionLayers();
+
+    expect(layerRows.map((row) => row.id)).toEqual([kept.id]);
+    expect(fieldRows.filter((row) => row.layer_id === kept.id)).toHaveLength(1);
+  });
+
   test('keeps an existing sheet connection when editing a synced layer', async () => {
     mockGetAuthSession.mockResolvedValue({ accessToken: 'token', user: { id: 'user-1' } });
     mockSaveCloudExtractionLayer.mockImplementation(async (layer) => layer);

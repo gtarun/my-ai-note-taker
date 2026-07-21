@@ -41,6 +41,7 @@ import { palette, radii, typography } from '../theme';
 export default function LayersScreen() {
   const [layers, setLayers] = useState<ExtractionLayer[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isEditorVisible, setIsEditorVisible] = useState(false);
   const [isSheetPickerVisible, setIsSheetPickerVisible] = useState(false);
   const [draft, setDraft] = useState<LayerDraft>(createEmptyDraft());
@@ -66,9 +67,17 @@ export default function LayersScreen() {
   const { height: windowHeight } = useWindowDimensions();
 
   const loadLayers = useCallback(async () => {
-    const nextLayers = await listExtractionLayers();
-    setLayers(nextLayers);
-    setIsLoaded(true);
+    try {
+      const nextLayers = await listExtractionLayers();
+      setLayers(nextLayers);
+      setLoadError(null);
+    } catch (error) {
+      // Without this, `isLoaded` never flipped and the empty state below could
+      // never render — the screen showed only the hero, permanently.
+      setLoadError(error instanceof Error ? error.message : 'Unable to load your layers.');
+    } finally {
+      setIsLoaded(true);
+    }
   }, []);
 
   useFocusEffect(
@@ -532,7 +541,17 @@ export default function LayersScreen() {
           </SurfaceCard>
         </FadeInView>
 
-        {isLoaded && !layers.length ? (
+        {isLoaded && loadError ? (
+          <FadeInView delay={80}>
+            <SurfaceCard style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>Couldn’t load your layers</Text>
+              <Text style={styles.emptyBody}>{loadError}</Text>
+              <PillButton label="Try again" onPress={() => void loadLayers()} variant="secondary" />
+            </SurfaceCard>
+          </FadeInView>
+        ) : null}
+
+        {isLoaded && !loadError && !layers.length ? (
           <FadeInView delay={80}>
             <SurfaceCard style={styles.emptyCard}>
               <Text style={styles.emptyTitle}>No extraction layers yet</Text>

@@ -2,6 +2,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { FileSystemUploadType } from 'expo-file-system/legacy';
 
 import { fetchGoogleDriveAccessToken, getAuthSession } from './account';
+import { addAppLog } from './appLogs';
+import { fetchWithRetry, fetchWithTimeout } from './http';
 
 const APP_ROOT_SEGMENTS = ['mu-fathom', 'recordings'] as const;
 
@@ -12,7 +14,7 @@ function escapeDriveQueryName(name: string) {
 async function listChildFolder(accessToken: string, parentId: string, name: string): Promise<string | null> {
   const q = `name='${escapeDriveQueryName(name)}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
   const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=5`;
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 
@@ -25,7 +27,7 @@ async function listChildFolder(accessToken: string, parentId: string, name: stri
 }
 
 async function createChildFolder(accessToken: string, parentId: string, name: string): Promise<string> {
-  const response = await fetch('https://www.googleapis.com/drive/v3/files?fields=id', {
+  const response = await fetchWithTimeout('https://www.googleapis.com/drive/v3/files?fields=id', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -85,7 +87,7 @@ async function startResumableDriveUpload(
   fileName: string,
   mimeType: string
 ): Promise<string> {
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id',
     {
       method: 'POST',
@@ -174,7 +176,18 @@ export async function uploadMeetingRecordingIfConfigured(input: { title: string;
     });
 
     return 'uploaded';
-  } catch {
+  } catch (error) {
+    // This used to swallow the reason entirely, so a user reporting "Drive
+    // backup says failed" gave us nothing to work with.
+    await addAppLog({
+      level: 'error',
+      scope: 'drive.upload',
+      message: 'Drive upload failed',
+      metadata: {
+        title: input.title,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
     return 'failed';
   }
 }

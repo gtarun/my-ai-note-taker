@@ -60,15 +60,23 @@ export async function getExtractionLayer(id: string): Promise<ExtractionLayer | 
     return local;
   }
 
-  const session = await getAuthSession();
+  // The cloud lookup is a best-effort fallback for a layer we don't have
+  // locally. It must not throw: this runs inside the meeting processing
+  // preflight, where a transient network error would otherwise abort a run the
+  // local cache could have served.
+  try {
+    const session = await getAuthSession();
 
-  if (!session) {
+    if (!session) {
+      return null;
+    }
+
+    const cloudLayers = await listCloudExtractionLayers();
+    await replaceLocalExtractionLayers(cloudLayers);
+    return cloudLayers.find((layer) => layer.id === id) ?? null;
+  } catch {
     return null;
   }
-
-  const cloudLayers = await listCloudExtractionLayers();
-  await replaceLocalExtractionLayers(cloudLayers);
-  return cloudLayers.find((layer) => layer.id === id) ?? null;
 }
 
 export async function saveExtractionLayer(input: SaveExtractionLayerInput): Promise<ExtractionLayer> {
@@ -117,12 +125,19 @@ export async function deleteExtractionLayer(id: string) {
 export async function replaceLocalExtractionLayers(layers: ExtractionLayer[]) {
   const existing = await listLocalExtractionLayers();
 
-  for (const layer of existing) {
-    await deleteExtractionLayerFromLocalCache(layer.id);
-  }
-
+  // Write before pruning. Deleting first meant an interrupted sync — or a cloud
+  // response that came back empty for any reason — permanently destroyed every
+  // local layer with nothing to restore from.
   for (const layer of layers) {
     await saveExtractionLayerToLocalCache(layer);
+  }
+
+  const incomingIds = new Set(layers.map((layer) => layer.id));
+
+  for (const layer of existing) {
+    if (!incomingIds.has(layer.id)) {
+      await deleteExtractionLayerFromLocalCache(layer.id);
+    }
   }
 }
 

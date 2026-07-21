@@ -111,6 +111,8 @@ export default function RecordScreen() {
 
             <View
               style={styles.timerWrap}
+              accessible
+              accessibilityRole="timer"
               accessibilityLabel={getTimerAccessibilityLabel(durationMillis)}
             >
               <Text style={styles.timerValue}>{formatDuration(durationMillis)}</Text>

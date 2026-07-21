@@ -12,6 +12,7 @@ import {
   ModelCatalogItem,
 } from '../types';
 import { Sha256 } from '../utils/sha256';
+import { fetchWithRetry } from './http';
 
 const MODEL_DIR = `${FileSystem.documentDirectory}models`;
 const SHA256_CHUNK_BYTES = 256 * 1024;
@@ -272,7 +273,9 @@ export async function getModelCatalog(modelCatalogUrl?: string): Promise<ModelCa
     return BUILT_IN_MODEL_CATALOG;
   }
 
-  const response = await fetch(catalogUrl);
+  // Short deadline: this is a small JSON file, and the built-in catalog is a
+  // perfectly good fallback if the user's URL is unreachable.
+  const response = await fetchWithRetry(catalogUrl, { timeoutMs: 15_000, attempts: 2 });
 
   if (!response.ok) {
     throw new Error(`Model catalog request failed (${response.status}).`);
