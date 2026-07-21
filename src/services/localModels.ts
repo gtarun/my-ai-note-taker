@@ -62,7 +62,7 @@ const BUILT_IN_MODEL_CATALOG: ModelCatalogItem[] = [
     downloadUrl: buildHuggingFaceDownloadUrl('ggerganov/whisper.cpp', 'ggml-base.bin'),
     sourceUrl: buildHuggingFaceModelUrl('ggerganov/whisper.cpp'),
     sourceLabel: 'View whisper.cpp files',
-    sha256: '',
+    sha256: '60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe',
     sizeBytes: 147951465,
     platforms: ['ios', 'android'],
     minFreeSpaceBytes: 1 * 1024 * 1024 * 1024,
@@ -79,8 +79,8 @@ const BUILT_IN_MODEL_CATALOG: ModelCatalogItem[] = [
     downloadUrl: buildHuggingFaceDownloadUrl('ggerganov/whisper.cpp', 'ggml-small.bin'),
     sourceUrl: buildHuggingFaceModelUrl('ggerganov/whisper.cpp'),
     sourceLabel: 'View whisper.cpp files',
-    sha256: '',
-    sizeBytes: 488 * 1024 * 1024,
+    sha256: '1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b',
+    sizeBytes: 487601967,
     platforms: ['ios', 'android'],
     minFreeSpaceBytes: 2 * 1024 * 1024 * 1024,
     recommended: false,
@@ -338,9 +338,19 @@ export function isSupportedIosSummaryModel(modelId: string) {
   return IOS_SUPPORTED_SUMMARY_MODEL_IDS.has(modelId);
 }
 
+/**
+ * `onPhase` exists because checksum verification of a multi-hundred-megabyte
+ * model takes real time in pure JS. Without it the UI sits at 100% looking
+ * frozen for minutes after the download finishes.
+ */
+export type DownloadModelOptions = {
+  onProgress?: (progress: number) => void;
+  onPhase?: (phase: 'downloading' | 'verifying') => void;
+};
+
 export async function downloadModel(
   catalogItem: ModelCatalogItem,
-  options?: { onProgress?: (progress: number) => void }
+  options?: DownloadModelOptions
 ) {
   if (activeModelDownloadIds.has(catalogItem.id)) {
     throw new Error(`${catalogItem.displayName} is already downloading.`);
@@ -357,7 +367,7 @@ export async function downloadModel(
 
 async function downloadModelOnce(
   catalogItem: ModelCatalogItem,
-  options?: { onProgress?: (progress: number) => void }
+  options?: DownloadModelOptions
 ) {
   // Apple Speech is provided by iOS; nothing to download. Just report
   // installed-and-ready so the UI completion path runs the same way.
@@ -410,6 +420,8 @@ async function downloadModelOnce(
   });
   await upsertInstalledModel(downloadingRow);
 
+  options?.onPhase?.('downloading');
+
   const downloadResumable = FileSystem.createDownloadResumable(
     catalogItem.downloadUrl,
     targetUri,
@@ -445,7 +457,10 @@ async function downloadModelOnce(
     }
 
     if (catalogItem.sha256.trim()) {
-      const digest = await computeFileSha256(result.uri);
+      options?.onPhase?.('verifying');
+      const digest = await computeFileSha256(result.uri, (progress) => {
+        options?.onProgress?.(progress);
+      });
       if (digest !== catalogItem.sha256.trim().toLowerCase()) {
         throw new Error('Downloaded model checksum did not match the catalog entry.');
       }
@@ -673,7 +688,7 @@ function getCurrentModelPlatform(support?: LocalDeviceSupport | null): LocalMode
   return Platform.OS === 'android' ? 'android' : 'ios';
 }
 
-async function computeFileSha256(uri: string) {
+async function computeFileSha256(uri: string, onProgress?: (progress: number) => void) {
   const fileInfo = await FileSystem.getInfoAsync(uri);
 
   if (!fileInfo.exists || !fileInfo.size) {
@@ -692,6 +707,7 @@ async function computeFileSha256(uri: string) {
 
     hasher.update(Uint8Array.from(Buffer.from(base64Chunk, 'base64')));
     position += Math.min(SHA256_CHUNK_BYTES, fileInfo.size - position);
+    onProgress?.(position / fileInfo.size);
   }
 
   return hasher.digestHex().toLowerCase();

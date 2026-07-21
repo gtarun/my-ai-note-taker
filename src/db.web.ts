@@ -15,6 +15,7 @@ type AppPreferencesRow = {
   delete_uploaded_audio: number;
   model_catalog_url: string;
   has_seen_onboarding: number;
+  transcription_locale: string;
 };
 
 type OfflineSetupSessionRow = {
@@ -148,6 +149,7 @@ const defaultState: DatabaseShape = {
     delete_uploaded_audio: 0,
     model_catalog_url: '',
     has_seen_onboarding: 0,
+    transcription_locale: 'en-US',
   },
   offlineSetupSession: {
     id: 1,
@@ -193,6 +195,8 @@ function readState(): DatabaseShape {
         ...state.appPreferences,
         model_catalog_url: state.appPreferences?.model_catalog_url ?? defaultState.appPreferences.model_catalog_url,
         has_seen_onboarding: state.appPreferences?.has_seen_onboarding ?? defaultState.appPreferences.has_seen_onboarding,
+        transcription_locale:
+          state.appPreferences?.transcription_locale ?? defaultState.appPreferences.transcription_locale,
       },
       offlineSetupSession: {
         ...structuredClone(defaultState.offlineSetupSession),
@@ -438,6 +442,7 @@ const db = {
         delete_uploaded_audio: Number(params[2]),
         model_catalog_url: params[3] ? String(params[3]) : '',
         has_seen_onboarding: 0,
+        transcription_locale: 'en-US',
       };
       writeState(state);
       return;
@@ -476,6 +481,7 @@ const db = {
         selected_summary_provider: String(params[1]),
         delete_uploaded_audio: Number(params[2]),
         model_catalog_url: params[3] ? String(params[3]) : '',
+        transcription_locale: params[4] ? String(params[4]) : 'en-US',
       };
       writeState(state);
       return;

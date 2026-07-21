@@ -71,6 +71,7 @@ export default function LocalModelsScreen() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [activeDownloadIds, setActiveDownloadIds] = useState<Set<string>>(() => new Set());
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [downloadPhase, setDownloadPhase] = useState<Record<string, 'downloading' | 'verifying'>>({});
   const activeDownloadIdsRef = useRef(new Set<string>());
 
   const setActiveDownload = (modelId: string, isActive: boolean) => {
@@ -190,6 +191,9 @@ export default function LocalModelsScreen() {
       setOfflineSetup(await getOfflineSetupSession());
 
       await downloadModel(item, {
+        onPhase: (phase) => {
+          setDownloadPhase((current) => ({ ...current, [item.id]: phase }));
+        },
         onProgress: (progress) => {
           const bytesDownloaded = Math.round(item.sizeBytes * progress);
           setOfflineSetup((current) =>
@@ -326,6 +330,7 @@ export default function LocalModelsScreen() {
               items={visibleCatalog.filter((item) => item.kind === 'transcription')}
               installedModels={installedTranscriptionModels}
               downloadProgress={downloadProgress}
+              downloadPhase={downloadPhase}
               offlineSetupStatusByModel={offlineSetupStatusByModel}
               activeDownloadIds={activeDownloadIds}
               onDownload={handleDownloadModel}
@@ -338,6 +343,7 @@ export default function LocalModelsScreen() {
               items={visibleCatalog.filter((item) => item.kind === 'summary')}
               installedModels={installedSummaryModels}
               downloadProgress={downloadProgress}
+              downloadPhase={downloadPhase}
               offlineSetupStatusByModel={offlineSetupStatusByModel}
               activeDownloadIds={activeDownloadIds}
               onDownload={handleDownloadModel}
@@ -400,6 +406,7 @@ function ModelCatalogList({
   items,
   installedModels,
   downloadProgress,
+  downloadPhase,
   offlineSetupStatusByModel,
   activeDownloadIds,
   onDownload,
@@ -411,6 +418,7 @@ function ModelCatalogList({
   items: ModelCatalogItem[];
   installedModels: InstalledModelRow[];
   downloadProgress: Record<string, number>;
+  downloadPhase: Record<string, 'downloading' | 'verifying'>;
   offlineSetupStatusByModel: Partial<Record<string, OfflineSetupSession['status']>>;
   activeDownloadIds: Set<string>;
   onDownload: (item: ModelCatalogItem) => void;
@@ -432,8 +440,13 @@ function ModelCatalogList({
           const progress = downloadProgress[item.id];
           const setupStatus = offlineSetupStatusByModel[item.id];
           const isActivelyDownloading = activeDownloadIds.has(item.id);
+          // Hashing a several-hundred-megabyte model in JS is slow enough that
+          // the bar would otherwise sit at 100% looking hung.
+          const isVerifying = downloadPhase[item.id] === 'verifying';
           const downloadLabel = isActivelyDownloading
-            ? `Downloading ${Math.round((progress ?? 0) * 100)}%`
+            ? isVerifying
+              ? `Verifying ${Math.round((progress ?? 0) * 100)}%`
+              : `Downloading ${Math.round((progress ?? 0) * 100)}%`
             : setupStatus === 'downloading' ||
                 setupStatus === 'paused_offline' ||
                 setupStatus === 'paused_user'

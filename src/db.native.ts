@@ -1,10 +1,17 @@
 import * as SQLite from 'expo-sqlite';
 
+import { type MigrationContext, runMigrations } from './db/migrations';
 import { MeetingRow } from './types';
 
 const db = SQLite.openDatabaseSync('mu-fathom.db');
 
 export async function initializeDatabase() {
+  // SQLite defaults foreign_keys OFF, so the ON DELETE CASCADE declared on
+  // extraction_layer_fields has never actually fired — it worked only because
+  // one delete path happens to remove field rows by hand first. Must be set
+  // outside a transaction to take effect.
+  await db.execAsync('PRAGMA foreign_keys = ON;');
+
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS meetings (
@@ -155,33 +162,38 @@ export async function initializeDatabase() {
     INSERT OR IGNORE INTO offline_setup_session (id) VALUES (1);
   `);
 
-  const appPreferenceColumns = await db.getAllAsync<{ name?: string }>('PRAGMA table_info(app_preferences)');
-  if (!appPreferenceColumns.some((column) => column.name === 'model_catalog_url')) {
-    await db.execAsync("ALTER TABLE app_preferences ADD COLUMN model_catalog_url TEXT NOT NULL DEFAULT '';");
-  }
-  if (!appPreferenceColumns.some((column) => column.name === 'has_seen_onboarding')) {
-    await db.execAsync('ALTER TABLE app_preferences ADD COLUMN has_seen_onboarding INTEGER NOT NULL DEFAULT 0;');
-  }
+  await applySchemaMigrations();
+}
 
-  const meetingColumns = await db.getAllAsync<{ name?: string }>('PRAGMA table_info(meetings)');
-  const requiredMeetingColumns = [
-    ['selected_layer_id', 'TEXT'],
-    ['extraction_layer_name', 'TEXT'],
-    ['extraction_fields_json', 'TEXT'],
-    ['extraction_values_json', 'TEXT'],
-    ['extraction_status', 'TEXT'],
-    ['extraction_error_message', 'TEXT'],
-    ['extraction_sync_status', 'TEXT'],
-    ['extraction_sync_error_message', 'TEXT'],
-    ['extraction_synced_at', 'TEXT'],
-    ['extraction_synced_row_id', 'TEXT'],
-  ] as const;
+/**
+ * Brings the schema up to the latest version, tracked in SQLite's own
+ * `user_version`. Replaces the hand-rolled column checks that only ever covered
+ * `app_preferences` and `meetings` — the other five tables had no migration
+ * path at all, so adding a column to any of them would have broken every
+ * existing install.
+ */
+async function applySchemaMigrations() {
+  const context: MigrationContext = {
+    execAsync: (source) => db.execAsync(source),
+    getColumnNames: async (table) => {
+      const columns = await db.getAllAsync<{ name?: string }>(`PRAGMA table_info(${table})`);
+      return columns.map((column) => column.name).filter((name): name is string => Boolean(name));
+    },
+  };
 
-  for (const [columnName, columnType] of requiredMeetingColumns) {
-    if (!meetingColumns.some((column) => column.name === columnName)) {
-      await db.execAsync(`ALTER TABLE meetings ADD COLUMN ${columnName} ${columnType};`);
+  const versionRow = await db.getFirstAsync<{ user_version?: number }>('PRAGMA user_version');
+  const currentVersion = Number(versionRow?.user_version ?? 0);
+
+  await runMigrations(context, currentVersion, async (version) => {
+    // PRAGMA does not accept bound parameters. The value comes from our own
+    // migration list, but assert it is an integer so it can never be a
+    // vector for anything else.
+    if (!Number.isInteger(version)) {
+      throw new Error(`Refusing to set a non-integer schema version: ${version}`);
     }
-  }
+
+    await db.execAsync(`PRAGMA user_version = ${version}`);
+  });
 }
 
 export function getDatabase() {

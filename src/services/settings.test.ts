@@ -50,6 +50,7 @@ const appPreferencesState = {
   delete_uploaded_audio: 0,
   model_catalog_url: '',
   has_seen_onboarding: 0,
+  transcription_locale: 'en-US',
 };
 
 const providerSettingsState = Object.fromEntries(
@@ -92,6 +93,7 @@ vi.mock('../db', () => ({
         appPreferencesState.selected_summary_provider = String(params[1]);
         appPreferencesState.delete_uploaded_audio = Number(params[2]);
         appPreferencesState.model_catalog_url = String(params[3] ?? '');
+        appPreferencesState.transcription_locale = String(params[4] ?? 'en-US');
         return;
       }
 
@@ -149,6 +151,7 @@ describe('settings persistence', () => {
     appPreferencesState.selected_summary_provider = 'openai';
     appPreferencesState.delete_uploaded_audio = 0;
     appPreferencesState.model_catalog_url = '';
+    appPreferencesState.transcription_locale = 'en-US';
     appPreferencesState.has_seen_onboarding = 0;
     for (const [providerId, config] of Object.entries(defaultProviderConfigs)) {
       providerSettingsState[providerId as keyof typeof providerSettingsState] = {
@@ -383,5 +386,28 @@ describe('settings persistence', () => {
     expect(appPreferencesState.selected_transcription_provider).toBe('local');
     expect(providerSettingsState.local.transcription_model).toBe('whisper-base');
     expect(mockSaveCloudSettings).toHaveBeenCalled();
+  });
+
+  test('persists the chosen transcription locale across reloads', async () => {
+    // The Settings screen has always offered Hindi, Punjabi and auto-detect,
+    // but the value had no column to live in: the preferences UPDATE wrote four
+    // columns and none was the locale, so getAppSettings hardcoded 'en-US' back
+    // and the choice silently reverted on the next read.
+    const { getAppSettings, saveAppSettings } = await import('./settings');
+
+    const settings = await getAppSettings();
+    await saveAppSettings({ ...settings, transcriptionLocale: 'hi-IN' });
+
+    expect(appPreferencesState.transcription_locale).toBe('hi-IN');
+    await expect(getAppSettings()).resolves.toMatchObject({ transcriptionLocale: 'hi-IN' });
+  });
+
+  test('keeps auto-detect selected too', async () => {
+    const { getAppSettings, saveAppSettings } = await import('./settings');
+
+    const settings = await getAppSettings();
+    await saveAppSettings({ ...settings, transcriptionLocale: 'auto' });
+
+    await expect(getAppSettings()).resolves.toMatchObject({ transcriptionLocale: 'auto' });
   });
 });

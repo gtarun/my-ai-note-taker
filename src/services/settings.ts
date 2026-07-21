@@ -23,6 +23,7 @@ type AppPreferencesRow = {
   selected_summary_provider: ProviderId;
   delete_uploaded_audio: number;
   model_catalog_url?: string | null;
+  transcription_locale?: AppSettings['transcriptionLocale'] | null;
 };
 
 type ProviderSettingsRow = {
@@ -364,12 +365,14 @@ export async function saveAppSettingsToLocalCache(
       selected_transcription_provider = ?,
       selected_summary_provider = ?,
       delete_uploaded_audio = ?,
-      model_catalog_url = ?
+      model_catalog_url = ?,
+      transcription_locale = ?
     WHERE id = 1`,
     settings.selectedTranscriptionProvider,
     settings.selectedSummaryProvider,
     settings.deleteUploadedAudio ? 1 : 0,
-    settings.modelCatalogUrl
+    settings.modelCatalogUrl,
+    settings.transcriptionLocale
   );
 
   if (options?.hasSeenOnboarding != null) {
@@ -423,7 +426,7 @@ async function getLocalAppSettings(): Promise<AppSettings> {
       storedPreferences?.selected_transcription_provider ?? defaultSettings.selectedTranscriptionProvider,
     selectedSummaryProvider: storedPreferences?.selected_summary_provider ?? defaultSettings.selectedSummaryProvider,
     providers,
-    transcriptionLocale: defaultSettings.transcriptionLocale,
+    transcriptionLocale: storedPreferences?.transcription_locale ?? defaultSettings.transcriptionLocale,
     deleteUploadedAudio:
       storedPreferences?.delete_uploaded_audio != null
         ? Boolean(storedPreferences.delete_uploaded_audio)

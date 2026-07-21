@@ -9,7 +9,6 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from 'react-native';
@@ -538,18 +537,16 @@ export default function SettingsScreen() {
               onPress={() => router.push(ONBOARDING_ROUTE)}
             />
 
-            <View style={styles.toggleRow}>
-              <View style={styles.toggleCopy}>
-                <Text style={styles.miniTitle}>Delete remote audio after processing</Text>
-                <Text style={styles.miniMeta}>
-                  Only applies if your selected remote provider supports deleting uploaded audio.
-                </Text>
-              </View>
-              <Switch
-                value={form.deleteUploadedAudio}
-                onValueChange={(value) => updateForm('deleteUploadedAudio', value)}
-              />
-            </View>
+            {/*
+              The "Delete remote audio after processing" switch used to live
+              here. It had a type, a database column, and cloud sync — but zero
+              read sites anywhere in the app, so it never deleted anything. It
+              also could not: the transcription endpoints these providers expose
+              do not retain the uploaded audio, so there is nothing to delete.
+              Removed rather than left as a switch that reports a guarantee the
+              app does not make. The field is kept in AppSettings so existing
+              stored values and cloud rows stay readable.
+            */}
           </SurfaceCard>
         </FadeInView>
 
@@ -773,13 +770,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.label.fontFamily,
     fontSize: 14,
   },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-  },
-  toggleCopy: { flex: 1, gap: 2 },
 
   // Saved provider rows
   savedProviderRow: {
