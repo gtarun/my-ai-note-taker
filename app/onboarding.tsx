@@ -33,7 +33,7 @@ import { SETTINGS_TAB_ROUTE } from '../src/navigation/routes';
 import { getLocalDeviceSupport } from '../src/services/localInference';
 import { markOnboardingSeen } from '../src/services/onboarding';
 import { getAppSettings, saveAppSettings } from '../src/services/settings';
-import { palette, radii, typography } from '../src/theme';
+import { palette, radii, spacing, type, typography } from '../src/theme';
 
 type FeatherIconName = ComponentProps<typeof Feather>['name'];
 
@@ -359,9 +359,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   progressTrack: {
-    height: 6,
+    height: 3,
     borderRadius: radii.pill,
-    backgroundColor: palette.cardUtility,
+    backgroundColor: palette.lineSoft,
     overflow: 'hidden',
   },
   progressFill: {
@@ -376,27 +376,24 @@ const styles = StyleSheet.create({
   eyebrow: {
     color: palette.accent,
     ...typography.label,
-    fontSize: 12,
+    ...type.micro,
     textTransform: 'uppercase',
-    letterSpacing: 1,
   },
   title: {
     color: palette.ink,
     ...typography.display,
-    fontSize: 34,
-    lineHeight: 40,
+    ...type.display,
   },
   body: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 16,
-    lineHeight: 25,
+    ...type.body,
     maxWidth: 560,
   },
   featureCard: {
-    gap: 14,
-    borderRadius: 28,
-    padding: 20,
+    gap: spacing.lg,
+    borderRadius: radii.xl,
+    padding: spacing.xl,
   },
   featureHeader: {
     flexDirection: 'row',
@@ -416,14 +413,13 @@ const styles = StyleSheet.create({
   },
   featureTitle: {
     color: palette.ink,
-    ...typography.heading,
-    fontSize: 17,
+    ...typography.headingSans,
+    ...type.heading,
   },
   featureBody: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 15,
-    lineHeight: 22,
+    ...type.bodySm,
   },
   routeList: {
     gap: 10,
