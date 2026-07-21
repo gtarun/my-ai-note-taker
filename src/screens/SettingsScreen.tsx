@@ -23,12 +23,7 @@ import {
   StatusChip,
   SurfaceCard,
 } from '../components/ui';
-import {
-  buildActiveProviderSummary,
-  displayModelLabel,
-  formatBytes,
-  getConfiguredProviderIds,
-} from '../features/settings/presentation';
+import { formatBytes, getConfiguredProviderIds } from '../features/settings/presentation';
 import {
   DEBUG_LOGS_ROUTE,
   LAYERS_ROUTE,
@@ -91,6 +86,10 @@ export default function SettingsScreen() {
   const palette = useTheme();
   const styles = useThemedStyles(makeStyles);
   const [form, setForm] = useState<AppSettings | null>(null);
+  // What is actually on disk, so "Save changes" can tell whether there are any.
+  // It was previously always enabled and always claimed success, which taught
+  // people to press it after every visit just in case.
+  const [savedForm, setSavedForm] = useState<AppSettings | null>(null);
   const [installedModels, setInstalledModels] = useState<InstalledModelRow[]>([]);
   const [hasLoadedInstalledModels, setHasLoadedInstalledModels] = useState(false);
   const [deviceSupport, setDeviceSupport] = useState<LocalDeviceSupport | null>(null);
@@ -117,7 +116,9 @@ export default function SettingsScreen() {
     // the "Loading settings…" text with no way back.
     try {
       const settings = await getAppSettings();
-      setForm(sanitizeAppSettings(settings));
+      const sanitizedSettings = sanitizeAppSettings(settings);
+      setForm(sanitizedSettings);
+      setSavedForm(sanitizedSettings);
 
       const [support, models] = await Promise.all([getLocalDeviceSupport(), getInstalledModels()]);
       setDeviceSupport(support);
@@ -227,31 +228,9 @@ export default function SettingsScreen() {
       ? getFallbackCloudProviderId(sanitized, 'summary')
       : sanitized.selectedSummaryProvider;
 
-  const transcriptionProvider = providerMap[sanitized.selectedTranscriptionProvider];
-  const summaryProvider = providerMap[effectiveSummaryProviderId];
-
-  const transcriptionModelLabel =
-    sanitized.selectedTranscriptionProvider === 'local'
-      ? displayModelLabel(
-          installedTranscriptionModels,
-          form.providers.local.transcriptionModel || 'No model selected yet'
-        )
-      : sanitized.providers[sanitized.selectedTranscriptionProvider].transcriptionModel || 'No model selected yet';
-
-  const summaryModelLabel =
-    effectiveSummaryProviderId === 'local'
-      ? displayModelLabel(
-          installedSummaryModels,
-          form.providers.local.summaryModel || 'No model selected yet'
-        )
-      : sanitized.providers[effectiveSummaryProviderId].summaryModel || 'No model selected yet';
-
-  const activeSummaryLine = buildActiveProviderSummary({
-    transcriptionProviderLabel: transcriptionProvider.label,
-    summaryProviderLabel: summaryProvider.label,
-    transcriptionModelLabel,
-    summaryModelLabel,
-  });
+  // Cheap and exact: the form is a plain settings object, so identical JSON
+  // means identical settings.
+  const isDirty = savedForm ? JSON.stringify(sanitized) !== JSON.stringify(savedForm) : false;
 
   const editingConfig = editingProviderId ? form.providers[editingProviderId] : null;
   const editingProviderConfigured = editingProviderId
@@ -321,7 +300,9 @@ export default function SettingsScreen() {
       }
       setForm(next);
       await saveAppSettings(next);
-      Alert.alert('Saved', 'Processing route, API credentials, and local model preferences were stored on this device.');
+      // Only after the write lands, so a failed save leaves the bar up rather
+      // than reporting a change that is not on disk.
+      setSavedForm(next);
     } catch (error) {
       Alert.alert('Save failed', error instanceof Error ? error.message : 'Unable to save settings.');
     } finally {
@@ -375,36 +356,14 @@ export default function SettingsScreen() {
           </FadeInView>
         ) : null}
 
-        {/* ─── Active now ─── */}
-        <FadeInView delay={30}>
-          <SurfaceCard style={styles.activeCard}>
-            <View style={styles.activeHeader}>
-              <Text style={styles.eyebrow}>ACTIVE NOW</Text>
-            </View>
-
-            <ActiveProviderRow
-              kindLabel="Transcription"
-              providerId={sanitized.selectedTranscriptionProvider}
-              providerLabel={transcriptionProvider.label}
-              modelLabel={transcriptionModelLabel}
-            />
-            <View style={styles.activeDivider} />
-            <ActiveProviderRow
-              kindLabel="Summary & analysis"
-              providerId={effectiveSummaryProviderId}
-              providerLabel={summaryProvider.label}
-              modelLabel={summaryModelLabel}
-            />
-
-            <Text style={styles.body}>{activeSummaryLine}</Text>
-
-            <PillButton
-              label={isSaving ? 'Saving…' : 'Save changes'}
-              onPress={handleSave}
-              disabled={isSaving}
-            />
-          </SurfaceCard>
-        </FadeInView>
+        {/*
+          An "Active now" card used to sit here, restating the provider and
+          model of both cards below it, and then restating both again as a
+          sentence underneath. Three copies of the same two facts, none of them
+          actionable — the cards below show the same thing next to the controls
+          that change it. Save moved to the bar at the bottom, where it is
+          reachable without scrolling back up.
+        */}
 
         {/* ─── Transcription ─── */}
         <FadeInView delay={60}>
@@ -435,30 +394,22 @@ export default function SettingsScreen() {
             />
 
             {sanitized.selectedTranscriptionProvider === 'local' ? (
-              <>
-                <ModelDropdown
-                  label="Local model"
-                  value={form.providers.local.transcriptionModel}
-                  options={(Platform.OS === 'ios'
-                    ? installedTranscriptionModels.filter((m) =>
-                        IOS_LOCAL_TRANSCRIPTION_MODEL_IDS.has(m.id)
+              <LocalModelField
+                value={form.providers.local.transcriptionModel}
+                models={
+                  Platform.OS === 'ios'
+                    ? installedTranscriptionModels.filter((model) =>
+                        IOS_LOCAL_TRANSCRIPTION_MODEL_IDS.has(model.id)
                       )
                     : installedTranscriptionModels
-                  ).map((m) => ({ label: m.displayName, value: m.id }))}
-                  onSelect={(value) => updateProvider('local', 'transcriptionModel', value)}
-                  emptyText={
-                    Platform.OS === 'ios'
-                      ? 'Download Whisper Base or Whisper Small from Local models before choosing Local.'
-                      : 'Download a local transcription model from Local models first.'
-                  }
-                />
-                <PillButton
-                  label="Manage local models"
-                  onPress={() => router.push(LOCAL_MODELS_ROUTE)}
-                  variant="secondary"
-                  icon={<Feather name="hard-drive" size={16} color={palette.ink} />}
-                />
-              </>
+                }
+                onSelect={(value) => updateProvider('local', 'transcriptionModel', value)}
+                emptyText={
+                  Platform.OS === 'ios'
+                    ? 'Whisper Base or Whisper Small has to be downloaded before transcription can run on this device.'
+                    : 'A local transcription model has to be downloaded before transcription can run on this device.'
+                }
+              />
             ) : (
               <PillButton
                 label={
@@ -494,21 +445,12 @@ export default function SettingsScreen() {
             />
 
             {effectiveSummaryProviderId === 'local' ? (
-              <>
-                <ModelDropdown
-                  label="Local model"
-                  value={form.providers.local.summaryModel}
-                  options={installedSummaryModels.map((m) => ({ label: m.displayName, value: m.id }))}
-                  onSelect={(value) => updateProvider('local', 'summaryModel', value)}
-                  emptyText="Download a local summary model from Local models first."
-                />
-                <PillButton
-                  label="Manage local models"
-                  onPress={() => router.push(LOCAL_MODELS_ROUTE)}
-                  variant="secondary"
-                  icon={<Feather name="hard-drive" size={16} color={palette.ink} />}
-                />
-              </>
+              <LocalModelField
+                value={form.providers.local.summaryModel}
+                models={installedSummaryModels}
+                onSelect={(value) => updateProvider('local', 'summaryModel', value)}
+                emptyText="A local summary model has to be downloaded before summaries can run on this device."
+              />
             ) : (
               <PillButton
                 label={
@@ -622,6 +564,25 @@ export default function SettingsScreen() {
         ) : null}
       </ScrollView>
 
+      {/*
+        Save sits above the scroll rather than inside it. It was previously
+        buried in a card at the top, so changing a model near the bottom meant
+        scrolling back up to commit it — and the button was always enabled and
+        always reported success, whether or not anything had changed.
+      */}
+      {isDirty ? (
+        <View style={styles.saveBar}>
+          <Text style={styles.saveBarHint} numberOfLines={1}>
+            Unsaved changes
+          </Text>
+          <PillButton
+            label={isSaving ? 'Saving…' : 'Save'}
+            onPress={handleSave}
+            disabled={isSaving}
+          />
+        </View>
+      ) : null}
+
       <ProviderConfigSheet
         visible={editingProviderId !== null && editingProviderId !== 'local'}
         providerId={editingProviderId ?? 'openai'}
@@ -642,31 +603,57 @@ export default function SettingsScreen() {
 
 // ─── Internal components ────────────────────────────────────────────────────
 
-function ActiveProviderRow({
-  kindLabel,
-  providerId,
-  providerLabel,
-  modelLabel,
+/**
+ * The local-model picker, plus a way out when there is nothing to pick.
+ *
+ * "Manage local models" used to sit under both job cards unconditionally, and
+ * a third link to the same screen sat below them — so the route appeared three
+ * times, twice as a button that did nothing useful once a model was chosen.
+ * The button now appears only in the state that needs it: no models installed,
+ * which is also the one state where the empty text was a dead end telling the
+ * user to go somewhere without offering to take them.
+ */
+function LocalModelField({
+  value,
+  models,
+  onSelect,
+  emptyText,
 }: {
-  kindLabel: string;
-  providerId: ProviderId;
-  providerLabel: string;
-  modelLabel: string;
+  value: string;
+  models: InstalledModelRow[];
+  onSelect: (next: string) => void;
+  emptyText: string;
 }) {
   const palette = useTheme();
-  const styles = useThemedStyles(makeStyles);
+
+  if (!models.length) {
+    return (
+      <>
+        <ModelDropdown
+          label="Local model"
+          value={value}
+          options={[]}
+          onSelect={onSelect}
+          emptyText={emptyText}
+        />
+        <PillButton
+          label="Download a model"
+          onPress={() => router.push(LOCAL_MODELS_ROUTE)}
+          variant="secondary"
+          icon={<Feather name="download" size={16} color={palette.ink} />}
+        />
+      </>
+    );
+  }
+
   return (
-    <View style={styles.activeRow}>
-      <View style={styles.activeIcon}>
-        <ProviderIcon providerId={providerId} />
-      </View>
-      <View style={styles.activeCopy}>
-        <Text style={styles.activeKind}>{kindLabel}</Text>
-        <Text style={styles.activeProvider}>
-          {providerLabel} <Text style={styles.activeDot}>·</Text> <Text style={styles.activeModel}>{modelLabel}</Text>
-        </Text>
-      </View>
-    </View>
+    <ModelDropdown
+      label="Local model"
+      value={value}
+      options={models.map((model) => ({ label: model.displayName, value: model.id }))}
+      onSelect={onSelect}
+      emptyText={emptyText}
+    />
   );
 }
 
@@ -737,40 +724,27 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
     textTransform: 'uppercase',
   },
 
-  // Active card
-  activeCard: { gap: 12 },
-  activeHeader: { gap: 4 },
-  activeRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  activeIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.md,
-    backgroundColor: palette.cardUtility,
+  // Error card, shown when settings loaded but device support did not.
+  activeCard: { gap: spacing.md },
+
+  // Save bar
+  saveBar: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+    backgroundColor: palette.card,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: palette.lineSoft,
   },
-  activeCopy: { flex: 1, gap: 2 },
-  activeKind: {
-    color: palette.faintInk,
-    ...typography.label,
-    ...type.micro,
-    textTransform: 'uppercase',
-  },
-  activeProvider: {
-    color: palette.ink,
-    ...typography.label,
-    ...type.body,
-  },
-  activeDot: { color: palette.line },
-  activeModel: {
+  saveBarHint: {
+    flex: 1,
     color: palette.mutedInk,
     ...typography.body,
     ...type.bodySm,
-  },
-  activeDivider: {
-    height: 1,
-    backgroundColor: palette.lineSoft,
-    marginVertical: 2,
   },
 
   // Job card

@@ -44,7 +44,22 @@ type LegacyStoredSettingsV2 = Omit<AppSettings, 'providers' | 'modelCatalogUrl'>
 
 function getDefaultSettings(): AppSettings {
   return {
-    selectedTranscriptionProvider: 'openai',
+    /*
+     * iOS ships Apple Speech: no key, no download, no account. Defaulting to it
+     * means a fresh install can record and transcribe before the user has
+     * configured anything, which is also the privacy-preserving route.
+     *
+     * This used to happen by accident — sanitizeAppSettings rerouted the
+     * 'openai' default to the first configured provider, and on iOS that is
+     * Local. That coercion had to go because it made every other provider
+     * unselectable, so the default now states the intent directly.
+     *
+     * Everywhere else local transcription needs a model downloaded first, so
+     * there is no zero-setup route and a cloud provider is the honest start.
+     * Summary stays on a cloud provider on every platform: this build has no
+     * local summary runtime, which onboarding explains before asking for a key.
+     */
+    selectedTranscriptionProvider: Platform.OS === 'ios' ? 'local' : 'openai',
     selectedSummaryProvider: 'openai',
     providers: structuredClone(defaultProviderConfigs),
     transcriptionLocale: 'en-US',

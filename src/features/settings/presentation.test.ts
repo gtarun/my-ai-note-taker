@@ -3,8 +3,6 @@ import { describe, expect, test } from 'vitest';
 import { defaultProviderConfigs } from '../../services/providers';
 import type { InstalledModelRow, ProviderConfig, ProviderId } from '../../types';
 import {
-  buildActiveProviderSummary,
-  buildConfiguredProviderMeta,
   buildProviderEditorSelection,
   buildProcessingModeDetails,
   buildProviderPickerOptionCopy,
@@ -31,17 +29,6 @@ describe('settings presentation', () => {
     expect(getConfiguredProviderIds(providers)).toEqual(['openai', 'openrouter', 'local']);
     expect(getConfiguredProviderIds(providers, 'transcription')).toEqual(['openai', 'openrouter', 'local']);
     expect(getConfiguredProviderIds(providers, 'summary')).toEqual(['openai', 'openrouter', 'local']);
-  });
-
-  test('builds the active provider summary copy', () => {
-    expect(
-      buildActiveProviderSummary({
-        transcriptionProviderLabel: 'Local',
-        summaryProviderLabel: 'OpenRouter',
-        transcriptionModelLabel: 'Whisper Base',
-        summaryModelLabel: 'google/gemini-2.5-flash',
-      })
-    ).toBe('Transcript: Local (Whisper Base) • Summary: OpenRouter (google/gemini-2.5-flash)');
   });
 
   test('formats bytes and display labels predictably', () => {
@@ -131,11 +118,6 @@ describe('settings presentation', () => {
       statusLine: 'Needs setup',
       description: 'Best default. Supports both transcription and summary.',
     });
-  });
-
-  test('builds configured provider meta text predictably', () => {
-    expect(buildConfiguredProviderMeta({ configured: false, active: true })).toBe('Needs setup • Active');
-    expect(buildConfiguredProviderMeta({ configured: true, active: false })).toBe('Credentials saved');
   });
 
   test('routes gear actions to the inline provider editor instead of a popup', () => {

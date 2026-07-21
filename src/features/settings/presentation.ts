@@ -52,19 +52,6 @@ export function formatBytes(value: number) {
   return `${size >= 10 || unitIndex === 0 ? Math.round(size) : size.toFixed(1)} ${units[unitIndex]}`;
 }
 
-export function buildActiveProviderSummary({
-  transcriptionProviderLabel,
-  summaryProviderLabel,
-  transcriptionModelLabel,
-  summaryModelLabel,
-}: {
-  transcriptionProviderLabel: string;
-  summaryProviderLabel: string;
-  transcriptionModelLabel: string;
-  summaryModelLabel: string;
-}) {
-  return `Transcript: ${transcriptionProviderLabel} (${transcriptionModelLabel}) • Summary: ${summaryProviderLabel} (${summaryModelLabel})`;
-}
 
 export function buildProcessingModeDetails({
   processingMode,
@@ -135,15 +122,6 @@ export function buildProviderPickerOptionCopy({
   };
 }
 
-export function buildConfiguredProviderMeta({
-  configured,
-  active,
-}: {
-  configured: boolean;
-  active: boolean;
-}) {
-  return `${configured ? 'Credentials saved' : 'Needs setup'}${active ? ' • Active' : ''}`;
-}
 
 export function buildProviderEditorSelection(providerId: ProviderId) {
   return {

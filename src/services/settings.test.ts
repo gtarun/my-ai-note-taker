@@ -53,6 +53,12 @@ const appPreferencesState = {
   transcription_locale: 'en-US',
 };
 
+// Most tests want a device that has been used before. Set `.row` to null to get
+// a first launch, where the defaults are what actually reach the user.
+const storedPreferences: { row: typeof appPreferencesState | null } = {
+  row: appPreferencesState,
+};
+
 const providerSettingsState = Object.fromEntries(
   Object.entries(defaultProviderConfigs).map(([providerId, config]) => [
     providerId,
@@ -70,7 +76,7 @@ vi.mock('../db', () => ({
   getDatabase: () => ({
     getFirstAsync: vi.fn(async (source: string) => {
       if (source.includes('FROM app_preferences')) {
-        return appPreferencesState;
+        return storedPreferences.row;
       }
 
       return null;
@@ -147,6 +153,7 @@ import type { AppSettings } from '../types';
 describe('settings persistence', () => {
   beforeEach(() => {
     platformState.OS = 'web';
+    storedPreferences.row = appPreferencesState;
     appPreferencesState.selected_transcription_provider = 'openai';
     appPreferencesState.selected_summary_provider = 'openai';
     appPreferencesState.delete_uploaded_audio = 0;
@@ -287,6 +294,35 @@ describe('settings persistence', () => {
 
     expect(sanitized.selectedTranscriptionProvider).toBe('openai');
     expect(sanitized.selectedSummaryProvider).toBe('openai');
+  });
+
+  test('starts a fresh iOS install on a route that already works', async () => {
+    /*
+     * Apple Speech needs no key and no download, so iOS can transcribe on first
+     * launch with nothing configured — but only if that is the default.
+     *
+     * This used to be handled by accident: sanitize rerouted the 'openai'
+     * default to the first configured provider, which on iOS is Local. Removing
+     * that coercion to unblock provider selection also removed the rescue, and
+     * a fresh install would have landed on OpenAI with no key — able to record
+     * and unable to transcribe. The default now says what it means.
+     */
+    platformState.OS = 'ios';
+    // Nothing has ever been written, so the defaults are what reach the user.
+    storedPreferences.row = null;
+    mockGetLocalDeviceSupport.mockResolvedValue({
+      platform: 'ios',
+      supportsSummary: false,
+      supportsTranscription: true,
+      requiresCustomBuild: false,
+      reason: null,
+    });
+    localStorageMock.getItem.mockReturnValue(null);
+
+    const settings = await getAppSettings();
+
+    expect(settings.selectedTranscriptionProvider).toBe('local');
+    expect(settings.providers.local.transcriptionModel).toBe('apple-speech-recognizer');
   });
 
   test('still rejects a provider that cannot do the job at all', () => {
