@@ -43,9 +43,10 @@ import {
   getMeetingDetailTitleDraftState,
   getMeetingDetailTranscriptCopyText,
   getPlaybackActionLabel,
+  isProviderSetupError,
 } from '../../src/features/meetings/detailPresentation';
 import { getMeetingDetailHeaderPresentation } from '../../src/features/meetings/navigation';
-import { APP_TABS_ROUTE, LAYERS_ROUTE } from '../../src/navigation/routes';
+import { APP_TABS_ROUTE, LAYERS_ROUTE, SETTINGS_TAB_ROUTE } from '../../src/navigation/routes';
 import { listExtractionLayers } from '../../src/services/extractionLayers';
 import {
   deleteMeeting,
@@ -179,6 +180,17 @@ export default function MeetingDetailScreen() {
       const message = error instanceof Error ? error.message : 'Unable to process meeting.';
       setProgressState((current) => (current ? markProgressFailed(current, message) : current));
       await loadMeeting();
+
+      // A setup error is the single most likely failure on a first run, and the
+      // bare OK alert left the user to find Settings on their own.
+      if (isProviderSetupError(message)) {
+        Alert.alert('Set up a provider first', message, [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => router.push(SETTINGS_TAB_ROUTE) },
+        ]);
+        return;
+      }
+
       Alert.alert('Processing failed', message);
     } finally {
       setIsBusy(false);

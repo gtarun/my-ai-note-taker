@@ -42,10 +42,10 @@ export const ONBOARDING_SLIDES: OnboardingSlide[] = [
   },
   {
     id: 'setup',
-    title: 'Prepare offline mode',
+    title: 'Choose how meetings get processed.',
     body:
-      'We can start downloading the recommended local bundle now so your first recording is easier to analyze later.',
-    highlights: ['Auto-started', 'Skippable', 'Resume later'],
+      'Recording works right away. Turning audio into a transcript and summary needs one choice from you — you can change it any time in Settings.',
+    highlights: ['Your choice', 'Changeable', 'Skippable'],
     ctaLabel: 'Open app',
     showSkip: true,
   },

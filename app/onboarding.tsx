@@ -10,12 +10,17 @@ import { ScreenBackground } from '../src/components/ScreenBackground';
 import { PillButton } from '../src/components/ui/PillButton';
 import { StatusChip } from '../src/components/ui/StatusChip';
 import { SurfaceCard } from '../src/components/ui/SurfaceCard';
-import { formatBytes } from '../src/features/settings/presentation';
 import {
-  getOfflineSetupStatusCopy,
   getOnboardingFeatureCard,
   getOnboardingProgressPercent,
 } from '../src/features/onboarding/presentation';
+import {
+  getSetupRouteConfirmation,
+  getSetupRouteOptions,
+  type SetupRouteId,
+  type SetupRouteOption,
+  type SetupRoutePlatform,
+} from '../src/features/onboarding/setupRoutes';
 import {
   canGoBackOnOnboarding,
   getNextOnboardingIndex,
@@ -24,18 +29,11 @@ import {
   isLastOnboardingSlide,
   ONBOARDING_SLIDES,
 } from '../src/onboarding/model';
+import { SETTINGS_TAB_ROUTE } from '../src/navigation/routes';
 import { getLocalDeviceSupport } from '../src/services/localInference';
-import { getCatalogItemsForDevice, getModelCatalog } from '../src/services/localModels';
-import {
-  getOfflineSetupSession,
-  resolveOfflineSetupBundles,
-  startOfflineSetup,
-  type OfflineSetupBundle,
-} from '../src/services/offlineSetupSession';
 import { markOnboardingSeen } from '../src/services/onboarding';
-import { getAppSettings } from '../src/services/settings';
+import { getAppSettings, saveAppSettings } from '../src/services/settings';
 import { palette, radii, typography } from '../src/theme';
-import type { OfflineSetupSession } from '../src/types';
 
 type FeatherIconName = ComponentProps<typeof Feather>['name'];
 
@@ -52,36 +50,16 @@ const featureToneStyles = {
 
 export default function OnboardingScreen() {
   const [activeIndex, setActiveIndex] = useState(0);
-  const [offlineSetup, setOfflineSetup] = useState<OfflineSetupSession | null>(null);
-  const [bundleOptions, setBundleOptions] = useState<OfflineSetupBundle[]>([]);
-  const [offlineSetupMessage, setOfflineSetupMessage] = useState<string | null>(null);
+  const [routeOptions, setRouteOptions] = useState<SetupRouteOption[]>([]);
+  const [selectedRouteId, setSelectedRouteId] = useState<SetupRouteId | null>(null);
+  const [routeMessage, setRouteMessage] = useState<string | null>(null);
+  const [isApplyingRoute, setIsApplyingRoute] = useState(false);
   const slide = ONBOARDING_SLIDES[activeIndex];
   const featureCard = getOnboardingFeatureCard(slide.id);
   const progressPercent = getOnboardingProgressPercent(activeIndex, ONBOARDING_SLIDES.length);
   const canGoBack = canGoBackOnOnboarding(activeIndex);
   const isLastSlide = isLastOnboardingSlide(activeIndex, ONBOARDING_SLIDES.length);
   const featureTone = featureToneStyles[featureCard.tone];
-  const setupProgressPercent = Math.round((offlineSetup?.progress ?? 0) * 100);
-  const activeBundleLabel = offlineSetup?.bundleLabel || bundleOptions[0]?.label || 'Starter';
-  const estimatedMinutes =
-    offlineSetup?.estimatedSecondsRemaining == null
-      ? bundleOptions[0]?.estimatedSeconds
-        ? Math.max(1, Math.round(bundleOptions[0].estimatedSeconds / 60))
-        : null
-      : Math.max(1, Math.round(offlineSetup.estimatedSecondsRemaining / 60));
-  const setupStatus =
-    offlineSetup?.status === 'downloading' ||
-    offlineSetup?.status === 'paused_offline' ||
-    offlineSetup?.status === 'failed' ||
-    offlineSetup?.status === 'ready'
-      ? offlineSetup.status
-      : 'preparing';
-  const setupCopy = getOfflineSetupStatusCopy({
-    status: setupStatus,
-    bundleLabel: activeBundleLabel,
-    progressPercent: setupProgressPercent,
-    estimatedMinutes,
-  });
 
   useEffect(() => {
     if (slide.id !== 'setup') {
@@ -90,61 +68,26 @@ export default function OnboardingScreen() {
 
     let cancelled = false;
 
-    async function hydrateOfflineSetup() {
+    async function loadRouteOptions() {
       try {
-        setOfflineSetupMessage(null);
-        const [settings, support, session] = await Promise.all([
-          getAppSettings(),
-          getLocalDeviceSupport(),
-          getOfflineSetupSession(),
-        ]);
+        const support = await getLocalDeviceSupport();
 
         if (cancelled) {
           return;
         }
 
-        setOfflineSetup(session);
-
-        if (support.platform !== 'ios' && support.platform !== 'android') {
-          setBundleOptions([]);
-          setOfflineSetupMessage(support.reason ?? 'Offline setup is available on iOS and Android builds.');
-          return;
-        }
-
-        const catalog = await getModelCatalog(settings.modelCatalogUrl);
-        const deviceCatalog = getCatalogItemsForDevice(catalog, support);
-        const bundles = resolveOfflineSetupBundles({
-          platform: support.platform,
-          catalog: deviceCatalog,
-        });
-
-        if (cancelled) {
-          return;
-        }
-
-        setBundleOptions(bundles);
-
-        if (session.status === 'idle' && bundles[0]) {
-          await startOfflineSetup(bundles[0]);
-
-          if (!cancelled) {
-            setOfflineSetup(await getOfflineSetupSession());
-          }
-        }
-
-        if (!bundles.length) {
-          setOfflineSetupMessage('No directly downloadable local bundle is available for this device yet.');
-        }
-      } catch (error) {
+        const platform: SetupRoutePlatform =
+          support.platform === 'ios' || support.platform === 'android' ? support.platform : 'web';
+        setRouteOptions(getSetupRouteOptions(platform));
+      } catch {
         if (!cancelled) {
-          setOfflineSetupMessage(
-            error instanceof Error ? error.message : 'Unable to prepare offline setup right now.'
-          );
+          // Cloud is the safe universal fallback when device support is unknown.
+          setRouteOptions(getSetupRouteOptions('web'));
         }
       }
     }
 
-    void hydrateOfflineSetup();
+    void loadRouteOptions();
 
     return () => {
       cancelled = true;
@@ -172,12 +115,44 @@ export default function OnboardingScreen() {
     setActiveIndex(getPreviousOnboardingIndex(activeIndex));
   };
 
-  const handleBundleSelect = async (bundle: OfflineSetupBundle) => {
+  /**
+   * Persists the chosen transcription route so the user lands in Settings with
+   * their pick already applied, then hands them off to finish the API key step.
+   * The previous version of this slide only wrote a "downloading" row and never
+   * started a download.
+   */
+  const handleRouteSelect = async (option: SetupRouteOption) => {
+    if (isApplyingRoute) {
+      return;
+    }
+
+    setIsApplyingRoute(true);
+    setSelectedRouteId(option.id);
+    setRouteMessage(null);
+
     try {
-      await startOfflineSetup(bundle);
-      setOfflineSetup(await getOfflineSetupSession());
+      const settings = await getAppSettings();
+      await saveAppSettings({
+        ...settings,
+        selectedTranscriptionProvider: option.transcriptionProvider,
+      });
+      setRouteMessage(getSetupRouteConfirmation(option.id));
     } catch (error) {
-      setOfflineSetupMessage(error instanceof Error ? error.message : 'Unable to start this download.');
+      setSelectedRouteId(null);
+      setRouteMessage(
+        error instanceof Error ? error.message : 'Unable to save that choice. You can set it in Settings.'
+      );
+    } finally {
+      setIsApplyingRoute(false);
+    }
+  };
+
+  /** Completes onboarding and drops the user directly into provider setup. */
+  const handleFinishSetupInSettings = async () => {
+    try {
+      await markOnboardingSeen();
+    } finally {
+      router.replace(SETTINGS_TAB_ROUTE);
     }
   };
 
@@ -220,55 +195,57 @@ export default function OnboardingScreen() {
                   <Feather name={featureCard.icon as FeatherIconName} size={20} color={featureTone.color} />
                 </View>
                 <View style={styles.featureCopy}>
-                  <Text style={styles.featureTitle}>{setupCopy.title}</Text>
-                  <Text style={styles.featureBody}>{setupCopy.body}</Text>
+                  <Text style={styles.featureTitle}>{featureCard.title}</Text>
+                  <Text style={styles.featureBody}>{featureCard.body}</Text>
                 </View>
               </View>
 
-              <View style={styles.setupProgressBlock}>
-                <View style={styles.setupProgressHeader}>
-                  <Text style={styles.setupProgressLabel}>{activeBundleLabel}</Text>
-                  <Text style={styles.setupProgressValue}>{setupCopy.progressLabel}</Text>
-                </View>
-                <View style={styles.progressTrack}>
-                  <View style={[styles.progressFill, { width: `${setupProgressPercent}%` }]} />
-                </View>
+              <View style={styles.routeList}>
+                {routeOptions.map((option) => {
+                  const isSelected = selectedRouteId === option.id;
+
+                  return (
+                    <Pressable
+                      key={option.id}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: isSelected, disabled: isApplyingRoute }}
+                      accessibilityLabel={`${option.title}. ${option.requirement}`}
+                      disabled={isApplyingRoute}
+                      onPress={() => {
+                        void handleRouteSelect(option);
+                      }}
+                      style={[styles.routeCard, isSelected ? styles.routeCardActive : null]}
+                    >
+                      <View style={styles.routeHeader}>
+                        <Feather
+                          name={option.icon as FeatherIconName}
+                          size={18}
+                          color={isSelected ? palette.accent : palette.mutedInk}
+                        />
+                        <Text style={styles.routeTitle}>{option.title}</Text>
+                        {option.isRecommended ? (
+                          <StatusChip label="Recommended" tone="secondary" />
+                        ) : null}
+                      </View>
+                      <Text style={styles.routeBody}>{option.body}</Text>
+                      <Text style={styles.routeRequirement}>{option.requirement}</Text>
+                    </Pressable>
+                  );
+                })}
               </View>
 
-              {bundleOptions.length ? (
-                <View style={styles.bundleList}>
-                  {bundleOptions.map((bundle) => {
-                    const isActive = activeBundleLabel === bundle.label;
-                    return (
-                      <Pressable
-                        key={bundle.id}
-                        onPress={() => {
-                          void handleBundleSelect(bundle);
-                        }}
-                        style={[styles.bundleCard, isActive ? styles.bundleCardActive : null]}
-                      >
-                        <View style={styles.bundleText}>
-                          <Text style={styles.bundleTitle}>{bundle.label}</Text>
-                          <Text style={styles.bundleMeta}>
-                            {formatBytes(bundle.totalBytes)} • ~{Math.max(1, Math.round(bundle.estimatedSeconds / 60))} min
-                          </Text>
-                        </View>
-                        {bundle.isRecommended ? <StatusChip label="Recommended" tone="secondary" /> : null}
-                      </Pressable>
-                    );
-                  })}
-                </View>
+              {routeMessage ? <Text style={styles.setupHint}>{routeMessage}</Text> : null}
+
+              {selectedRouteId ? (
+                <PillButton
+                  label="Add API key in Settings"
+                  onPress={() => {
+                    void handleFinishSetupInSettings();
+                  }}
+                  variant="secondary"
+                  icon={<Feather name="key" size={16} color={palette.ink} />}
+                />
               ) : null}
-
-              {offlineSetupMessage ? <Text style={styles.setupHint}>{offlineSetupMessage}</Text> : null}
-
-              <View style={styles.setupStoryGrid}>
-                {['Record meetings', 'Import audio', 'Analyze when ready'].map((label) => (
-                  <View key={label} style={styles.setupStoryCard}>
-                    <Text style={styles.setupStoryText}>{label}</Text>
-                  </View>
-                ))}
-              </View>
             </SurfaceCard>
           ) : (
             <SurfaceCard style={styles.featureCard} muted>
@@ -444,82 +421,49 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
-  setupProgressBlock: {
-    gap: 8,
-  },
-  setupProgressHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  routeList: {
     gap: 10,
   },
-  setupProgressLabel: {
-    color: palette.ink,
-    fontFamily: typography.label.fontFamily,
-    fontSize: 13,
-  },
-  setupProgressValue: {
-    color: palette.accent,
-    fontFamily: typography.label.fontFamily,
-    fontSize: 13,
-  },
-  bundleList: {
-    gap: 10,
-  },
-  bundleCard: {
+  routeCard: {
     borderWidth: 1,
     borderColor: palette.lineSoft,
     borderRadius: 20,
     backgroundColor: palette.card,
     padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
+    gap: 6,
   },
-  bundleCardActive: {
+  routeCardActive: {
     borderColor: palette.accent,
     backgroundColor: palette.accentSoft,
   },
-  bundleText: {
-    flex: 1,
-    gap: 4,
+  routeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  bundleTitle: {
+  routeTitle: {
+    flex: 1,
     color: palette.ink,
     fontFamily: typography.heading.fontFamily,
     fontSize: 15,
   },
-  bundleMeta: {
+  routeBody: {
     color: palette.mutedInk,
     fontFamily: typography.body.fontFamily,
     fontSize: 13,
+    lineHeight: 19,
+  },
+  routeRequirement: {
+    color: palette.ink,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 12,
+    lineHeight: 17,
   },
   setupHint: {
     color: palette.mutedInk,
     fontFamily: typography.body.fontFamily,
     fontSize: 13,
     lineHeight: 19,
-  },
-  setupStoryGrid: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  setupStoryCard: {
-    flex: 1,
-    minHeight: 62,
-    borderRadius: 18,
-    backgroundColor: palette.paper,
-    borderWidth: 1,
-    borderColor: palette.lineSoft,
-    padding: 10,
-    justifyContent: 'flex-end',
-  },
-  setupStoryText: {
-    color: palette.ink,
-    fontFamily: typography.label.fontFamily,
-    fontSize: 12,
-    lineHeight: 16,
   },
   highlights: {
     flexDirection: 'row',

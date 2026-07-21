@@ -27,9 +27,9 @@ describe('onboarding presentation', () => {
       tone: 'secondary',
     });
     expect(getOnboardingFeatureCard('setup')).toEqual({
-      icon: 'download-cloud',
-      title: 'Offline setup',
-      body: 'We can prepare the local bundle now and keep progress visible from Meetings.',
+      icon: 'sliders',
+      title: 'Pick your processing route',
+      body: 'Choose on-device or cloud processing. Nothing is downloaded or uploaded until you say so.',
       tone: 'secondary',
     });
   });

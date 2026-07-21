@@ -272,6 +272,23 @@ export async function markOfflineSetupFailed(message: string) {
   });
 }
 
+/**
+ * Hides the offline-setup card on the meetings dashboard.
+ *
+ * `isDismissed` was persisted and read from the very beginning but nothing ever
+ * set it to true, so the card's "Dismiss" button did nothing and the card could
+ * not be removed from the home screen.
+ */
+export async function dismissOfflineSetup() {
+  const current = await getOfflineSetupSession();
+
+  await saveOfflineSetupSession({
+    ...current,
+    isDismissed: true,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
 export async function markOfflineSetupReady(params: {
   preferredTranscriptionModelId: string | null;
   preferredSummaryModelId: string | null;

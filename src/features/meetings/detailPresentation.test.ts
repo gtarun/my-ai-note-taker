@@ -1,8 +1,9 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, it, test } from 'vitest';
 
 import { SummaryPayload } from '../../types';
 import {
   MEETING_DETAIL_TITLE_ACTION_SLOT_MIN_WIDTH,
+  isProviderSetupError,
   MEETING_DETAIL_SECTION_ORDER,
   getExtractionSyncLabel,
   getMeetingDetailLayerChooserPresentation,
@@ -144,5 +145,25 @@ describe('meeting detail presentation', () => {
     expect(getMeetingDetailLayerPickerHeightRatio(2)).toBe(0.7);
     expect(getMeetingDetailLayerPickerHeightRatio(4)).toBe(0.82);
     expect(getMeetingDetailLayerPickerHeightRatio(8)).toBe(0.92);
+  });
+});
+
+describe('isProviderSetupError', () => {
+  it('recognizes the setup failures a user can fix in Settings', () => {
+    expect(isProviderSetupError('Configure the selected summary provider in Settings first.')).toBe(
+      true
+    );
+    expect(
+      isProviderSetupError('Configure the selected transcription provider in Settings first.')
+    ).toBe(true);
+    expect(
+      isProviderSetupError('Download and install the selected local transcription model first.')
+    ).toBe(true);
+  });
+
+  it('leaves transient and provider-side errors alone', () => {
+    expect(isProviderSetupError('The request timed out after 120s.')).toBe(false);
+    expect(isProviderSetupError('429 Too Many Requests')).toBe(false);
+    expect(isProviderSetupError('Unable to process meeting.')).toBe(false);
   });
 });

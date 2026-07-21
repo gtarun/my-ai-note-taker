@@ -42,6 +42,13 @@ export function getDashboardCloudStatusCopy(session: AuthSession | null) {
       };
 }
 
+/**
+ * What the card's button should actually do. Every state previously navigated
+ * to the Settings tab regardless of its label — including "Dismiss", and
+ * including the states whose downloads live on the Local models screen.
+ */
+export type OfflineSetupCardAction = 'dismiss' | 'open-local-models';
+
 export function getOfflineSetupCardCopy(params: {
   status: Exclude<OfflineSetupStatus, 'idle'>;
   bundleLabel: string;
@@ -50,6 +57,7 @@ export function getOfflineSetupCardCopy(params: {
   title: string;
   body: string;
   actionLabel: string;
+  action: OfflineSetupCardAction;
   tone: StatusChipTone;
 } {
   switch (params.status) {
@@ -58,6 +66,7 @@ export function getOfflineSetupCardCopy(params: {
         title: 'Offline setup paused',
         body: `Connection was interrupted while ${params.bundleLabel} was downloading.`,
         actionLabel: 'Resume',
+        action: 'open-local-models',
         tone: 'tertiary',
       };
     case 'paused_user':
@@ -65,6 +74,7 @@ export function getOfflineSetupCardCopy(params: {
         title: 'Offline setup paused',
         body: `${params.bundleLabel} is paused until you resume it.`,
         actionLabel: 'Resume',
+        action: 'open-local-models',
         tone: 'tertiary',
       };
     case 'failed':
@@ -72,6 +82,7 @@ export function getOfflineSetupCardCopy(params: {
         title: 'Offline setup failed',
         body: `We could not finish preparing ${params.bundleLabel}.`,
         actionLabel: 'Try again',
+        action: 'open-local-models',
         tone: 'danger',
       };
     case 'ready':
@@ -79,6 +90,7 @@ export function getOfflineSetupCardCopy(params: {
         title: 'Offline mode ready',
         body: `${params.bundleLabel} finished downloading and is ready to use.`,
         actionLabel: 'Dismiss',
+        action: 'dismiss',
         tone: 'secondary',
       };
     case 'preparing':
@@ -86,6 +98,7 @@ export function getOfflineSetupCardCopy(params: {
         title: 'Preparing offline mode',
         body: `Checking the best local setup for ${params.bundleLabel}.`,
         actionLabel: 'View details',
+        action: 'open-local-models',
         tone: 'secondary',
       };
     case 'downloading':
@@ -94,6 +107,7 @@ export function getOfflineSetupCardCopy(params: {
         title: 'Preparing offline mode',
         body: `${params.bundleLabel} is ${params.progressPercent}% complete.`,
         actionLabel: 'View details',
+        action: 'open-local-models',
         tone: 'secondary',
       };
   }

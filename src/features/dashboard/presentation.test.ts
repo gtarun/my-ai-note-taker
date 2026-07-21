@@ -71,7 +71,31 @@ describe('dashboard presentation', () => {
       title: 'Offline setup paused',
       body: 'Connection was interrupted while Starter was downloading.',
       actionLabel: 'Resume',
+      action: 'open-local-models',
       tone: 'tertiary',
     });
+  });
+
+  test('sends every actionable state to the screen that owns downloads', () => {
+    // Every state used to navigate to the Settings tab regardless of its label,
+    // including states whose downloads live on the Local models screen.
+    for (const status of ['paused_offline', 'paused_user', 'failed', 'preparing', 'downloading'] as const) {
+      expect(
+        getOfflineSetupCardCopy({ status, bundleLabel: 'Starter', progressPercent: 10 }).action
+      ).toBe('open-local-models');
+    }
+  });
+
+  test('the ready state dismisses instead of navigating', () => {
+    // Its label is "Dismiss" but it pushed a route, and isDismissed was never
+    // set anywhere, so the card could not be removed from the home screen.
+    const copy = getOfflineSetupCardCopy({
+      status: 'ready',
+      bundleLabel: 'Starter',
+      progressPercent: 100,
+    });
+
+    expect(copy.actionLabel).toBe('Dismiss');
+    expect(copy.action).toBe('dismiss');
   });
 });

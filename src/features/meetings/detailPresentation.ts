@@ -11,6 +11,23 @@ export const MEETING_DETAIL_SECTION_ORDER = [
   'recording',
 ] as const;
 
+/**
+ * Whether a processing failure is really a setup problem the user can fix in
+ * Settings, rather than a transient or provider-side error. Used to offer an
+ * "Open Settings" action instead of a dead-end OK button — the most likely
+ * failure on a first run, since the summary provider defaults to one with no
+ * API key.
+ */
+export function isProviderSetupError(message: string): boolean {
+  const normalized = message.toLowerCase();
+
+  return (
+    normalized.includes('configure the selected') ||
+    normalized.includes('in settings first') ||
+    normalized.includes('download and install the selected')
+  );
+}
+
 export function getMeetingDetailTitleDraftState(draftTitle: string, savedTitle: string) {
   const trimmedDraft = draftTitle.trim();
   const trimmedSaved = savedTitle.trim();

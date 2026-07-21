@@ -20,10 +20,18 @@ describe('onboarding model', () => {
       'setup',
     ]);
     expect(ONBOARDING_SLIDES[0].title).toBe('Record it. Upload it. Process it later.');
-    expect(ONBOARDING_SLIDES[3].title).toBe('Prepare offline mode');
+    expect(ONBOARDING_SLIDES[3].title).toBe('Choose how meetings get processed.');
     expect(ONBOARDING_SLIDES[3].ctaLabel).toBe('Open app');
-    expect(ONBOARDING_SLIDES[3].body).toContain('download');
     expect(ONBOARDING_SLIDES.every((slide) => slide.showSkip)).toBe(true);
+  });
+
+  test('the setup slide does not promise a download it never starts', () => {
+    // The old copy said a bundle was "downloading now" while nothing called
+    // downloadModel, leaving a 0% progress bar on screen forever.
+    const setupSlide = ONBOARDING_SLIDES[3];
+
+    expect(setupSlide.body).not.toMatch(/download/i);
+    expect(setupSlide.highlights ?? []).not.toContain('Auto-started');
   });
 
   test('supports onboarding navigation helpers', () => {

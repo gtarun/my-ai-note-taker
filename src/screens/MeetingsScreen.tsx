@@ -29,13 +29,13 @@ import {
   getMeetingStatusMeta,
 } from '../features/dashboard/presentation';
 import {
+  LOCAL_MODELS_ROUTE,
   RECORD_TAB_ROUTE,
-  SETTINGS_TAB_ROUTE,
   getMeetingDetailRoute,
 } from '../navigation/routes';
 import { getAuthSession } from '../services/account';
 import { createMeetingFromImport, listMeetings } from '../services/meetings';
-import { getOfflineSetupSession } from '../services/offlineSetupSession';
+import { dismissOfflineSetup, getOfflineSetupSession } from '../services/offlineSetupSession';
 import type { AuthSession, MeetingRow, OfflineSetupSession } from '../types';
 import { palette, typography } from '../theme';
 import { formatDuration, formatTimestamp } from '../utils/format';
@@ -82,6 +82,18 @@ export default function HomeScreen() {
       void loadMeetings();
     }, [loadMeetings])
   );
+
+  const handleDismissOfflineSetup = async () => {
+    try {
+      await dismissOfflineSetup();
+      setOfflineSetup(await getOfflineSetupSession());
+    } catch (error) {
+      Alert.alert(
+        'Could not dismiss',
+        error instanceof Error ? error.message : 'Unable to dismiss this card.'
+      );
+    }
+  };
 
   const handleImport = async () => {
     try {
@@ -202,7 +214,13 @@ export default function HomeScreen() {
 
                     <PillButton
                       label={offlineSetupCard.actionLabel}
-                      onPress={() => router.push(SETTINGS_TAB_ROUTE)}
+                      onPress={() => {
+                        if (offlineSetupCard.action === 'dismiss') {
+                          void handleDismissOfflineSetup();
+                          return;
+                        }
+                        router.push(LOCAL_MODELS_ROUTE);
+                      }}
                       variant="ghost"
                     />
                   </SurfaceCard>
