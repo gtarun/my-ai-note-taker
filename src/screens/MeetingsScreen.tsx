@@ -401,10 +401,10 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 999,
-    backgroundColor: palette.clay,
+    backgroundColor: palette.clayFill,
     alignItems: 'center',
     justifyContent: 'center',
     ...elevation.floating,
   },
-  dockRecordDot: { width: 19, height: 19, borderRadius: 999, backgroundColor: palette.paper },
+  dockRecordDot: { width: 19, height: 19, borderRadius: 999, backgroundColor: palette.onFill },
 });

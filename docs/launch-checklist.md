@@ -57,9 +57,13 @@ External TestFlight goes through Beta App Review, so these apply there too.
 
 These are understood and deliberately not done yet. None blocks a beta.
 
-- **No background recording.** Recording stops if the app is backgrounded long
-  enough for the OS to suspend it. This is the single most likely beta
-  complaint.
+- **Background recording now declares `UIBackgroundModes: ["audio"]`.** The
+  audio session already asked for `allowsBackgroundRecording`, but iOS suspends
+  an app that has not declared the background mode — so recording stopped on
+  background while the Record screen told the user it continued. Apple
+  scrutinises this entitlement: be ready to explain in review that the app is a
+  recorder and the mode is used only while a recording is running. Verify on a
+  device that a recording actually survives backgrounding before relying on it.
 - **Local summarization does not work on-device.** iOS transcription is real
   (Apple Speech, and whisper.cpp for other languages), but summaries always
   require a cloud API key. Onboarding says so plainly rather than implying

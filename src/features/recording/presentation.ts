@@ -5,7 +5,9 @@ export type RecordingPhase = 'idle' | 'recording' | 'saving' | 'error';
 // --- Hero Section ---
 
 export function getHeroEyebrow(): string {
-  return 'NEW RECORDING';
+  // The nav bar already says "New Recording" directly above this. Repeating it
+  // as an eyebrow printed the same words twice, one line apart, in two faces.
+  return 'ON THIS DEVICE';
 }
 
 export function getHeroHeadline(): string {

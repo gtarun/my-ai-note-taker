@@ -108,4 +108,17 @@ describe('contrast', () => {
       expect(contrastRatio(p.clay, p.paper), `${scheme} clay`).toBeGreaterThanOrEqual(3);
     }
   });
+
+  it('keeps white content legible on a filled control', () => {
+    // clay and clayFill exist separately because they have opposite jobs: one
+    // is read against the page, the other is read *against*. Sharing a token
+    // produced a record button whose dot looked like a punched hole.
+    for (const scheme of ['light', 'dark'] as const) {
+      const p = getPalette(scheme);
+
+      expect(contrastRatio(p.onFill, p.clayFill), `${scheme} onFill/clayFill`).toBeGreaterThanOrEqual(4);
+      // And the control still has to separate from the page behind it.
+      expect(contrastRatio(p.clayFill, p.paper), `${scheme} clayFill/paper`).toBeGreaterThanOrEqual(3);
+    }
+  });
 });

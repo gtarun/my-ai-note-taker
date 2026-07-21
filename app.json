@@ -17,6 +17,9 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSMicrophoneUsageDescription": "AI Notes records meeting audio only when you explicitly start recording.",
+        "UIBackgroundModes": [
+          "audio"
+        ],
         "NSSpeechRecognitionUsageDescription": "AI Notes uses on-device Speech Recognition to transcribe your saved meeting recordings. Audio stays on this device.",
         "ITSAppUsesNonExemptEncryption": false
       },

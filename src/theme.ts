@@ -32,9 +32,21 @@ const lightPalette = {
   accentLit: '#12a184',
   accentSoft: '#dcebe6',
 
-  /** Record and destructive only — never decorative, so it always means something. */
+  /**
+   * Record and destructive only — never decorative, so it always means
+   * something.
+   *
+   * `clay` is for text and icons sitting *on the page*; `clayFill` is for a
+   * filled control that white content sits *on top of*. They have opposite
+   * requirements — one must be light enough to read against a dark page, the
+   * other dark enough for white to read against it — which is why a single
+   * token produced a record button that looked like a hole.
+   */
   clay: '#c2603c',
+  clayFill: '#c2603c',
   claySoft: '#f7e3da',
+  /** Content on a clay or accent fill. */
+  onFill: '#fffdf8',
 
   line: '#c9c4b8',
   lineSoft: 'rgba(20, 26, 25, 0.08)',
@@ -71,7 +83,11 @@ const darkPalette: typeof lightPalette = {
   accentSoft: 'rgba(55, 214, 168, 0.14)',
 
   clay: '#e0805a',
+  // Deeper than `clay` so the white record dot reads on it (4.97:1) while the
+  // control still separates from the page (3.77:1).
+  clayFill: '#b8502f',
   claySoft: 'rgba(224, 128, 90, 0.16)',
+  onFill: '#fffdf8',
 
   line: '#2f3937',
   lineSoft: 'rgba(233, 234, 228, 0.10)',

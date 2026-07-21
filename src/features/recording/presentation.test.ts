@@ -27,6 +27,9 @@ const phases: RecordingPhase[] = ['idle', 'recording', 'saving', 'error'];
 describe('smoke tests — every function returns a non-empty string', () => {
   test('getHeroEyebrow', () => {
     expect(getHeroEyebrow().length).toBeGreaterThan(0);
+    // The nav bar already renders the screen title; the eyebrow must not repeat
+    // it back one line below in a different face.
+    expect(getHeroEyebrow().toLowerCase()).not.toBe('new recording');
   });
 
   test('getHeroHeadline', () => {

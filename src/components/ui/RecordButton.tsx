@@ -105,7 +105,7 @@ export function RecordButton({
             width: size,
             height: size,
             borderRadius: size / 2,
-            backgroundColor: palette.clay,
+            backgroundColor: palette.clayFill,
           },
           disabled && styles.disabled,
         ]}
@@ -115,7 +115,7 @@ export function RecordButton({
             width: innerSize,
             height: innerSize,
             borderRadius: innerRadius,
-            backgroundColor: palette.paper,
+            backgroundColor: palette.onFill,
           }}
         />
       </PressableScale>
