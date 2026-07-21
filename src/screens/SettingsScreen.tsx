@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Platform,
   Pressable,
   SafeAreaView,
@@ -39,6 +40,8 @@ import {
   IOS_LOCAL_TRANSCRIPTION_MODEL_IDS,
   getLocalDeviceSupport,
 } from '../services/localInference';
+import { isDeveloperToolsEnabled } from '../services/devTools';
+import { getLegalConfig } from '../services/legal';
 import { getInstalledModels, getInstalledModelsForKind } from '../services/localModels';
 import { defaultProviderConfigs, providerDefinitions, providerMap } from '../services/providers';
 import { getAppSettings, sanitizeAppSettings, saveAppSettings } from '../services/settings';
@@ -91,6 +94,8 @@ export default function SettingsScreen() {
   const [editingProviderId, setEditingProviderId] = useState<ProviderId | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const legal = getLegalConfig();
+  const developerToolsEnabled = isDeveloperToolsEnabled();
 
   useEffect(() => {
     void hydrate();
@@ -526,16 +531,36 @@ export default function SettingsScreen() {
               label="Extraction layers"
               onPress={() => router.push(LAYERS_ROUTE)}
             />
-            <NavRow
-              icon={<Feather name="activity" size={18} color={palette.ink} />}
-              label="Debug logs"
-              onPress={() => router.push(DEBUG_LOGS_ROUTE)}
-            />
-            <NavRow
-              icon={<Feather name="rotate-ccw" size={18} color={palette.ink} />}
-              label="Replay onboarding"
-              onPress={() => router.push(ONBOARDING_ROUTE)}
-            />
+            {legal.privacyPolicyUrl ? (
+              <NavRow
+                icon={<Feather name="shield" size={18} color={palette.ink} />}
+                label="Privacy policy"
+                onPress={() => void Linking.openURL(legal.privacyPolicyUrl)}
+              />
+            ) : null}
+            {legal.termsUrl ? (
+              <NavRow
+                icon={<Feather name="file-text" size={18} color={palette.ink} />}
+                label="Terms of use"
+                onPress={() => void Linking.openURL(legal.termsUrl)}
+              />
+            ) : null}
+
+            {/* Diagnostics are useful during a beta but must not ship publicly. */}
+            {developerToolsEnabled ? (
+              <>
+                <NavRow
+                  icon={<Feather name="activity" size={18} color={palette.ink} />}
+                  label="Debug logs"
+                  onPress={() => router.push(DEBUG_LOGS_ROUTE)}
+                />
+                <NavRow
+                  icon={<Feather name="rotate-ccw" size={18} color={palette.ink} />}
+                  label="Replay onboarding"
+                  onPress={() => router.push(ONBOARDING_ROUTE)}
+                />
+              </>
+            ) : null}
 
             {/*
               The "Delete remote audio after processing" switch used to live

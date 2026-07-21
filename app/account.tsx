@@ -25,6 +25,7 @@ import {
 import {
   clearAuthSession,
   completeOAuthSignIn,
+  deleteAccount,
   getAuthSession,
   getGoogleDriveConnectUrl,
   getGoogleDriveOAuthRedirectUrl,
@@ -35,6 +36,7 @@ import {
   saveGoogleDriveSaveFolder,
   signInWithGoogle,
 } from '../src/services/account';
+import { getLegalConfig } from '../src/services/legal';
 import { AuthSession } from '../src/types';
 import { elevation, palette, radii, typography } from '../src/theme';
 
@@ -83,7 +85,9 @@ export default function AccountScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isConnectingDrive, setIsConnectingDrive] = useState(false);
   const [isPickingDriveFolder, setIsPickingDriveFolder] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const isConfigured = isCloudBackendConfigured();
+  const legal = getLegalConfig();
 
   const loadState = useCallback(async () => {
     try {
@@ -259,6 +263,51 @@ export default function AccountScreen() {
     setSession(null);
   };
 
+  /**
+   * Two-step confirmation because this is irreversible and destroys cloud data.
+   * Required in-app by App Store Guideline 5.1.1(v).
+   */
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete account?',
+      'This permanently deletes your account, your synced settings, extraction layers, and Google connections. Meetings already recorded stay on this device. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete account',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert('Are you sure?', 'This cannot be undone.', [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Delete permanently',
+                style: 'destructive',
+                onPress: async () => {
+                  try {
+                    setIsDeletingAccount(true);
+                    await deleteAccount();
+                    setSession(null);
+                    Alert.alert(
+                      'Account deleted',
+                      'Your account and its cloud data have been removed. Recordings on this device were not touched.'
+                    );
+                  } catch (error) {
+                    Alert.alert(
+                      'Delete failed',
+                      error instanceof Error ? error.message : 'Unable to delete this account.'
+                    );
+                  } finally {
+                    setIsDeletingAccount(false);
+                  }
+                },
+              },
+            ]);
+          },
+        },
+      ]
+    );
+  };
+
   const driveConnection = session?.user.driveConnection;
   const initials = getProfileInitials({
     name: session?.user.name ?? null,
@@ -322,15 +371,50 @@ export default function AccountScreen() {
           </Text>
 
           {!session ? (
-            <Pressable
-              style={styles.primaryButton}
-              onPress={handleGoogleSignIn}
-              disabled={isGoogleSubmitting || !isConfigured}
-            >
-              <Text style={styles.primaryButtonText}>
-                {isGoogleSubmitting ? 'Opening Google...' : 'Continue with Google'}
-              </Text>
-            </Pressable>
+            <>
+              <Pressable
+                style={styles.primaryButton}
+                onPress={handleGoogleSignIn}
+                disabled={isGoogleSubmitting || !isConfigured}
+                accessibilityRole="button"
+                accessibilityLabel="Continue with Google"
+                accessibilityState={{ disabled: isGoogleSubmitting || !isConfigured }}
+              >
+                <Text style={styles.primaryButtonText}>
+                  {isGoogleSubmitting ? 'Opening Google...' : 'Continue with Google'}
+                </Text>
+              </Pressable>
+
+              {/* Consent links belong next to the control that creates the account. */}
+              {legal.privacyPolicyUrl || legal.termsUrl ? (
+                <View style={styles.legalRow}>
+                  <Text style={styles.legalText}>By continuing you agree to the</Text>
+                  {legal.termsUrl ? (
+                    <Pressable
+                      onPress={() => void Linking.openURL(legal.termsUrl)}
+                      accessibilityRole="link"
+                      accessibilityLabel="Terms of use"
+                      hitSlop={8}
+                    >
+                      <Text style={styles.legalLink}>Terms of use</Text>
+                    </Pressable>
+                  ) : null}
+                  {legal.termsUrl && legal.privacyPolicyUrl ? (
+                    <Text style={styles.legalText}>and</Text>
+                  ) : null}
+                  {legal.privacyPolicyUrl ? (
+                    <Pressable
+                      onPress={() => void Linking.openURL(legal.privacyPolicyUrl)}
+                      accessibilityRole="link"
+                      accessibilityLabel="Privacy policy"
+                      hitSlop={8}
+                    >
+                      <Text style={styles.legalLink}>Privacy policy</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
+            </>
           ) : (
             <View style={styles.buttonRow}>
               <Pressable
@@ -340,11 +424,31 @@ export default function AccountScreen() {
               >
                 <Text style={styles.secondaryButtonText}>{isRefreshing ? 'Refreshing...' : 'Refresh'}</Text>
               </Pressable>
-              <Pressable style={styles.secondaryButton} onPress={handleSignOut}>
+              <Pressable
+                style={styles.secondaryButton}
+                onPress={handleSignOut}
+                accessibilityRole="button"
+                accessibilityLabel="Sign out"
+              >
                 <Text style={styles.secondaryButtonText}>Sign out</Text>
               </Pressable>
             </View>
           )}
+
+          {session ? (
+            <Pressable
+              style={styles.destructiveButton}
+              onPress={handleDeleteAccount}
+              disabled={isDeletingAccount}
+              accessibilityRole="button"
+              accessibilityLabel="Delete account permanently"
+              accessibilityState={{ disabled: isDeletingAccount }}
+            >
+              <Text style={styles.destructiveButtonText}>
+                {isDeletingAccount ? 'Deleting…' : 'Delete account'}
+              </Text>
+            </Pressable>
+          ) : null}
         </FadeInView>
 
         <FadeInView style={styles.card} delay={40}>
@@ -574,6 +678,41 @@ const styles = StyleSheet.create({
     color: palette.paper,
     fontFamily: typography.label.fontFamily,
     fontSize: 16,
+  },
+  legalRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: 12,
+  },
+  legalText: {
+    color: palette.mutedInk,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 12,
+  },
+  legalLink: {
+    color: palette.accent,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 12,
+    textDecorationLine: 'underline',
+  },
+  destructiveButton: {
+    marginTop: 12,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: palette.danger,
+    backgroundColor: palette.dangerSoft,
+  },
+  destructiveButtonText: {
+    color: palette.danger,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 15,
   },
   secondaryButton: {
     flex: 1,

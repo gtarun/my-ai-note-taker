@@ -126,6 +126,55 @@ export async function clearAuthSession() {
   await supabase.auth.signOut();
 }
 
+/**
+ * Permanently deletes the signed-in account and its server-side data, then
+ * signs out locally.
+ *
+ * App Store Guideline 5.1.1(v) requires in-app account deletion for any app
+ * that supports account creation. Deleting the auth user needs the service role
+ * key, so the actual work happens in the `delete-account` edge function; the
+ * user is identified there from the verified JWT, never from anything sent by
+ * this client.
+ */
+export async function deleteAccount(): Promise<void> {
+  ensureSupabaseConfigured();
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error('Sign in first.');
+  }
+
+  const { data, error } = await supabase.functions.invoke<{ deleted?: boolean; error?: string }>(
+    'delete-account',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    }
+  );
+
+  if (error) {
+    if (error instanceof FunctionsHttpError) {
+      throw new Error(await readFunctionsErrorMessage(error));
+    }
+    throw error;
+  }
+
+  if (!data?.deleted) {
+    throw new Error(
+      typeof data?.error === 'string' ? data.error : 'The account could not be deleted. Please try again.'
+    );
+  }
+
+  // The account is gone server-side; drop the local session so the app cannot
+  // keep using a token for a user that no longer exists.
+  await supabase.auth.signOut();
+}
+
 export async function signUpWithEmail(params: { email: string; password: string; name: string }) {
   ensureSupabaseConfigured();
 

@@ -33,9 +33,7 @@
       "permissions": [
         "RECORD_AUDIO",
         "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS",
-        "android.permission.FOREGROUND_SERVICE_MICROPHONE",
-        "android.permission.POST_NOTIFICATIONS"
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
     "web": {
@@ -58,6 +56,9 @@
       "supabaseUrl": "https://ulgbdlhwjwsyflzfdhma.supabase.co",
       "supabaseAnonKey": "sb_publishable__eiWD9e4H3e1oMUYrPQ0lA_ZABVjiEo",
       "googleDriveConnectFunctionName": "google-drive-connect-url",
+      "privacyPolicyUrl": "",
+      "termsUrl": "",
+      "showDeveloperTools": true,
       "router": {},
       "eas": {
         "projectId": "ff5da993-fdaa-47ef-8a52-1d582508b263"
