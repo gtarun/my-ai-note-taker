@@ -55,6 +55,7 @@ import type {
 } from '../types';
 import { ProviderConfigSheet } from './settings/ProviderConfigSheet';
 import { ModelDropdown, ProviderDropdown, ProviderIcon } from './settings/SharedControls';
+import { useTheme, useThemedStyles, type Palette } from '../hooks/useTheme';
 
 /**
  * Normalize the iOS local-transcription model selection. If the user previously
@@ -87,6 +88,8 @@ function getFallbackCloudProviderId(settings: AppSettings, mode: 'transcription'
 }
 
 export default function SettingsScreen() {
+  const palette = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [form, setForm] = useState<AppSettings | null>(null);
   const [installedModels, setInstalledModels] = useState<InstalledModelRow[]>([]);
   const [hasLoadedInstalledModels, setHasLoadedInstalledModels] = useState(false);
@@ -650,6 +653,8 @@ function ActiveProviderRow({
   providerLabel: string;
   modelLabel: string;
 }) {
+  const palette = useTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.activeRow}>
       <View style={styles.activeIcon}>
@@ -674,6 +679,8 @@ function ConfiguredProviderRow({
   active: boolean;
   onPress: () => void;
 }) {
+  const palette = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const provider = providerMap[providerId];
 
   return (
@@ -700,6 +707,8 @@ function NavRow({
   label: string;
   onPress: () => void;
 }) {
+  const palette = useTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <Pressable style={styles.navRow} onPress={onPress}>
       <View style={styles.navIcon}>{icon}</View>
@@ -709,7 +718,7 @@ function NavRow({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: Palette) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: palette.paper },
   container: { padding: 20, gap: 18, paddingBottom: 48 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 24 },

@@ -6,8 +6,10 @@ import { palette, radii, typography } from '../../theme';
 import { buildProviderPickerOptionCopy } from '../../features/settings/presentation';
 import { providerMap } from '../../services/providers';
 import type { ProviderId } from '../../types';
+import { useTheme } from '../../hooks/useTheme';
 
 export function ProviderIcon({ providerId }: { providerId: ProviderId }) {
+  const palette = useTheme();
   switch (providerId) {
     case 'openai':
       return <MaterialCommunityIcons name="star-four-points-circle-outline" size={18} color={palette.ink} />;

@@ -26,10 +26,13 @@ import {
   type AppLogEntry,
 } from '../services/appLogs';
 import { palette, radii, typography } from '../theme';
+import { useTheme, useThemedStyles, type Palette } from '../hooks/useTheme';
 
 const LOG_LIMIT = 200;
 
 export default function DebugLogsScreen() {
+  const palette = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [logs, setLogs] = useState<AppLogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -191,6 +194,8 @@ export default function DebugLogsScreen() {
 }
 
 function LogRow({ log }: { log: AppLogEntry }) {
+  const palette = useTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <SurfaceCard style={styles.logCard}>
       <View style={styles.logHeader}>
@@ -216,7 +221,7 @@ function LogRow({ log }: { log: AppLogEntry }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: Palette) => StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: palette.paper,

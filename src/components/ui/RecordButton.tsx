@@ -4,6 +4,7 @@ import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { motion, palette } from '../../theme';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { PressableScale } from './PressableScale';
+import { useThemedStyles, type Palette } from '../../hooks/useTheme';
 
 /**
  * The record control.
@@ -32,6 +33,7 @@ export function RecordButton({
   const morph = useRef(new Animated.Value(isRecording ? 1 : 0)).current;
   const pulse = useRef(new Animated.Value(0)).current;
   const reduceMotion = useReducedMotion();
+  const styles = useThemedStyles(makeStyles);
 
   useEffect(() => {
     Animated.spring(morph, {
@@ -121,7 +123,7 @@ export function RecordButton({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: Palette) => StyleSheet.create({
   wrap: { alignItems: 'center', justifyContent: 'center' },
   ring: { position: 'absolute', borderWidth: 2 },
   button: { alignItems: 'center', justifyContent: 'center' },

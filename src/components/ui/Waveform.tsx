@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Animated, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
-import { palette } from '../../theme';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { useTheme, useThemedStyles, type Palette } from '../../hooks/useTheme';
 
 /**
  * The audio, drawn as audio.
@@ -25,7 +25,7 @@ export function Waveform({
   level = 0,
   bars = 32,
   height = 96,
-  color = palette.accentLit,
+  color,
   /** 0–1. Bars past this point dim — used as a playback scrub track. */
   progress,
   style,
@@ -33,11 +33,15 @@ export function Waveform({
   level?: number;
   bars?: number;
   height?: number;
+  /** Defaults to the lit accent — the colour reserved for an open microphone. */
   color?: string;
   progress?: number;
   style?: StyleProp<ViewStyle>;
 }) {
+  const palette = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const reduceMotion = useReducedMotion();
+  const barColor = color ?? palette.accentLit;
 
   // Stable per-bar phase offsets, so the shape reads as a clip rather than a
   // bar chart. Generated once — regenerating per render would make it jitter.
@@ -116,7 +120,7 @@ export function Waveform({
               styles.bar,
               {
                 height,
-                backgroundColor: color,
+                backgroundColor: barColor,
                 opacity: isPast ? 0.25 : 1,
                 transform: [{ scaleY: value }],
               },
@@ -128,7 +132,7 @@ export function Waveform({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: Palette) => StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',

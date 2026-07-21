@@ -38,8 +38,11 @@ import { getMeetingDetailRoute } from '../navigation/routes';
 import { MICROPHONE_PERMISSION_ERROR, recordingSession } from '../services/recordingSession';
 import { formatDuration } from '../utils/format';
 import { palette, radii, spacing, type, typography } from '../theme';
+import { useTheme, useThemedStyles, type Palette } from '../hooks/useTheme';
 
 export default function RecordScreen() {
+  const palette = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [sessionSnapshot, setSessionSnapshot] = useState(() => recordingSession.getSnapshot());
 
   useEffect(() => {
@@ -232,7 +235,7 @@ export default function RecordScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: Palette) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: palette.paper },
   container: { padding: spacing.xl, gap: spacing.lg },
 

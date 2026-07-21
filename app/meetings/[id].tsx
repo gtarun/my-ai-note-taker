@@ -69,8 +69,11 @@ import {
 import type { ExtractionLayer, MeetingRow, SummaryPayload } from '../../src/types';
 import { elevation, palette, radii, spacing, type, typography } from '../../src/theme';
 import { formatDuration, formatTimestamp } from '../../src/utils/format';
+import { useTheme, useThemedStyles, type Palette } from '../../src/hooks/useTheme';
 
 export default function MeetingDetailScreen() {
+  const palette = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const params = useLocalSearchParams<{ id: string | string[] }>();
   // The generic above is an assertion, not a runtime guarantee — a deep link can
   // deliver `id` as an array, which would otherwise be bound directly into SQL.
@@ -100,7 +103,7 @@ export default function MeetingDetailScreen() {
     if (headerPresentation.fallback) {
       router.replace(headerPresentation.fallback.href);
     }
-  });
+  }, styles, palette);
 
   const loadMeeting = useCallback(async () => {
     if (!id) {
@@ -790,6 +793,8 @@ export default function MeetingDetailScreen() {
 }
 
 function StatusIcon({ status }: { status: MeetingRow['status'] }) {
+  const palette = useTheme();
+
   switch (status) {
     case 'ready':
       return <Feather name="check-circle" size={16} color={palette.accent} />;
@@ -820,6 +825,9 @@ function Section({
   isCopied?: boolean;
   onCopyPress?: () => void;
 }) {
+  const palette = useTheme();
+  const styles = useThemedStyles(makeStyles);
+
   return (
     <FadeInView style={styles.section} delay={delay}>
       <View style={styles.sectionHeaderRow}>
@@ -877,7 +885,11 @@ ${meeting.transcriptText || 'No transcript yet.'}`;
 
 function getMeetingDetailScreenOptions(
   headerPresentation: ReturnType<typeof getMeetingDetailHeaderPresentation>,
-  handleFallbackPress: () => void
+  handleFallbackPress: () => void,
+  // Passed in because this runs outside a component and so cannot read the
+  // active theme itself.
+  styles: ReturnType<typeof makeStyles>,
+  palette: Palette
 ) {
   return {
     headerBackVisible: headerPresentation.headerBackVisible,
@@ -894,7 +906,7 @@ function getMeetingDetailScreenOptions(
   };
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: Palette) => StyleSheet.create({
   player: {
     flexDirection: 'row',
     alignItems: 'center',

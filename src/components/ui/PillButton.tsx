@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { palette, radii, spacing, type, typography } from '../../theme';
 import { PressableScale } from './PressableScale';
+import { useThemedStyles, type Palette } from '../../hooks/useTheme';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
@@ -32,6 +33,7 @@ export function PillButton({
   accessibilityHint?: string;
   fullWidth?: boolean;
 }) {
+  const styles = useThemedStyles(makeStyles);
   const isFilled = variant === 'primary' || variant === 'danger';
 
   return (
@@ -56,7 +58,7 @@ export function PillButton({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: Palette) => StyleSheet.create({
   base: {
     minHeight: 50,
     paddingHorizontal: spacing.xl,

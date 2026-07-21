@@ -7,8 +7,10 @@ import { APP_TABS } from '../../src/navigation/tabs';
 import { getAuthSession } from '../../src/services/account';
 import type { AuthSession } from '../../src/types';
 import { palette, type, typography } from '../../src/theme';
+import { useTheme } from '../../src/hooks/useTheme';
 
 export default function TabLayout() {
+  const palette = useTheme();
   const [session, setSession] = useState<AuthSession | null>(null);
   const router = useRouter();
 

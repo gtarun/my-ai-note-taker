@@ -39,6 +39,7 @@ import {
 import { getLegalConfig } from '../src/services/legal';
 import { AuthSession } from '../src/types';
 import { elevation, palette, radii, typography } from '../src/theme';
+import { useTheme, useThemedStyles, type Palette } from '../src/hooks/useTheme';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -80,6 +81,8 @@ function getBuildInfo() {
 }
 
 export default function AccountScreen() {
+  const palette = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -532,7 +535,7 @@ export default function AccountScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: Palette) => StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: palette.paper,

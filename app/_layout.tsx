@@ -18,8 +18,11 @@ import { getHasSeenOnboarding } from '../src/services/onboarding';
 import { getStartupPresentation } from '../src/startup';
 import { palette, resolveTypography } from '../src/theme';
 import { shouldPresentOnboarding } from '../src/onboarding/model';
+import { useTheme, useThemedStyles, type Palette } from '../src/hooks/useTheme';
 
 export default function RootLayout() {
+  const palette = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(true);
@@ -118,7 +121,7 @@ export default function RootLayout() {
   if (startupPresentation.screen === 'error') {
     return (
       <View style={styles.centered}>
-        <StatusBar style="dark" />
+        <StatusBar style="auto" />
         <Text style={styles.statusTitle}>App bootstrap failed</Text>
         <Text style={styles.statusBody}>{error}</Text>
       </View>
@@ -128,7 +131,7 @@ export default function RootLayout() {
   if (startupPresentation.screen === 'loading') {
     return (
       <View style={styles.centered}>
-        <StatusBar style="dark" />
+        <StatusBar style="auto" />
         <ActivityIndicator size="large" color={palette.accent} />
         <Text style={styles.statusBody}>Preparing local storage…</Text>
       </View>
@@ -137,7 +140,7 @@ export default function RootLayout() {
 
   return (
     <>
-      <StatusBar style="dark" />
+      <StatusBar style="auto" />
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: palette.paper },
@@ -161,7 +164,7 @@ export default function RootLayout() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: Palette) => StyleSheet.create({
   centered: {
     flex: 1,
     alignItems: 'center',

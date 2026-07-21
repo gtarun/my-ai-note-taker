@@ -34,6 +34,7 @@ import { getLocalDeviceSupport } from '../src/services/localInference';
 import { markOnboardingSeen } from '../src/services/onboarding';
 import { getAppSettings, saveAppSettings } from '../src/services/settings';
 import { palette, radii, spacing, type, typography } from '../src/theme';
+import { useTheme, useThemedStyles, type Palette } from '../src/hooks/useTheme';
 
 type FeatherIconName = ComponentProps<typeof Feather>['name'];
 
@@ -49,6 +50,8 @@ const featureToneStyles = {
 } as const;
 
 export default function OnboardingScreen() {
+  const palette = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [activeIndex, setActiveIndex] = useState(0);
   const [routeOptions, setRouteOptions] = useState<SetupRouteOption[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<SetupRouteId | null>(null);
@@ -315,7 +318,7 @@ export default function OnboardingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: Palette) => StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: palette.paper,

@@ -85,20 +85,29 @@ const darkPalette: typeof lightPalette = {
 
 export type ColorScheme = 'light' | 'dark';
 
-export function getPalette(scheme: ColorScheme) {
-  return scheme === 'dark' ? darkPalette : lightPalette;
+function withAliases(base: typeof lightPalette) {
+  return {
+    ...base,
+    // Aliases kept so screens that have not been renamed keep compiling. They
+    // must exist on both palettes, or a themed component loses them in dark.
+    cardStrong: base.cardMuted,
+    accentStrong: base.accentLit,
+    accentMist: base.accentSoft,
+    lineStrong: base.line,
+    tertiary: base.clay,
+    tertiarySoft: base.claySoft,
+  };
 }
 
-export const palette = {
-  ...lightPalette,
-  // Aliases kept so the existing screens keep compiling while they migrate.
-  cardStrong: lightPalette.cardMuted,
-  accentStrong: lightPalette.accentLit,
-  accentMist: lightPalette.accentSoft,
-  lineStrong: lightPalette.line,
-  tertiary: lightPalette.clay,
-  tertiarySoft: lightPalette.claySoft,
-};
+const lightWithAliases = withAliases(lightPalette);
+const darkWithAliases = withAliases(darkPalette);
+
+export function getPalette(scheme: ColorScheme) {
+  return scheme === 'dark' ? darkWithAliases : lightWithAliases;
+}
+
+/** Light palette at module scope, for the few call sites outside components. */
+export const palette = lightWithAliases;
 
 /** 4pt base. Use these instead of ad-hoc numbers so rhythm survives edits. */
 export const spacing = {
@@ -190,40 +199,45 @@ export const motion = {
  *
  * Previously one shadow was applied to all 71 cards, which meant no hierarchy:
  * a hero and a toggle row sat at the same visual depth.
+ *
+ * Takes the palette because a shadow tuned for warm paper is invisible on a
+ * dark ground — dark surfaces need a deeper, tighter shadow to read at all.
  */
+export function getElevation(activePalette: { shadow: string } = lightPalette) {
+  const shadowColor = activePalette.shadow;
+
+  return {
+    /** Grouped rows and inline surfaces. Border only. */
+    flat: {
+      shadowColor: 'transparent',
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      shadowOffset: { width: 0, height: 0 },
+      elevation: 0,
+    },
+    /** The default card. Barely there. */
+    raised: {
+      shadowColor,
+      shadowOpacity: 0.05,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 3 },
+      elevation: 1,
+    },
+    /** Sheets, the record bar, anything genuinely above the page. */
+    floating: {
+      shadowColor,
+      shadowOpacity: 0.14,
+      shadowRadius: 28,
+      shadowOffset: { width: 0, height: 12 },
+      elevation: 6,
+    },
+  };
+}
+
+/** Light-mode elevation, for the module-scope stylesheets still using it. */
 export const elevation = {
-  /** Grouped rows and inline surfaces. Border only. */
-  flat: {
-    shadowColor: 'transparent',
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 0,
-  },
-  /** The default card. Barely there. */
-  raised: {
-    shadowColor: '#141a19',
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 1,
-  },
-  /** Sheets, the record bar, anything genuinely above the page. */
-  floating: {
-    shadowColor: '#141a19',
-    shadowOpacity: 0.14,
-    shadowRadius: 28,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 6,
-  },
-  /** Alias retained while screens migrate off the single-shadow world. */
-  card: {
-    shadowColor: '#141a19',
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 1,
-  },
+  ...getElevation(lightPalette),
+  card: getElevation(lightPalette).raised,
 };
 
 type ResolvedTypography = Record<

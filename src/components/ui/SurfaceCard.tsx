@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
 import { elevation, palette, radii, spacing } from '../../theme';
+import { useThemedStyles, type Palette } from '../../hooks/useTheme';
 
 /**
  * Surfaces, in three weights.
@@ -29,6 +30,7 @@ export function SurfaceCard({
   muted?: boolean;
   level?: SurfaceLevel;
 }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View
       style={[
@@ -45,7 +47,7 @@ export function SurfaceCard({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: Palette) => StyleSheet.create({
   base: {
     backgroundColor: palette.card,
     borderRadius: radii.card,

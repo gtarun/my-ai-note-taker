@@ -7,6 +7,7 @@ import { palette, radii, typography } from '../../theme';
 import { providerMap } from '../../services/providers';
 import type { ProviderConfig, ProviderId } from '../../types';
 import { FieldGroup, Label, ModelDropdown, PlainInput, ProviderIcon } from './SharedControls';
+import { useTheme, useThemedStyles, type Palette } from '../../hooks/useTheme';
 
 type ProviderConfigSheetProps = {
   visible: boolean;
@@ -31,6 +32,8 @@ export function ProviderConfigSheet({
   onClear,
   onClose,
 }: ProviderConfigSheetProps) {
+  const palette = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const provider = providerMap[providerId];
   const isCustom = providerId === 'custom';
   const [showAdvancedEndpoint, setShowAdvancedEndpoint] = useState(false);
@@ -131,7 +134,7 @@ export function ProviderConfigSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: Palette) => StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(11, 15, 16, 0.45)',

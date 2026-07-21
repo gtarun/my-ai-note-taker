@@ -3,6 +3,7 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { getProfileInitials } from '../features/account/presentation';
 import { palette, radii, typography } from '../theme';
+import { useThemedStyles, type Palette } from '../hooks/useTheme';
 
 export function ProfileAvatarButton({
   name,
@@ -15,6 +16,7 @@ export function ProfileAvatarButton({
   avatarUrl: string | null | undefined;
   onPress: () => void;
 }) {
+  const styles = useThemedStyles(makeStyles);
   const initials = getProfileInitials({
     name: name ?? null,
     email: email ?? null,
@@ -43,7 +45,7 @@ export function ProfileAvatarButton({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: Palette) => StyleSheet.create({
   button: {
     width: 34,
     height: 34,

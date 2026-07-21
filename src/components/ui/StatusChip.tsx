@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { palette, radii, typography } from '../../theme';
+import { useThemedStyles, type Palette } from '../../hooks/useTheme';
 
 export type StatusChipTone = 'secondary' | 'tertiary' | 'danger';
 
@@ -19,6 +20,7 @@ export function StatusChip({
   tone?: StatusChipTone;
   accessibilityLabel?: string;
 }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View
       style={[styles.base, { backgroundColor: tones[tone].backgroundColor }]}
@@ -29,7 +31,7 @@ export function StatusChip({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: Palette) => StyleSheet.create({
   base: {
     paddingHorizontal: 10,
     paddingVertical: 6,

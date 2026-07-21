@@ -41,10 +41,13 @@ import { dismissOfflineSetup, getOfflineSetupSession } from '../services/offline
 import type { AuthSession, MeetingRow, OfflineSetupSession } from '../types';
 import { elevation, motion, palette, radii, spacing, type, typography } from '../theme';
 import { formatDuration, formatTimestamp } from '../utils/format';
+import { useTheme, useThemedStyles, type Palette } from '../hooks/useTheme';
 
 const emptyCopy = getDashboardEmptyStateCopy();
 
 export default function HomeScreen() {
+  const palette = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [meetings, setMeetings] = useState<MeetingRow[]>([]);
   const [session, setSession] = useState<AuthSession | null>(null);
   const [offlineSetup, setOfflineSetup] = useState<OfflineSetupSession | null>(null);
@@ -307,7 +310,7 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: Palette) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: palette.paper },
   container: { flex: 1 },
   listContent: { paddingHorizontal: spacing.xl, paddingBottom: 120 },

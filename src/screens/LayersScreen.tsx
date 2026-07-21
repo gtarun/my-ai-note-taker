@@ -37,8 +37,11 @@ import {
 } from '../services/googleSheets';
 import type { ExtractionLayer, SpreadsheetBrowserSpreadsheet } from '../types';
 import { palette, radii, typography } from '../theme';
+import { useTheme, useThemedStyles, type Palette } from '../hooks/useTheme';
 
 export default function LayersScreen() {
+  const palette = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [layers, setLayers] = useState<ExtractionLayer[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -947,7 +950,7 @@ export default function LayersScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: Palette) => StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: palette.paper,

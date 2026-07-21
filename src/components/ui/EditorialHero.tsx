@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { palette, radii, typography } from '../../theme';
 import { StatusChip } from './StatusChip';
 import { SurfaceCard } from './SurfaceCard';
+import { useThemedStyles, type Palette } from '../../hooks/useTheme';
 
 export function EditorialHero({
   eyebrow,
@@ -17,6 +18,7 @@ export function EditorialHero({
   pillLabel?: string;
   chips?: string[];
 }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <SurfaceCard style={styles.card}>
       <View style={styles.topRow}>
@@ -40,7 +42,7 @@ export function EditorialHero({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: Palette) => StyleSheet.create({
   card: {
     gap: 10,
   },

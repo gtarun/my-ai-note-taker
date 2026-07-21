@@ -4,6 +4,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { palette, radii, typography } from '../theme';
 import type { MeetingProcessingProgressState, StageInfo } from './meetingProcessingProgressState';
+import { useTheme, useThemedStyles, type Palette } from '../hooks/useTheme';
 
 export type {
   MeetingProcessingProgressState,
@@ -41,6 +42,9 @@ export function MeetingProcessingProgress({
     };
   }, [hasActiveStage]);
 
+  const palette = useTheme();
+  const styles = useThemedStyles(makeStyles);
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -76,6 +80,8 @@ export function MeetingProcessingProgress({
 }
 
 function StageRow({ stage, now }: { stage: StageInfo; now: number }) {
+  const palette = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const elapsedSeconds =
     stage.state === 'active' && stage.startedAt
       ? Math.max(0, Math.round((now - stage.startedAt) / 1000))
@@ -113,7 +119,7 @@ function StageRow({ stage, now }: { stage: StageInfo; now: number }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: Palette) => StyleSheet.create({
   container: {
     backgroundColor: palette.card,
     borderRadius: radii.card,

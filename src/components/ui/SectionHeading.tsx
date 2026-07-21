@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { palette, typography } from '../../theme';
+import { useThemedStyles, type Palette } from '../../hooks/useTheme';
 
 export function SectionHeading({
   title,
@@ -13,6 +14,7 @@ export function SectionHeading({
   actionLabel?: string;
   onActionPress?: () => void;
 }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.row}>
       <View style={styles.copy}>
@@ -28,7 +30,7 @@ export function SectionHeading({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: Palette) => StyleSheet.create({
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',

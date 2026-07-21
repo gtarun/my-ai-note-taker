@@ -3,6 +3,7 @@ import { Animated, Easing, StyleProp, StyleSheet, View, ViewStyle } from 'react-
 
 import { motion, palette, radii, spacing } from '../../theme';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { useThemedStyles, type Palette } from '../../hooks/useTheme';
 
 /**
  * Loading placeholders shaped like the content that is coming.
@@ -75,6 +76,7 @@ export function SkeletonParagraph({
   lines?: number;
   style?: StyleProp<ViewStyle>;
 }) {
+  const styles = useThemedStyles(makeStyles);
   // Deterministic widths — random ones shift on every re-render and flicker.
   const widths: `${number}%`[] = ['100%', '94%', '97%', '88%', '92%'];
 
@@ -95,7 +97,7 @@ export function SkeletonParagraph({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: Palette) => StyleSheet.create({
   paragraph: {
     gap: spacing.sm,
   },

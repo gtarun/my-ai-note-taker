@@ -5,12 +5,12 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#f4f2ec"
     },
     "scheme": "mufathom",
     "ios": {
@@ -21,7 +21,8 @@
         "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "com.gtarun.mu-fathom",
-      "appleTeamId": "Z4L8SXT9S6"
+      "appleTeamId": "Z4L8SXT9S6",
+      "userInterfaceStyle": "automatic"
     },
     "android": {
       "adaptiveIcon": {

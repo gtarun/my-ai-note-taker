@@ -1,6 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 
 import { palette } from '../theme';
+import { useThemedStyles, type Palette } from '../hooks/useTheme';
 
 /**
  * The page ground.
@@ -14,10 +15,11 @@ import { palette } from '../theme';
  * if the ground ever gains a texture or gradient.
  */
 export function ScreenBackground() {
+  const styles = useThemedStyles(makeStyles);
   return <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.ground]} />;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: Palette) => StyleSheet.create({
   ground: {
     backgroundColor: palette.paper,
   },

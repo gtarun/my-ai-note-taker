@@ -48,6 +48,7 @@ import type {
   OfflineSetupSession,
 } from '../types';
 import { FieldGroup, Label, PlainInput } from './settings/SharedControls';
+import { useTheme, useThemedStyles, type Palette } from '../hooks/useTheme';
 
 function buildOfflineSetupBundleFromModel(item: ModelCatalogItem): OfflineSetupBundle {
   return {
@@ -62,6 +63,8 @@ function buildOfflineSetupBundleFromModel(item: ModelCatalogItem): OfflineSetupB
 }
 
 export default function LocalModelsScreen() {
+  const palette = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [catalog, setCatalog] = useState<ModelCatalogItem[]>([]);
   const [installedModels, setInstalledModels] = useState<InstalledModelRow[]>([]);
@@ -431,6 +434,9 @@ function ModelCatalogList({
   onOpenSource: (item: ModelCatalogItem) => void;
   allowDownload: boolean;
 }) {
+  const palette = useTheme();
+  const styles = useThemedStyles(makeStyles);
+
   return (
     <View style={styles.catalogSection}>
       <SectionHeading title={title} />
@@ -565,7 +571,7 @@ function ModelCatalogList({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: Palette) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: palette.paper },
   container: { padding: 20, gap: 18, paddingBottom: 48 },
   runtimeCard: { gap: 6 },
