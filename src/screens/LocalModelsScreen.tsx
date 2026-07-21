@@ -39,7 +39,7 @@ import {
   updateOfflineSetupProgress,
 } from '../services/offlineSetupSession';
 import { getAppSettings, saveAppSettings } from '../services/settings';
-import { palette, radii, typography } from '../theme';
+import { palette, radii, type, typography } from '../theme';
 import type {
   AppSettings,
   InstalledModelRow,
@@ -580,7 +580,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   runtimeLabel: {
     color: palette.mutedInk,
     ...typography.label,
-    fontSize: 12,
+    ...type.caption,
     textTransform: 'uppercase',
     letterSpacing: 0.6,
   },
@@ -597,25 +597,23 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   modelTitle: {
     color: palette.ink,
     ...typography.heading,
-    fontSize: 16,
+    ...type.body,
   },
   modelMeta: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 12,
+    ...type.caption,
   },
   modelActionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   modelHint: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 12,
-    lineHeight: 16,
+    ...type.caption,
   },
   body: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 13,
-    lineHeight: 19,
+    ...type.label,
   },
   progressTrack: {
     height: 6,
@@ -627,7 +625,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   errorText: {
     color: palette.danger,
     ...typography.body,
-    fontSize: 13,
+    ...type.label,
   },
   advancedCard: { gap: 12 },
   advancedHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },

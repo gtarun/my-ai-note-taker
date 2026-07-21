@@ -2,7 +2,7 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
-import { palette, radii, typography } from '../theme';
+import { palette, radii, type, typography } from '../theme';
 import type { MeetingProcessingProgressState, StageInfo } from './meetingProcessingProgressState';
 import { useTheme, useThemedStyles, type Palette } from '../hooks/useTheme';
 
@@ -130,20 +130,19 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   eyebrow: {
     color: palette.tertiary,
     ...typography.label,
-    fontSize: 11,
+    ...type.micro,
     letterSpacing: 1.6,
     textTransform: 'uppercase',
   },
   title: {
     color: palette.ink,
     ...typography.heading,
-    fontSize: 18,
+    ...type.heading,
   },
   body: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 13,
-    lineHeight: 19,
+    ...type.label,
   },
   stages: { gap: 4 },
   stageRow: {
@@ -157,18 +156,18 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   stageLabel: {
     color: palette.ink,
     ...typography.label,
-    fontSize: 14,
+    ...type.bodySm,
   },
   stageLabelPending: { color: palette.mutedInk },
   stageDetail: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 12,
+    ...type.caption,
   },
   stageTiming: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 12,
+    ...type.caption,
     minWidth: 32,
     textAlign: 'right',
   },
@@ -194,7 +193,6 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
     flex: 1,
     color: palette.ink,
     ...typography.body,
-    fontSize: 13,
-    lineHeight: 19,
+    ...type.label,
   },
 });

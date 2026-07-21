@@ -38,7 +38,7 @@ import {
 } from '../src/services/account';
 import { getLegalConfig } from '../src/services/legal';
 import { AuthSession } from '../src/types';
-import { elevation, palette, radii, typography } from '../src/theme';
+import { elevation, palette, radii, type, typography } from '../src/theme';
 import { useTheme, useThemedStyles, type Palette } from '../src/hooks/useTheme';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -578,7 +578,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   avatarInitials: {
     color: palette.accent,
     ...typography.display,
-    fontSize: 28,
+    ...type.title,
   },
   identityBlock: {
     flex: 1,
@@ -587,21 +587,19 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   eyebrow: {
     color: palette.accent,
     ...typography.label,
-    fontSize: 12,
+    ...type.caption,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
   displayName: {
     color: palette.ink,
     ...typography.display,
-    fontSize: 28,
-    lineHeight: 32,
+    ...type.title,
   },
   email: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 15,
-    lineHeight: 22,
+    ...type.body,
   },
   heroBadgeRow: {
     gap: 8,
@@ -621,13 +619,12 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   heroBadgeText: {
     color: palette.ink,
     ...typography.label,
-    fontSize: 13,
+    ...type.label,
   },
   heroBody: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 15,
-    lineHeight: 22,
+    ...type.body,
   },
   card: {
     backgroundColor: palette.card,
@@ -647,12 +644,12 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   cardTitle: {
     color: palette.ink,
     ...typography.heading,
-    fontSize: 19,
+    ...type.heading,
   },
   cardStatus: {
     color: palette.mutedInk,
     ...typography.label,
-    fontSize: 13,
+    ...type.label,
   },
   infoRow: {
     gap: 4,
@@ -660,15 +657,14 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   infoLabel: {
     color: palette.mutedInk,
     ...typography.label,
-    fontSize: 12,
+    ...type.caption,
     letterSpacing: 0.4,
     textTransform: 'uppercase',
   },
   infoValue: {
     color: palette.ink,
     ...typography.body,
-    fontSize: 15,
-    lineHeight: 22,
+    ...type.body,
   },
   primaryButton: {
     backgroundColor: palette.ink,
@@ -680,7 +676,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   primaryButtonText: {
     color: palette.paper,
     ...typography.label,
-    fontSize: 16,
+    ...type.body,
   },
   legalRow: {
     flexDirection: 'row',
@@ -693,12 +689,12 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   legalText: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 12,
+    ...type.caption,
   },
   legalLink: {
     color: palette.accent,
     ...typography.label,
-    fontSize: 12,
+    ...type.caption,
     textDecorationLine: 'underline',
   },
   destructiveButton: {
@@ -715,7 +711,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   destructiveButtonText: {
     color: palette.danger,
     ...typography.label,
-    fontSize: 15,
+    ...type.body,
   },
   secondaryButton: {
     flex: 1,
@@ -739,8 +735,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   inlineHint: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 13,
-    lineHeight: 19,
+    ...type.label,
   },
   folderButton: {
     borderRadius: 18,
@@ -753,13 +748,12 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   folderButtonText: {
     color: palette.ink,
     ...typography.label,
-    fontSize: 15,
+    ...type.body,
   },
   footer: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 12,
-    lineHeight: 18,
+    ...type.caption,
     opacity: 0.72,
     textAlign: 'center',
     paddingVertical: 8,

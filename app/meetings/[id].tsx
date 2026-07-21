@@ -948,18 +948,17 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   },
   headerFallbackButtonText: {
     color: palette.ink,
-    fontSize: 16,
+    ...type.body,
     fontWeight: '700',
   },
   notFoundTitle: {
     color: palette.ink,
-    fontSize: 24,
+    ...type.title,
     fontWeight: '800',
   },
   notFoundBody: {
     color: palette.mutedInk,
-    fontSize: 15,
-    lineHeight: 22,
+    ...type.body,
     textAlign: 'center',
   },
   container: {
@@ -983,7 +982,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   titleInput: {
     flex: 1,
     color: palette.ink,
-    fontSize: 28,
+    ...type.title,
     fontWeight: '800',
     borderBottomWidth: 1,
     borderBottomColor: palette.line,
@@ -1010,11 +1009,11 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   inlineSaveButtonText: {
     color: palette.card,
     fontWeight: '700',
-    fontSize: 14,
+    ...type.bodySm,
   },
   meta: {
     color: palette.mutedInk,
-    fontSize: 14,
+    ...type.bodySm,
   },
   statusWrap: {
     flexDirection: 'row',
@@ -1035,8 +1034,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   },
   errorText: {
     color: palette.danger,
-    fontSize: 14,
-    lineHeight: 20,
+    ...type.bodySm,
   },
   primaryActionWrap: {
     width: '100%',
@@ -1070,13 +1068,12 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   },
   layerLauncherTitle: {
     color: palette.ink,
-    fontSize: 16,
+    ...type.body,
     fontWeight: '800',
   },
   layerLauncherBody: {
     color: palette.mutedInk,
-    fontSize: 14,
-    lineHeight: 20,
+    ...type.bodySm,
   },
   layerLauncherBadge: {
     borderRadius: 999,
@@ -1088,7 +1085,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   },
   layerLauncherBadgeText: {
     color: palette.mutedInk,
-    fontSize: 12,
+    ...type.caption,
     fontWeight: '700',
   },
   layerLauncherButton: {
@@ -1158,12 +1155,11 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   dangerZoneTitle: {
     color: palette.danger,
     fontWeight: '800',
-    fontSize: 17,
+    ...type.body,
   },
   dangerZoneBody: {
     color: palette.ink,
-    fontSize: 14,
-    lineHeight: 20,
+    ...type.bodySm,
   },
   dangerButton: {
     minHeight: 48,
@@ -1199,7 +1195,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   sectionTitle: {
     color: palette.ink,
     fontWeight: '800',
-    fontSize: 17,
+    ...type.body,
   },
   sectionCopyButton: {
     width: 34,
@@ -1220,18 +1216,17 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   },
   bodyText: {
     color: palette.ink,
-    lineHeight: 22,
-    fontSize: 15,
+    ...type.body,
   },
   listText: {
     color: palette.ink,
-    lineHeight: 22,
-    fontSize: 15,
+    ...type.body,
   },
   transcriptText: {
     color: palette.ink,
+    ...type.bodySm,
+    // Long-form reading wants more air than the scale's default leading.
     lineHeight: 22,
-    fontSize: 14,
   },
   extractionWrap: {
     gap: 12,
@@ -1245,8 +1240,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   extractionMetaText: {
     flex: 1,
     color: palette.mutedInk,
-    fontSize: 13,
-    lineHeight: 20,
+    ...type.label,
   },
   extractionSyncBadge: {
     paddingHorizontal: 10,
@@ -1262,7 +1256,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   },
   extractionSyncBadgeText: {
     color: palette.ink,
-    fontSize: 12,
+    ...type.caption,
     fontWeight: '700',
   },
   extractionSyncBadgeTextReady: {
@@ -1273,8 +1267,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   },
   extractionErrorText: {
     color: palette.danger,
-    fontSize: 13,
-    lineHeight: 20,
+    ...type.label,
   },
   extractionFieldCard: {
     gap: 6,
@@ -1286,13 +1279,12 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   },
   extractionFieldTitle: {
     color: palette.ink,
-    fontSize: 14,
+    ...type.bodySm,
     fontWeight: '700',
   },
   extractionFieldDescription: {
     color: palette.mutedInk,
-    fontSize: 13,
-    lineHeight: 19,
+    ...type.label,
   },
   extractionInput: {
     minHeight: 56,
@@ -1340,13 +1332,12 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   },
   layerPickerTitle: {
     color: palette.ink,
-    fontSize: 24,
+    ...type.title,
     fontWeight: '800',
   },
   layerPickerBody: {
     color: palette.mutedInk,
-    fontSize: 14,
-    lineHeight: 21,
+    ...type.bodySm,
   },
   layerPickerScroll: {
     flexGrow: 1,
@@ -1367,13 +1358,12 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   },
   layerOptionTitle: {
     color: palette.ink,
-    fontSize: 16,
+    ...type.body,
     fontWeight: '700',
   },
   layerOptionBody: {
     color: palette.mutedInk,
-    fontSize: 13,
-    lineHeight: 19,
+    ...type.label,
   },
   layerPickerActions: {
     alignItems: 'flex-start',

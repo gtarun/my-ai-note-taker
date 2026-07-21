@@ -36,7 +36,7 @@ import {
   searchSpreadsheets,
 } from '../services/googleSheets';
 import type { ExtractionLayer, SpreadsheetBrowserSpreadsheet } from '../types';
-import { palette, radii, typography } from '../theme';
+import { palette, radii, type, typography } from '../theme';
 import { useTheme, useThemedStyles, type Palette } from '../hooks/useTheme';
 
 export default function LayersScreen() {
@@ -973,20 +973,19 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   heroLabel: {
     color: palette.mutedInk,
     ...typography.label,
-    fontSize: 12,
+    ...type.caption,
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
   heroValue: {
     color: palette.ink,
     ...typography.heading,
-    fontSize: 28,
+    ...type.title,
   },
   heroBody: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 14,
-    lineHeight: 21,
+    ...type.bodySm,
   },
   heroActions: {
     alignItems: 'flex-start',
@@ -997,13 +996,12 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   emptyTitle: {
     color: palette.ink,
     ...typography.heading,
-    fontSize: 20,
+    ...type.heading,
   },
   emptyBody: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 14,
-    lineHeight: 21,
+    ...type.bodySm,
   },
   layerCard: {
     gap: 14,
@@ -1020,13 +1018,12 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   layerTitle: {
     color: palette.ink,
     ...typography.heading,
-    fontSize: 20,
+    ...type.heading,
   },
   layerMeta: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 13,
-    lineHeight: 20,
+    ...type.label,
   },
   sheetBadge: {
     paddingHorizontal: 10,
@@ -1041,7 +1038,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   sheetBadgeText: {
     color: palette.ink,
     ...typography.label,
-    fontSize: 12,
+    ...type.caption,
   },
   sheetBadgeTextReady: {
     color: palette.accent,
@@ -1058,12 +1055,12 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   fieldPreviewTitle: {
     color: palette.ink,
     ...typography.label,
-    fontSize: 14,
+    ...type.bodySm,
   },
   fieldPreviewMeta: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 12,
+    ...type.caption,
   },
   cardActions: {
     flexDirection: 'row',
@@ -1149,13 +1146,12 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   modalTitle: {
     color: palette.ink,
     ...typography.heading,
-    fontSize: 24,
+    ...type.title,
   },
   modalSubtitle: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 13,
-    lineHeight: 19,
+    ...type.label,
   },
   formGroup: {
     gap: 8,
@@ -1169,14 +1165,14 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   inputLabel: {
     color: palette.ink,
     ...typography.label,
-    fontSize: 13,
+    ...type.label,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   smallSectionLabel: {
     color: palette.mutedInk,
     ...typography.label,
-    fontSize: 12,
+    ...type.caption,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
@@ -1188,7 +1184,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
     paddingVertical: 12,
     color: palette.ink,
     ...typography.body,
-    fontSize: 15,
+    ...type.body,
     backgroundColor: palette.card,
   },
   searchInput: {
@@ -1210,20 +1206,19 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   sheetSummaryLabel: {
     color: palette.mutedInk,
     ...typography.label,
-    fontSize: 12,
+    ...type.caption,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   sheetSummaryTitle: {
     color: palette.ink,
     ...typography.heading,
-    fontSize: 18,
+    ...type.heading,
   },
   sheetSummaryBody: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 13,
-    lineHeight: 20,
+    ...type.label,
   },
   sheetSummaryActions: {
     flexDirection: 'row',
@@ -1256,13 +1251,12 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   optionTitle: {
     color: palette.ink,
     ...typography.label,
-    fontSize: 14,
+    ...type.bodySm,
   },
   optionBody: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 12,
-    lineHeight: 18,
+    ...type.caption,
   },
   sheetPickerActions: {
     flexDirection: 'row',
@@ -1277,13 +1271,12 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   choiceTitle: {
     color: palette.ink,
     ...typography.label,
-    fontSize: 15,
+    ...type.body,
   },
   choiceBody: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 13,
-    lineHeight: 20,
+    ...type.label,
   },
   choiceActions: {
     flexDirection: 'row',
@@ -1309,12 +1302,12 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   fieldListTitle: {
     color: palette.ink,
     ...typography.label,
-    fontSize: 14,
+    ...type.bodySm,
   },
   fieldListMeta: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 12,
+    ...type.caption,
   },
   emptyFieldsCard: {
     gap: 6,
@@ -1325,13 +1318,12 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   emptyFieldsTitle: {
     color: palette.ink,
     ...typography.label,
-    fontSize: 14,
+    ...type.bodySm,
   },
   emptyFieldsBody: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 13,
-    lineHeight: 20,
+    ...type.label,
   },
   modalActions: {
     flexDirection: 'row',

@@ -2,7 +2,7 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { type ReactNode, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { palette, radii, typography } from '../../theme';
+import { palette, radii, type, typography } from '../../theme';
 import { buildProviderPickerOptionCopy } from '../../features/settings/presentation';
 import { providerMap } from '../../services/providers';
 import type { ProviderId } from '../../types';
@@ -265,7 +265,7 @@ export const controlStyles = StyleSheet.create({
   fieldGroup: { gap: 8 },
   label: {
     ...typography.label,
-    fontSize: 13,
+    ...type.label,
     color: palette.mutedInk,
     textTransform: 'uppercase',
     letterSpacing: 0.6,
@@ -273,8 +273,7 @@ export const controlStyles = StyleSheet.create({
   helperText: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 13,
-    lineHeight: 18,
+    ...type.label,
   },
   input: {
     backgroundColor: palette.cardUtility,
@@ -282,7 +281,7 @@ export const controlStyles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     ...typography.body,
-    fontSize: 15,
+    ...type.body,
     color: palette.ink,
   },
   selectButton: {
@@ -298,12 +297,12 @@ export const controlStyles = StyleSheet.create({
   selectValue: {
     color: palette.ink,
     ...typography.label,
-    fontSize: 15,
+    ...type.body,
   },
   selectHint: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 12,
+    ...type.caption,
   },
   modalBackdrop: {
     flex: 1,
@@ -324,13 +323,12 @@ export const controlStyles = StyleSheet.create({
   modalTitle: {
     color: palette.ink,
     ...typography.heading,
-    fontSize: 18,
+    ...type.heading,
   },
   modalBody: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 13,
-    lineHeight: 18,
+    ...type.label,
   },
   optionListScroll: { maxHeight: 360 },
   optionList: { gap: 8 },
@@ -349,18 +347,17 @@ export const controlStyles = StyleSheet.create({
   optionLabel: {
     color: palette.ink,
     ...typography.label,
-    fontSize: 14,
+    ...type.bodySm,
   },
   optionMeta: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 12,
+    ...type.caption,
   },
   optionDescription: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 12,
-    lineHeight: 16,
+    ...type.caption,
   },
   optionLabelSelected: { color: palette.paper },
   modalCloseButton: {
@@ -373,6 +370,6 @@ export const controlStyles = StyleSheet.create({
   modalCloseText: {
     color: palette.ink,
     ...typography.label,
-    fontSize: 13,
+    ...type.label,
   },
 });

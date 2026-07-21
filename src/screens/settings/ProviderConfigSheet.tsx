@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PillButton, StatusChip } from '../../components/ui';
-import { palette, radii, typography } from '../../theme';
+import { palette, radii, type, typography } from '../../theme';
 import { providerMap } from '../../services/providers';
 import type { ProviderConfig, ProviderId } from '../../types';
 import { FieldGroup, Label, ModelDropdown, PlainInput, ProviderIcon } from './SharedControls';
@@ -169,13 +169,12 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   title: {
     color: palette.ink,
     ...typography.heading,
-    fontSize: 20,
+    ...type.heading,
   },
   body: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 13,
-    lineHeight: 18,
+    ...type.label,
   },
   scroll: { maxHeight: 480 },
   scrollContent: { gap: 16, paddingBottom: 8 },

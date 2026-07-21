@@ -25,7 +25,7 @@ import {
   getAppLogs,
   type AppLogEntry,
 } from '../services/appLogs';
-import { palette, radii, typography } from '../theme';
+import { palette, radii, type, typography } from '../theme';
 import { useTheme, useThemedStyles, type Palette } from '../hooks/useTheme';
 
 const LOG_LIMIT = 200;
@@ -253,13 +253,12 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   },
   heroTitle: {
     color: palette.ink,
-    fontSize: 20,
+    ...type.heading,
     ...typography.heading,
   },
   heroBody: {
     color: palette.mutedInk,
-    fontSize: 15,
-    lineHeight: 22,
+    ...type.body,
     ...typography.body,
   },
   statsRow: {
@@ -292,13 +291,12 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   },
   errorTitle: {
     color: palette.danger,
-    fontSize: 17,
+    ...type.body,
     ...typography.heading,
   },
   errorBody: {
     color: palette.ink,
-    fontSize: 14,
-    lineHeight: 20,
+    ...type.bodySm,
     ...typography.body,
   },
   emptyCard: {
@@ -306,13 +304,12 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   },
   emptyTitle: {
     color: palette.ink,
-    fontSize: 18,
+    ...type.heading,
     ...typography.heading,
   },
   emptyBody: {
     color: palette.mutedInk,
-    fontSize: 15,
-    lineHeight: 22,
+    ...type.body,
     ...typography.body,
   },
   logList: {
@@ -338,30 +335,28 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   logScope: {
     flex: 1,
     color: palette.ink,
-    fontSize: 15,
+    ...type.body,
     ...typography.label,
   },
   logLevel: {
     color: palette.mutedInk,
-    fontSize: 12,
+    ...type.caption,
     ...typography.label,
   },
   logTime: {
     color: palette.mutedInk,
-    fontSize: 12,
+    ...type.caption,
     fontVariant: ['tabular-nums'],
     ...typography.body,
   },
   logMessage: {
     color: palette.ink,
-    fontSize: 15,
-    lineHeight: 21,
+    ...type.body,
     ...typography.bodyStrong,
   },
   logMetadata: {
     color: palette.mutedInk,
-    fontSize: 12,
-    lineHeight: 18,
+    ...type.caption,
     padding: 12,
     borderRadius: radii.md,
     backgroundColor: palette.cardMuted,
@@ -379,7 +374,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   },
   copyOneText: {
     color: palette.accent,
-    fontSize: 13,
+    ...type.label,
     ...typography.label,
   },
 });
