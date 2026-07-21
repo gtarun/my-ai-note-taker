@@ -24,7 +24,7 @@ const lightPalette = {
   /** Near-black pulled green rather than blue — a chosen neutral, not an inherited one. */
   ink: '#141a19',
   mutedInk: '#4a5350',
-  faintInk: '#7c8580',
+  faintInk: '#68716c',
 
   /** Primary. Every active, selected and successful state. */
   accent: '#0b6e5f',
@@ -41,6 +41,8 @@ const lightPalette = {
   danger: '#b4462c',
   dangerSoft: '#f7e3da',
   shadow: 'rgba(20, 26, 25, 0.10)',
+  /** Modal backdrop. */
+  scrim: 'rgba(20, 26, 25, 0.32)',
 
   /** The recording surface. Dim room, open mic. */
   stage: '#0e1312',
@@ -62,7 +64,7 @@ const darkPalette: typeof lightPalette = {
 
   ink: '#e9eae4',
   mutedInk: '#a7b0ab',
-  faintInk: '#78827d',
+  faintInk: '#7c8681',
 
   accent: '#37d6a8',
   accentLit: '#5ff0c4',
@@ -76,6 +78,9 @@ const darkPalette: typeof lightPalette = {
   danger: '#e0805a',
   dangerSoft: 'rgba(224, 128, 90, 0.16)',
   shadow: 'rgba(0, 0, 0, 0.4)',
+  // Heavier than light mode: a weak scrim over a dark page leaves the sheet
+  // and the background reading as the same plane.
+  scrim: 'rgba(0, 0, 0, 0.6)',
 
   stage: '#080b0a',
   stageCard: '#141a18',

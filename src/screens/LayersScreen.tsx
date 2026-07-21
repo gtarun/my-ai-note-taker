@@ -1036,7 +1036,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
     alignSelf: 'flex-start',
   },
   sheetBadgeReady: {
-    backgroundColor: '#d7f4e5',
+    backgroundColor: palette.accentSoft,
   },
   sheetBadgeText: {
     color: palette.ink,
@@ -1044,7 +1044,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
     fontSize: 12,
   },
   sheetBadgeTextReady: {
-    color: '#146c43',
+    color: palette.accent,
   },
   fieldPreviewList: {
     gap: 8,
@@ -1073,7 +1073,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(22, 29, 37, 0.32)',
+    backgroundColor: palette.scrim,
     justifyContent: 'flex-end',
     paddingTop: 12,
   },
@@ -1102,7 +1102,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   },
   inlineOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(22, 29, 37, 0.18)',
+    backgroundColor: palette.scrim,
     justifyContent: 'flex-end',
     zIndex: 10,
   },

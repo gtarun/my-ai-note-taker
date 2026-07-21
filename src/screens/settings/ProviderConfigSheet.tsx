@@ -137,7 +137,7 @@ export function ProviderConfigSheet({
 const makeStyles = (palette: Palette) => StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(11, 15, 16, 0.45)',
+    backgroundColor: palette.scrim,
     justifyContent: 'flex-end',
   },
   sheet: {

@@ -1148,11 +1148,11 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
     minWidth: 220,
   },
   dangerZone: {
-    backgroundColor: '#fff4f2',
+    backgroundColor: palette.dangerSoft,
     borderRadius: 24,
     padding: 18,
     borderWidth: 1,
-    borderColor: '#efc2bc',
+    borderColor: palette.danger,
     gap: 12,
   },
   dangerZoneTitle: {
@@ -1173,8 +1173,8 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
     flexDirection: 'row',
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#e7b0aa',
-    backgroundColor: '#fff1ee',
+    borderColor: palette.danger,
+    backgroundColor: palette.dangerSoft,
     gap: 8,
   },
   dangerButtonText: {
@@ -1255,10 +1255,10 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
     backgroundColor: palette.card,
   },
   extractionSyncBadgeReady: {
-    backgroundColor: '#d7f4e5',
+    backgroundColor: palette.accentSoft,
   },
   extractionSyncBadgeFailed: {
-    backgroundColor: '#fde3e0',
+    backgroundColor: palette.dangerSoft,
   },
   extractionSyncBadgeText: {
     color: palette.ink,
@@ -1266,7 +1266,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
     fontWeight: '700',
   },
   extractionSyncBadgeTextReady: {
-    color: '#146c43',
+    color: palette.accent,
   },
   extractionSyncBadgeTextFailed: {
     color: palette.danger,
@@ -1312,7 +1312,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(22, 29, 37, 0.32)',
+    backgroundColor: palette.scrim,
     justifyContent: 'flex-end',
     paddingTop: 12,
   },
