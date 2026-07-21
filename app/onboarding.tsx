@@ -97,9 +97,10 @@ export default function OnboardingScreen() {
   const finish = async () => {
     try {
       await markOnboardingSeen();
-    } finally {
-      router.replace(getOnboardingCompletionRoute());
+    } catch {
+      // See handleFinishSetupInSettings: never block leaving onboarding.
     }
+    router.replace(getOnboardingCompletionRoute());
   };
 
   const handlePrimary = async () => {
@@ -151,9 +152,12 @@ export default function OnboardingScreen() {
   const handleFinishSetupInSettings = async () => {
     try {
       await markOnboardingSeen();
-    } finally {
-      router.replace(SETTINGS_TAB_ROUTE);
+    } catch {
+      // Navigating on is still the right move — the worst case is that
+      // onboarding replays next launch. Swallowing here keeps it from becoming
+      // an unhandled rejection at the `void` call site.
     }
+    router.replace(SETTINGS_TAB_ROUTE);
   };
 
   return (

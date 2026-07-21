@@ -43,10 +43,15 @@ import {
   getMeetingDetailTitleDraftState,
   getMeetingDetailTranscriptCopyText,
   getPlaybackActionLabel,
-  isProviderSetupError,
+  getProviderSetupDestination,
 } from '../../src/features/meetings/detailPresentation';
 import { getMeetingDetailHeaderPresentation } from '../../src/features/meetings/navigation';
-import { APP_TABS_ROUTE, LAYERS_ROUTE, SETTINGS_TAB_ROUTE } from '../../src/navigation/routes';
+import {
+  APP_TABS_ROUTE,
+  LAYERS_ROUTE,
+  LOCAL_MODELS_ROUTE,
+  SETTINGS_TAB_ROUTE,
+} from '../../src/navigation/routes';
 import { listExtractionLayers } from '../../src/services/extractionLayers';
 import {
   deleteMeeting,
@@ -182,11 +187,19 @@ export default function MeetingDetailScreen() {
       await loadMeeting();
 
       // A setup error is the single most likely failure on a first run, and the
-      // bare OK alert left the user to find Settings on their own.
-      if (isProviderSetupError(message)) {
-        Alert.alert('Set up a provider first', message, [
+      // bare OK alert left the user to find the fix on their own. Model
+      // problems are fixed on Local models, provider problems in Settings.
+      const setupDestination = getProviderSetupDestination(message);
+
+      if (setupDestination) {
+        const isModelIssue = setupDestination === 'local-models';
+        Alert.alert(isModelIssue ? 'Model needed' : 'Set up a provider first', message, [
           { text: 'Not now', style: 'cancel' },
-          { text: 'Open Settings', onPress: () => router.push(SETTINGS_TAB_ROUTE) },
+          {
+            text: isModelIssue ? 'Open Local models' : 'Open Settings',
+            onPress: () =>
+              router.push(isModelIssue ? LOCAL_MODELS_ROUTE : SETTINGS_TAB_ROUTE),
+          },
         ]);
         return;
       }

@@ -142,4 +142,64 @@ describe('fetchWithRetry', () => {
 
     expect(delays).toEqual([100, 200, 400]);
   });
+
+  it('does not retry thrown errors when retryOnNetworkError is false', async () => {
+    // Transcription uploads are billed on receipt, so a timeout retry could pay
+    // for the same audio twice.
+    const spy = mockFetch(async () => {
+      throw new TypeError('Network request failed');
+    });
+
+    await expect(
+      fetchWithRetry('https://example.test', { retryOnNetworkError: false, sleep: noSleep })
+    ).rejects.toThrow('Network request failed');
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('still retries rejected statuses when retryOnNetworkError is false', async () => {
+    // A 429 means the server refused the request outright, so nothing was
+    // billed and retrying is safe.
+    let calls = 0;
+    const spy = mockFetch(async () => {
+      calls += 1;
+      return jsonResponse(calls < 2 ? 429 : 200);
+    });
+
+    const response = await fetchWithRetry('https://example.test', {
+      retryOnNetworkError: false,
+      sleep: noSleep,
+    });
+
+    expect(response.status).toBe(200);
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry a caller-initiated abort', async () => {
+    const controller = new AbortController();
+    const spy = mockFetch(async (_url, init) => {
+      controller.abort();
+      const error = new Error('Aborted');
+      error.name = 'AbortError';
+      void init;
+      throw error;
+    });
+
+    await expect(
+      fetchWithRetry('https://example.test', { signal: controller.signal, sleep: noSleep })
+    ).rejects.toThrow();
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses to start a request on an already-aborted signal', async () => {
+    // addEventListener would never fire on an aborted signal, leaving an
+    // in-flight request nothing can cancel.
+    const controller = new AbortController();
+    controller.abort();
+    const spy = mockFetch(async () => jsonResponse(200));
+
+    await expect(
+      fetchWithTimeout('https://example.test', { signal: controller.signal })
+    ).rejects.toThrow();
+    expect(spy).not.toHaveBeenCalled();
+  });
 });

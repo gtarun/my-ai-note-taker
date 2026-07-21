@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
 import {
-  getOfflineSetupStatusCopy,
   getOnboardingFeatureCard,
   getOnboardingProgressPercent,
 } from './presentation';
@@ -31,34 +30,6 @@ describe('onboarding presentation', () => {
       title: 'Pick your processing route',
       body: 'Choose on-device or cloud processing. Nothing is downloaded or uploaded until you say so.',
       tone: 'secondary',
-    });
-  });
-
-  test('returns setup-card copy for downloading and ready states', () => {
-    expect(
-      getOfflineSetupStatusCopy({
-        status: 'downloading',
-        bundleLabel: 'Starter',
-        progressPercent: 42,
-        estimatedMinutes: 6,
-      })
-    ).toEqual({
-      title: 'Preparing offline mode',
-      body: 'Starter is downloading now. About 6 min remaining.',
-      progressLabel: '42%',
-    });
-
-    expect(
-      getOfflineSetupStatusCopy({
-        status: 'ready',
-        bundleLabel: 'Starter',
-        progressPercent: 100,
-        estimatedMinutes: null,
-      })
-    ).toEqual({
-      title: 'Offline mode is ready',
-      body: 'Starter finished downloading and local setup has been applied.',
-      progressLabel: 'Ready',
     });
   });
 

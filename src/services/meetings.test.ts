@@ -249,10 +249,10 @@ vi.mock('../db', () => ({
         return;
       }
 
-      if (source.includes('SET transcript_text = NULL, summary_json = NULL, summary_short = NULL')) {
-        const meeting = meetingState.get(String(params[1]));
+      if (source.includes('transcript_text = ?') && source.includes('extraction_synced_row_id = NULL')) {
+        const meeting = meetingState.get(String(params[2]));
         if (meeting) {
-          meeting.transcript_text = null;
+          meeting.transcript_text = String(params[0]);
           meeting.summary_json = null;
           meeting.summary_short = null;
           meeting.error_message = null;
@@ -266,7 +266,7 @@ vi.mock('../db', () => ({
           meeting.extraction_sync_error_message = null;
           meeting.extraction_synced_at = null;
           meeting.extraction_synced_row_id = null;
-          meeting.updated_at = String(params[0]);
+          meeting.updated_at = String(params[1]);
         }
         return;
       }
@@ -445,6 +445,25 @@ describe('meeting processing with extraction layers', () => {
     expect(transcribeAudio).toHaveBeenCalledTimes(1);
     expect(summarizeTranscript).toHaveBeenCalledTimes(1);
     expect(extractStructuredData).not.toHaveBeenCalled();
+    expect(meeting?.status).toBe('ready');
+    expect(meeting?.extractionResult).toBeNull();
+  });
+
+  test('clears a previous layer result when re-running without a layer', async () => {
+    fileSystemGetInfoAsync.mockImplementation(async () => ({ exists: true, size: 128 }));
+    fileSystemReadAsStringAsync.mockImplementation(async () => 'YQ==');
+    const { getMeeting, processMeeting } = await import('./meetings');
+
+    // First run extracts against a layer.
+    await processMeeting('meeting-1', { layerId: 'layer-1' });
+    expect((await getMeeting('meeting-1'))?.extractionResult).not.toBeNull();
+
+    // Re-run with no layer. The old values came from a transcript that no
+    // longer exists, and the detail screen would otherwise still offer to sync
+    // them to Sheets.
+    await processMeeting('meeting-1');
+
+    const meeting = await getMeeting('meeting-1');
     expect(meeting?.status).toBe('ready');
     expect(meeting?.extractionResult).toBeNull();
   });

@@ -12,20 +12,35 @@ export const MEETING_DETAIL_SECTION_ORDER = [
 ] as const;
 
 /**
- * Whether a processing failure is really a setup problem the user can fix in
- * Settings, rather than a transient or provider-side error. Used to offer an
- * "Open Settings" action instead of a dead-end OK button — the most likely
- * failure on a first run, since the summary provider defaults to one with no
- * API key.
+ * Classifies a processing failure the user can actually fix, and says which
+ * screen fixes it. Used to offer a real action instead of a dead-end OK button
+ * — the most likely failure on a first run, since the summary provider defaults
+ * to one with no API key.
+ *
+ * `null` means the failure is transient or provider-side and there is nowhere
+ * useful to send the user.
  */
-export function isProviderSetupError(message: string): boolean {
+export type ProviderSetupDestination = 'settings' | 'local-models';
+
+export function getProviderSetupDestination(message: string): ProviderSetupDestination | null {
   const normalized = message.toLowerCase();
 
-  return (
-    normalized.includes('configure the selected') ||
-    normalized.includes('in settings first') ||
-    normalized.includes('download and install the selected')
-  );
+  // Model problems are fixed on the Local models screen, not in Settings.
+  // Includes the whisper-small locale message, which names no provider and so
+  // matched none of the older checks — the one message that most needed an
+  // action attached to it.
+  if (
+    normalized.includes('download and install the selected') ||
+    normalized.includes('download it from local models')
+  ) {
+    return 'local-models';
+  }
+
+  if (normalized.includes('configure the selected') || normalized.includes('in settings first')) {
+    return 'settings';
+  }
+
+  return null;
 }
 
 export function getMeetingDetailTitleDraftState(draftTitle: string, savedTitle: string) {

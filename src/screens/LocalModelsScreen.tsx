@@ -237,6 +237,11 @@ export default function LocalModelsScreen() {
       Alert.alert('Download failed', message);
     } finally {
       setActiveDownload(item.id, false);
+      setDownloadPhase((current) => {
+        const next = { ...current };
+        delete next[item.id];
+        return next;
+      });
     }
   };
 

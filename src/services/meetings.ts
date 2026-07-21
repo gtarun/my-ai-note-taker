@@ -783,15 +783,43 @@ async function updateTranscript(id: string, transcriptText: string) {
 }
 
 /**
- * Writes a freshly produced transcript and retires the summary it invalidates in
- * one statement. Re-runs used to null the transcript and summary up front, so a
- * failed retry left the user with nothing where they previously had working
- * notes. Now the old result survives until a new transcript replaces it.
+ * Writes a freshly produced transcript and retires everything it invalidates in
+ * one statement.
+ *
+ * Two things are going on here:
+ *
+ * 1. Re-runs used to null the transcript and summary *before* transcription
+ *    started, so a failed retry left the user with nothing where they
+ *    previously had working notes. The old result now survives until a new
+ *    transcript actually replaces it.
+ *
+ * 2. The extraction columns are cleared too. The old native statement did not
+ *    touch them (only the web shim did), so re-running a meeting without
+ *    selecting a layer left the previous layer's extracted values on the row —
+ *    values derived from a transcript that no longer exists, still showing a
+ *    live "sync to Sheets" action. Extraction always runs after this point, so
+ *    a run that does select a layer simply rewrites them.
  */
 async function replaceTranscriptAndClearStaleSummary(id: string, transcriptText: string) {
   const db = getDatabase();
   await db.runAsync(
-    'UPDATE meetings SET transcript_text = ?, summary_json = NULL, summary_short = NULL, error_message = NULL, updated_at = ? WHERE id = ?',
+    `UPDATE meetings SET
+      transcript_text = ?,
+      summary_json = NULL,
+      summary_short = NULL,
+      error_message = NULL,
+      selected_layer_id = NULL,
+      extraction_layer_name = NULL,
+      extraction_fields_json = NULL,
+      extraction_values_json = NULL,
+      extraction_status = NULL,
+      extraction_error_message = NULL,
+      extraction_sync_status = NULL,
+      extraction_sync_error_message = NULL,
+      extraction_synced_at = NULL,
+      extraction_synced_row_id = NULL,
+      updated_at = ?
+    WHERE id = ?`,
     transcriptText,
     new Date().toISOString(),
     id

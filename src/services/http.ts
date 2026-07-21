@@ -33,6 +33,13 @@ export async function fetchWithTimeout(
   options: TimeoutFetchOptions = {}
 ): Promise<Response> {
   const { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, signal, ...init } = options;
+
+  // An already-aborted signal must not start a request. addEventListener below
+  // would never fire for it, producing an uncancellable in-flight request.
+  if (signal?.aborted) {
+    throw new DOMException('Aborted', 'AbortError');
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -71,6 +78,17 @@ export type RetryOptions = TimeoutFetchOptions & {
   attempts?: number;
   /** Base delay; grows exponentially per attempt. */
   retryDelayMs?: number;
+  /**
+   * Whether to retry thrown errors (timeouts, dropped connections) in addition
+   * to retryable status codes.
+   *
+   * Set false for requests that may already have been accepted and billed when
+   * the client gives up — a transcription upload that exceeds our deadline may
+   * still be processing server-side, and retrying would pay for it twice. A
+   * retryable *status* is always safe to retry, because the server explicitly
+   * rejected the request.
+   */
+  retryOnNetworkError?: boolean;
   /** Injectable for tests. */
   sleep?: (ms: number) => Promise<void>;
 };
@@ -85,7 +103,13 @@ const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(r
  * existing per-provider error handling still owns the message.
  */
 export async function fetchWithRetry(url: string, options: RetryOptions = {}): Promise<Response> {
-  const { attempts = 3, retryDelayMs = 1_000, sleep = defaultSleep, ...fetchOptions } = options;
+  const {
+    attempts = 3,
+    retryDelayMs = 1_000,
+    retryOnNetworkError = true,
+    sleep = defaultSleep,
+    ...fetchOptions
+  } = options;
   const totalAttempts = Math.max(1, attempts);
   let lastError: unknown;
 
@@ -98,10 +122,19 @@ export async function fetchWithRetry(url: string, options: RetryOptions = {}): P
       if (!isRetryableStatus(response.status) || isLastAttempt) {
         return response;
       }
+
+      // Release the connection before the next attempt rather than leaving an
+      // unread body behind.
+      await response.body?.cancel?.().catch(() => undefined);
     } catch (error) {
       lastError = error;
 
-      if (isLastAttempt) {
+      // A caller-initiated abort is a decision, not a failure to retry through.
+      if (fetchOptions.signal?.aborted) {
+        throw error;
+      }
+
+      if (isLastAttempt || !retryOnNetworkError) {
         throw error;
       }
     }

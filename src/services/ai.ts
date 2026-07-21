@@ -40,6 +40,9 @@ type ExtractParams = {
 
 type SummarizeAndExtractParams = ExtractParams;
 
+/** Audio uploads carry whole recordings, so they need far longer than a chat call. */
+const TRANSCRIPTION_TIMEOUT_MS = 600_000;
+
 const summaryJsonSchema = {
   type: 'object',
   additionalProperties: false,
@@ -198,6 +201,12 @@ async function transcribeOpenAICompatible(provider: ProviderConfig, audioUri: st
       Authorization: `Bearer ${provider.apiKey}`,
     },
     body: formData,
+    // Audio uploads are large and billed per minute of audio on receipt. A
+    // long meeting can outlast our deadline while the provider is still
+    // processing it, so retrying a timeout would pay for the same transcription
+    // twice. Rejections (429/5xx) are still retried — those were never billed.
+    timeoutMs: TRANSCRIPTION_TIMEOUT_MS,
+    retryOnNetworkError: false,
   });
 
   if (!response.ok) {
@@ -249,6 +258,10 @@ async function transcribeWithOpenRouter(provider: ProviderConfig, audioUri: stri
       ],
       stream: false,
     }),
+    // Same billing exposure as the OpenAI-compatible upload above: the audio is
+    // already on the wire, so a timeout retry can pay for it twice.
+    timeoutMs: TRANSCRIPTION_TIMEOUT_MS,
+    retryOnNetworkError: false,
   });
 
   if (!response.ok) {

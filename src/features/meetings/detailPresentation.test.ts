@@ -3,7 +3,7 @@ import { describe, expect, it, test } from 'vitest';
 import { SummaryPayload } from '../../types';
 import {
   MEETING_DETAIL_TITLE_ACTION_SLOT_MIN_WIDTH,
-  isProviderSetupError,
+  getProviderSetupDestination,
   MEETING_DETAIL_SECTION_ORDER,
   getExtractionSyncLabel,
   getMeetingDetailLayerChooserPresentation,
@@ -148,22 +148,35 @@ describe('meeting detail presentation', () => {
   });
 });
 
-describe('isProviderSetupError', () => {
-  it('recognizes the setup failures a user can fix in Settings', () => {
-    expect(isProviderSetupError('Configure the selected summary provider in Settings first.')).toBe(
-      true
-    );
+describe('getProviderSetupDestination', () => {
+  it('sends provider configuration failures to Settings', () => {
     expect(
-      isProviderSetupError('Configure the selected transcription provider in Settings first.')
-    ).toBe(true);
+      getProviderSetupDestination('Configure the selected summary provider in Settings first.')
+    ).toBe('settings');
     expect(
-      isProviderSetupError('Download and install the selected local transcription model first.')
-    ).toBe(true);
+      getProviderSetupDestination('Configure the selected transcription provider in Settings first.')
+    ).toBe('settings');
+  });
+
+  it('sends model failures to Local models, where downloads actually live', () => {
+    expect(
+      getProviderSetupDestination('Download and install the selected local transcription model first.')
+    ).toBe('local-models');
+  });
+
+  it('handles the whisper-small locale message, which names no provider', () => {
+    // This one matched nothing before and fell through to a dead-end alert —
+    // despite being the message most in need of an action.
+    expect(
+      getProviderSetupDestination(
+        'hi-IN transcription needs Whisper Small. Download it from Local models, then try again.'
+      )
+    ).toBe('local-models');
   });
 
   it('leaves transient and provider-side errors alone', () => {
-    expect(isProviderSetupError('The request timed out after 120s.')).toBe(false);
-    expect(isProviderSetupError('429 Too Many Requests')).toBe(false);
-    expect(isProviderSetupError('Unable to process meeting.')).toBe(false);
+    expect(getProviderSetupDestination('The request timed out after 120s.')).toBeNull();
+    expect(getProviderSetupDestination('429 Too Many Requests')).toBeNull();
+    expect(getProviderSetupDestination('Unable to process meeting.')).toBeNull();
   });
 });

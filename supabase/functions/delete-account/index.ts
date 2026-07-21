@@ -110,19 +110,30 @@ Deno.serve(async (request) => {
       }
     }
 
-    const { error: deleteUserError } = await adminClient.auth.admin.deleteUser(user.id);
-
-    if (deleteUserError) {
+    // Stop before deleting the auth user if any of their data survived.
+    // Deleting the login first would strand that data permanently: the user
+    // could never authenticate again to retry, and no request could reach it.
+    if (failedTables.length) {
       return jsonResponse(
         {
-          error: `Could not delete the account: ${deleteUserError.message}`,
+          error:
+            'Some of your data could not be removed, so the account was left intact. Please try again, or contact support.',
           failedTables,
         },
         500
       );
     }
 
-    return jsonResponse({ deleted: true, failedTables });
+    const { error: deleteUserError } = await adminClient.auth.admin.deleteUser(user.id);
+
+    if (deleteUserError) {
+      return jsonResponse(
+        { error: `Could not delete the account: ${deleteUserError.message}` },
+        500
+      );
+    }
+
+    return jsonResponse({ deleted: true });
   } catch (error) {
     return jsonResponse(
       { error: error instanceof Error ? error.message : 'Unexpected error deleting account.' },

@@ -119,11 +119,14 @@ export default function SettingsScreen() {
       const [support, models] = await Promise.all([getLocalDeviceSupport(), getInstalledModels()]);
       setDeviceSupport(support);
       setInstalledModels(models);
+      // Only set on success. This flag gates the normalization effect below,
+      // which rewrites the user's local transcription model when it believes
+      // nothing is installed — so treating a failed read as "loaded, empty"
+      // would silently discard a downloaded-model selection on the next save.
+      setHasLoadedInstalledModels(true);
       setLoadError(null);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Unable to load your settings.');
-    } finally {
-      setHasLoadedInstalledModels(true);
     }
   }
 
@@ -353,6 +356,21 @@ export default function SettingsScreen() {
             body="Pick where transcription and summary run. Tune the pieces you actually use; ignore the rest."
           />
         </FadeInView>
+
+        {/*
+          Settings themselves loaded but something else (device support, the
+          installed-model list) did not. Without this the failure was invisible,
+          because the error branch above only renders while `form` is null.
+        */}
+        {loadError ? (
+          <FadeInView delay={20}>
+            <SurfaceCard muted style={styles.activeCard}>
+              <Text style={styles.eyebrow}>COULDN’T FULLY LOAD</Text>
+              <Text style={styles.body}>{loadError}</Text>
+              <PillButton label="Try again" onPress={() => void hydrate()} variant="secondary" />
+            </SurfaceCard>
+          </FadeInView>
+        ) : null}
 
         {/* ─── Active now ─── */}
         <FadeInView delay={30}>
