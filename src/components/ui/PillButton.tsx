@@ -23,6 +23,7 @@ export function PillButton({
   accessibilityLabel,
   accessibilityHint,
   fullWidth,
+  iconPosition = 'leading',
 }: {
   label: string;
   onPress: () => void;
@@ -32,6 +33,12 @@ export function PillButton({
   accessibilityLabel?: string;
   accessibilityHint?: string;
   fullWidth?: boolean;
+  /**
+   * Where the icon sits relative to the label. Directional icons should follow
+   * the direction they mean — a forward arrow leading "Next" points back at the
+   * text it is pushing you past.
+   */
+  iconPosition?: 'leading' | 'trailing';
 }) {
   const styles = useThemedStyles(makeStyles);
   const isFilled = variant === 'primary' || variant === 'danger';
@@ -52,8 +59,9 @@ export function PillButton({
         disabled && styles.disabled,
       ]}
     >
-      {icon ? <View style={styles.icon}>{icon}</View> : null}
+      {icon && iconPosition === 'leading' ? <View style={styles.icon}>{icon}</View> : null}
       <Text style={[styles.label, isFilled ? styles.filledLabel : styles.plainLabel]}>{label}</Text>
+      {icon && iconPosition === 'trailing' ? <View style={styles.icon}>{icon}</View> : null}
     </PressableScale>
   );
 }

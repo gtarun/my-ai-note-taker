@@ -140,12 +140,16 @@ export const radii = {
  *
  * UI text uses the system face — SF Pro on iOS — because it is the most legible
  * option at small sizes, costs nothing to load, and is the voice the platform
- * already speaks in. Display uses New York, Apple's own serif, which gives
- * screen titles a bookish quality that a geometric sans cannot. Unknown
- * families fall back to the system face rather than failing, so a device
- * without New York simply renders SF.
+ * already speaks in.
+ *
+ * Display uses Charter. New York would have been the obvious pick, but iOS
+ * registers it as `.New York` — the leading dot marks it private to the system,
+ * so an app asking for it by name gets a silent fallback to sans, which is
+ * exactly what happened on the first build. Charter is user-accessible, is what
+ * Apple Books sets its reading text in, and is the right register for a screen
+ * full of transcript.
  */
-const serifDisplay = Platform.select({ ios: 'New York', default: undefined });
+const serifDisplay = Platform.select({ ios: 'Charter', default: undefined });
 
 export const typography = {
   display: { fontFamily: serifDisplay, fontWeight: '600' as const },

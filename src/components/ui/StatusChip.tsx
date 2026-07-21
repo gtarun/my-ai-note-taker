@@ -1,15 +1,28 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { palette, radii, typography } from '../../theme';
-import { useThemedStyles, type Palette } from '../../hooks/useTheme';
+import { radii, spacing, type, typography } from '../../theme';
+import { useTheme, useThemedStyles, type Palette } from '../../hooks/useTheme';
 
 export type StatusChipTone = 'secondary' | 'tertiary' | 'danger';
 
-const tones = {
-  secondary: { backgroundColor: palette.accentSoft, color: palette.ink },
-  tertiary: { backgroundColor: palette.tertiarySoft, color: palette.tertiary },
-  danger: { backgroundColor: palette.dangerSoft, color: palette.danger },
-} satisfies Record<StatusChipTone, { backgroundColor: string; color: string }>;
+/**
+ * Tone colours have to be resolved per render.
+ *
+ * These were a module-scope constant built from the static light palette, so
+ * every chip in the app stayed pale mint or pale pink on a dark screen no
+ * matter what the theme said — the one thing on the page that hadn't got the
+ * message.
+ */
+function getTone(palette: Palette, tone: StatusChipTone) {
+  switch (tone) {
+    case 'tertiary':
+      return { backgroundColor: palette.claySoft, color: palette.clay };
+    case 'danger':
+      return { backgroundColor: palette.dangerSoft, color: palette.danger };
+    default:
+      return { backgroundColor: palette.accentSoft, color: palette.accent };
+  }
+}
 
 export function StatusChip({
   label,
@@ -20,25 +33,32 @@ export function StatusChip({
   tone?: StatusChipTone;
   accessibilityLabel?: string;
 }) {
+  const palette = useTheme();
   const styles = useThemedStyles(makeStyles);
+  const toneStyle = getTone(palette, tone);
+
   return (
     <View
-      style={[styles.base, { backgroundColor: tones[tone].backgroundColor }]}
+      style={[styles.base, { backgroundColor: toneStyle.backgroundColor }]}
       accessibilityLabel={accessibilityLabel}
     >
-      <Text style={[styles.label, { color: tones[tone].color }]}>{label}</Text>
+      <Text style={[styles.label, { color: toneStyle.color }]}>{label}</Text>
     </View>
   );
 }
 
-const makeStyles = (palette: Palette) => StyleSheet.create({
-  base: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: radii.pill,
-  },
-  label: {
-    fontSize: 12,
-    ...typography.label,
-  },
-});
+const makeStyles = (_palette: Palette) =>
+  StyleSheet.create({
+    base: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: 5,
+      borderRadius: radii.pill,
+      // Without this the chip stretches to fill its parent column — the
+      // "First run" chip rendered as a full-width bar across the screen.
+      alignSelf: 'flex-start',
+    },
+    label: {
+      ...typography.label,
+      ...type.caption,
+    },
+  });

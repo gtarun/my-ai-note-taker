@@ -38,16 +38,16 @@ import { useTheme, useThemedStyles, type Palette } from '../src/hooks/useTheme';
 
 type FeatherIconName = ComponentProps<typeof Feather>['name'];
 
-const featureToneStyles = {
-  secondary: {
-    backgroundColor: palette.accentSoft,
-    color: palette.accent,
-  },
-  tertiary: {
-    backgroundColor: palette.tertiarySoft,
-    color: palette.tertiary,
-  },
-} as const;
+/**
+ * Resolved per render, not at module scope. Built from the static light palette
+ * this stayed a pale mint square on a dark screen — the same trap StatusChip
+ * fell into, and the reason a hardcoded lookup table is worse than a function.
+ */
+function getFeatureTone(palette: Palette, tone: 'secondary' | 'tertiary') {
+  return tone === 'tertiary'
+    ? { backgroundColor: palette.claySoft, color: palette.clay }
+    : { backgroundColor: palette.accentSoft, color: palette.accent };
+}
 
 export default function OnboardingScreen() {
   const palette = useTheme();
@@ -62,7 +62,7 @@ export default function OnboardingScreen() {
   const progressPercent = getOnboardingProgressPercent(activeIndex, ONBOARDING_SLIDES.length);
   const canGoBack = canGoBackOnOnboarding(activeIndex);
   const isLastSlide = isLastOnboardingSlide(activeIndex, ONBOARDING_SLIDES.length);
-  const featureTone = featureToneStyles[featureCard.tone];
+  const featureTone = getFeatureTone(palette, featureCard.tone);
 
   useEffect(() => {
     if (slide.id !== 'setup') {
@@ -301,11 +301,12 @@ export default function OnboardingScreen() {
                   onPress={() => {
                     void handlePrimary();
                   }}
+                  iconPosition="trailing"
                   icon={
                     <Feather
                       name={isLastSlide ? 'check' : 'arrow-right'}
                       size={16}
-                      color={palette.card}
+                      color={palette.paper}
                     />
                   }
                 />

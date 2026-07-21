@@ -103,4 +103,27 @@ describe('design tokens', () => {
     expect(palette.lineStrong).toBe(palette.line);
     expect(radii.pill).toBe(999);
   });
+
+  test('does not ask iOS for a private system font', () => {
+    /*
+     * Apple prefixes its private system faces with a dot — `.New York`,
+     * `.SF Pro`. An app that requests one by name does not error; it silently
+     * falls back to the default sans, so the mistake is invisible in code
+     * review, in the type system, and in every test except this one. It cost a
+     * build to notice.
+     */
+    for (const role of Object.values(typography)) {
+      if (typeof role.fontFamily === 'string') {
+        expect(role.fontFamily.startsWith('.'), `${role.fontFamily} is a private system font`).toBe(
+          false
+        );
+      }
+    }
+  });
+
+  test('sets the display face to one iOS actually exposes to apps', () => {
+    // Charter ships in the user-accessible AppFonts directory. Verified against
+    // the font's own name table rather than assumed.
+    expect(typography.display.fontFamily).toBe('Charter');
+  });
 });
