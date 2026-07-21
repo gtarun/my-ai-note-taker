@@ -262,7 +262,7 @@ export function ModelDropdown({
 export const controlStyles = StyleSheet.create({
   fieldGroup: { gap: 8 },
   label: {
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 13,
     color: palette.mutedInk,
     textTransform: 'uppercase',
@@ -270,7 +270,7 @@ export const controlStyles = StyleSheet.create({
   },
   helperText: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -279,7 +279,7 @@ export const controlStyles = StyleSheet.create({
     borderRadius: radii.md,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 15,
     color: palette.ink,
   },
@@ -295,12 +295,12 @@ export const controlStyles = StyleSheet.create({
   selectCopy: { flex: 1, gap: 2 },
   selectValue: {
     color: palette.ink,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 15,
   },
   selectHint: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 12,
   },
   modalBackdrop: {
@@ -321,12 +321,12 @@ export const controlStyles = StyleSheet.create({
   providerPickerModalCard: { paddingBottom: 16 },
   modalTitle: {
     color: palette.ink,
-    fontFamily: typography.heading.fontFamily,
+    ...typography.heading,
     fontSize: 18,
   },
   modalBody: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -346,17 +346,17 @@ export const controlStyles = StyleSheet.create({
   optionHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   optionLabel: {
     color: palette.ink,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 14,
   },
   optionMeta: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 12,
   },
   optionDescription: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 12,
     lineHeight: 16,
   },
@@ -370,7 +370,7 @@ export const controlStyles = StyleSheet.create({
   },
   modalCloseText: {
     color: palette.ink,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 13,
   },
 });

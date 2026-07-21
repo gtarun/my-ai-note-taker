@@ -573,7 +573,7 @@ const styles = StyleSheet.create({
   runtimeCopy: { flex: 1, gap: 4 },
   runtimeLabel: {
     color: palette.mutedInk,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.6,
@@ -590,24 +590,24 @@ const styles = StyleSheet.create({
   modelTitleWrap: { flex: 1, gap: 2 },
   modelTitle: {
     color: palette.ink,
-    fontFamily: typography.heading.fontFamily,
+    ...typography.heading,
     fontSize: 16,
   },
   modelMeta: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 12,
   },
   modelActionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   modelHint: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 12,
     lineHeight: 16,
   },
   body: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 13,
     lineHeight: 19,
   },
@@ -620,7 +620,7 @@ const styles = StyleSheet.create({
   progressFill: { height: '100%', backgroundColor: palette.accent },
   errorText: {
     color: palette.danger,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 13,
   },
   advancedCard: { gap: 12 },

@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
   },
   stepText: {
     color: palette.mutedInk,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 13,
   },
   skipButton: {
@@ -355,7 +355,7 @@ const styles = StyleSheet.create({
   },
   skipText: {
     color: palette.mutedInk,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 14,
   },
   progressTrack: {
@@ -375,20 +375,20 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     color: palette.accent,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   title: {
     color: palette.ink,
-    fontFamily: typography.display.fontFamily,
+    ...typography.display,
     fontSize: 34,
     lineHeight: 40,
   },
   body: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 16,
     lineHeight: 25,
     maxWidth: 560,
@@ -416,12 +416,12 @@ const styles = StyleSheet.create({
   },
   featureTitle: {
     color: palette.ink,
-    fontFamily: typography.heading.fontFamily,
+    ...typography.heading,
     fontSize: 17,
   },
   featureBody: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 15,
     lineHeight: 22,
   },
@@ -448,24 +448,24 @@ const styles = StyleSheet.create({
   routeTitle: {
     flex: 1,
     color: palette.ink,
-    fontFamily: typography.heading.fontFamily,
+    ...typography.heading,
     fontSize: 15,
   },
   routeBody: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 13,
     lineHeight: 19,
   },
   routeRequirement: {
     color: palette.ink,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 12,
     lineHeight: 17,
   },
   setupHint: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 13,
     lineHeight: 19,
   },

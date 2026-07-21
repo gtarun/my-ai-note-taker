@@ -165,12 +165,12 @@ const styles = StyleSheet.create({
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   title: {
     color: palette.ink,
-    fontFamily: typography.heading.fontFamily,
+    ...typography.heading,
     fontSize: 20,
   },
   body: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 13,
     lineHeight: 18,
   },

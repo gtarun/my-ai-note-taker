@@ -123,19 +123,19 @@ const styles = StyleSheet.create({
   header: { gap: 4 },
   eyebrow: {
     color: palette.tertiary,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 11,
     letterSpacing: 1.6,
     textTransform: 'uppercase',
   },
   title: {
     color: palette.ink,
-    fontFamily: typography.heading.fontFamily,
+    ...typography.heading,
     fontSize: 18,
   },
   body: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 13,
     lineHeight: 19,
   },
@@ -150,18 +150,18 @@ const styles = StyleSheet.create({
   stageCopy: { flex: 1, gap: 2 },
   stageLabel: {
     color: palette.ink,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 14,
   },
   stageLabelPending: { color: palette.mutedInk },
   stageDetail: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 12,
   },
   stageTiming: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 12,
     minWidth: 32,
     textAlign: 'right',
@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
   warningText: {
     flex: 1,
     color: palette.ink,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 13,
     lineHeight: 19,
   },

@@ -713,16 +713,16 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: palette.paper },
   container: { padding: 20, gap: 18, paddingBottom: 48 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 24 },
-  loadingText: { color: palette.mutedInk, fontFamily: typography.body.fontFamily, fontSize: 15 },
+  loadingText: { color: palette.mutedInk, ...typography.body, fontSize: 15 },
   body: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 13,
     lineHeight: 19,
   },
   eyebrow: {
     color: palette.tertiary,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 11,
     letterSpacing: 1.6,
     textTransform: 'uppercase',
@@ -743,20 +743,20 @@ const styles = StyleSheet.create({
   activeCopy: { flex: 1, gap: 2 },
   activeKind: {
     color: palette.mutedInk,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 11,
     letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
   activeProvider: {
     color: palette.ink,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 15,
   },
   activeDot: { color: palette.line },
   activeModel: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 13,
   },
   activeDivider: {
@@ -782,12 +782,12 @@ const styles = StyleSheet.create({
   miniCopy: { flex: 1, gap: 2 },
   miniTitle: {
     color: palette.ink,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 14,
   },
   miniMeta: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 12,
   },
 
@@ -810,7 +810,7 @@ const styles = StyleSheet.create({
   navLabel: {
     flex: 1,
     color: palette.ink,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 14,
   },
 

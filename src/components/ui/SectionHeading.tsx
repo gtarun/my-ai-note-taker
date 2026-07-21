@@ -41,17 +41,17 @@ const styles = StyleSheet.create({
   },
   title: {
     color: palette.ink,
-    fontFamily: typography.heading.fontFamily,
+    ...typography.heading,
     fontSize: 20,
   },
   subtitle: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 14,
   },
   action: {
     color: palette.accent,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 13,
   },
 });

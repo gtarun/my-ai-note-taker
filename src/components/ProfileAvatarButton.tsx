@@ -72,7 +72,7 @@ const styles = StyleSheet.create({
   },
   initials: {
     color: palette.accent,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 11,
     letterSpacing: 0.3,
   },

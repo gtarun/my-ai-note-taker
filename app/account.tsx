@@ -574,7 +574,7 @@ const styles = StyleSheet.create({
   },
   avatarInitials: {
     color: palette.accent,
-    fontFamily: typography.display.fontFamily,
+    ...typography.display,
     fontSize: 28,
   },
   identityBlock: {
@@ -583,20 +583,20 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     color: palette.accent,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 12,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
   displayName: {
     color: palette.ink,
-    fontFamily: typography.display.fontFamily,
+    ...typography.display,
     fontSize: 28,
     lineHeight: 32,
   },
   email: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 15,
     lineHeight: 22,
   },
@@ -617,12 +617,12 @@ const styles = StyleSheet.create({
   },
   heroBadgeText: {
     color: palette.ink,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 13,
   },
   heroBody: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 15,
     lineHeight: 22,
   },
@@ -643,12 +643,12 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     color: palette.ink,
-    fontFamily: typography.heading.fontFamily,
+    ...typography.heading,
     fontSize: 19,
   },
   cardStatus: {
     color: palette.mutedInk,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 13,
   },
   infoRow: {
@@ -656,14 +656,14 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     color: palette.mutedInk,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 12,
     letterSpacing: 0.4,
     textTransform: 'uppercase',
   },
   infoValue: {
     color: palette.ink,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 15,
     lineHeight: 22,
   },
@@ -676,7 +676,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: palette.paper,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 16,
   },
   legalRow: {
@@ -689,12 +689,12 @@ const styles = StyleSheet.create({
   },
   legalText: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 12,
   },
   legalLink: {
     color: palette.accent,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 12,
     textDecorationLine: 'underline',
   },
@@ -711,7 +711,7 @@ const styles = StyleSheet.create({
   },
   destructiveButtonText: {
     color: palette.danger,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 15,
   },
   secondaryButton: {
@@ -727,7 +727,7 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: palette.ink,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
   },
   buttonRow: {
     flexDirection: 'row',
@@ -735,7 +735,7 @@ const styles = StyleSheet.create({
   },
   inlineHint: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 13,
     lineHeight: 19,
   },
@@ -749,12 +749,12 @@ const styles = StyleSheet.create({
   },
   folderButtonText: {
     color: palette.ink,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 15,
   },
   footer: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 12,
     lineHeight: 18,
     opacity: 0.72,

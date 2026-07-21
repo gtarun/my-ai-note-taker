@@ -249,13 +249,13 @@ const styles = StyleSheet.create({
   heroTitle: {
     color: palette.ink,
     fontSize: 20,
-    fontFamily: typography.heading.fontFamily,
+    ...typography.heading,
   },
   heroBody: {
     color: palette.mutedInk,
     fontSize: 15,
     lineHeight: 22,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
   },
   statsRow: {
     flexDirection: 'row',
@@ -279,7 +279,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
   },
   errorCard: {
     backgroundColor: palette.dangerSoft,
@@ -288,13 +288,13 @@ const styles = StyleSheet.create({
   errorTitle: {
     color: palette.danger,
     fontSize: 17,
-    fontFamily: typography.heading.fontFamily,
+    ...typography.heading,
   },
   errorBody: {
     color: palette.ink,
     fontSize: 14,
     lineHeight: 20,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
   },
   emptyCard: {
     gap: 8,
@@ -302,13 +302,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     color: palette.ink,
     fontSize: 18,
-    fontFamily: typography.heading.fontFamily,
+    ...typography.heading,
   },
   emptyBody: {
     color: palette.mutedInk,
     fontSize: 15,
     lineHeight: 22,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
   },
   logList: {
     gap: 12,
@@ -334,24 +334,24 @@ const styles = StyleSheet.create({
     flex: 1,
     color: palette.ink,
     fontSize: 15,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
   },
   logLevel: {
     color: palette.mutedInk,
     fontSize: 12,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
   },
   logTime: {
     color: palette.mutedInk,
     fontSize: 12,
     fontVariant: ['tabular-nums'],
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
   },
   logMessage: {
     color: palette.ink,
     fontSize: 15,
     lineHeight: 21,
-    fontFamily: typography.bodyStrong.fontFamily,
+    ...typography.bodyStrong,
   },
   logMetadata: {
     color: palette.mutedInk,
@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: radii.md,
     backgroundColor: palette.cardMuted,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
   },
   copyOneButton: {
     alignSelf: 'flex-start',
@@ -375,6 +375,6 @@ const styles = StyleSheet.create({
   copyOneText: {
     color: palette.accent,
     fontSize: 13,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
   },
 });

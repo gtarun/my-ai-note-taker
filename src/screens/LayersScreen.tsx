@@ -969,19 +969,19 @@ const styles = StyleSheet.create({
   },
   heroLabel: {
     color: palette.mutedInk,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 12,
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
   heroValue: {
     color: palette.ink,
-    fontFamily: typography.heading.fontFamily,
+    ...typography.heading,
     fontSize: 28,
   },
   heroBody: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 14,
     lineHeight: 21,
   },
@@ -993,12 +993,12 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     color: palette.ink,
-    fontFamily: typography.heading.fontFamily,
+    ...typography.heading,
     fontSize: 20,
   },
   emptyBody: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 14,
     lineHeight: 21,
   },
@@ -1016,12 +1016,12 @@ const styles = StyleSheet.create({
   },
   layerTitle: {
     color: palette.ink,
-    fontFamily: typography.heading.fontFamily,
+    ...typography.heading,
     fontSize: 20,
   },
   layerMeta: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 13,
     lineHeight: 20,
   },
@@ -1037,7 +1037,7 @@ const styles = StyleSheet.create({
   },
   sheetBadgeText: {
     color: palette.ink,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 12,
   },
   sheetBadgeTextReady: {
@@ -1054,12 +1054,12 @@ const styles = StyleSheet.create({
   },
   fieldPreviewTitle: {
     color: palette.ink,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 14,
   },
   fieldPreviewMeta: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 12,
   },
   cardActions: {
@@ -1145,12 +1145,12 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     color: palette.ink,
-    fontFamily: typography.heading.fontFamily,
+    ...typography.heading,
     fontSize: 24,
   },
   modalSubtitle: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 13,
     lineHeight: 19,
   },
@@ -1165,14 +1165,14 @@ const styles = StyleSheet.create({
   },
   inputLabel: {
     color: palette.ink,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 13,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   smallSectionLabel: {
     color: palette.mutedInk,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 1,
@@ -1184,7 +1184,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     color: palette.ink,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 15,
     backgroundColor: palette.card,
   },
@@ -1206,19 +1206,19 @@ const styles = StyleSheet.create({
   },
   sheetSummaryLabel: {
     color: palette.mutedInk,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   sheetSummaryTitle: {
     color: palette.ink,
-    fontFamily: typography.heading.fontFamily,
+    ...typography.heading,
     fontSize: 18,
   },
   sheetSummaryBody: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 13,
     lineHeight: 20,
   },
@@ -1252,12 +1252,12 @@ const styles = StyleSheet.create({
   },
   optionTitle: {
     color: palette.ink,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 14,
   },
   optionBody: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 12,
     lineHeight: 18,
   },
@@ -1273,12 +1273,12 @@ const styles = StyleSheet.create({
   },
   choiceTitle: {
     color: palette.ink,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 15,
   },
   choiceBody: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 13,
     lineHeight: 20,
   },
@@ -1305,12 +1305,12 @@ const styles = StyleSheet.create({
   },
   fieldListTitle: {
     color: palette.ink,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 14,
   },
   fieldListMeta: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 12,
   },
   emptyFieldsCard: {
@@ -1321,12 +1321,12 @@ const styles = StyleSheet.create({
   },
   emptyFieldsTitle: {
     color: palette.ink,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 14,
   },
   emptyFieldsBody: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 13,
     lineHeight: 20,
   },

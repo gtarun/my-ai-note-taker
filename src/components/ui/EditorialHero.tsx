@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
   eyebrow: {
     flex: 1,
     color: palette.accent,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 1,
@@ -66,18 +66,18 @@ const styles = StyleSheet.create({
   },
   pillText: {
     color: palette.ink,
-    fontFamily: typography.label.fontFamily,
+    ...typography.label,
     fontSize: 12,
   },
   title: {
     color: palette.ink,
-    fontFamily: typography.display.fontFamily,
+    ...typography.display,
     fontSize: 30,
     lineHeight: 34,
   },
   body: {
     color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
+    ...typography.body,
     fontSize: 15,
     lineHeight: 22,
   },
