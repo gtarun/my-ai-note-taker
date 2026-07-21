@@ -299,7 +299,12 @@ export default function LocalModelsScreen() {
             body="Download once, then use models in Offline mode or as a private fallback."
             chips={[
               `${installedModels.length} installed`,
-              installedModels.length ? formatBytes(totalInstalledBytes) : 'No data used yet',
+              // Zero bytes across installed models means Apple Speech and
+              // nothing else — built into iOS, so it occupies no disk. The
+              // formatBytes fallback called that "size unknown".
+              installedModels.length && totalInstalledBytes > 0
+                ? formatBytes(totalInstalledBytes)
+                : 'No storage used',
             ]}
           />
         </FadeInView>
