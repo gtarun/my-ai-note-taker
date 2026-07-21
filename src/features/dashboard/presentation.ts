@@ -23,6 +23,90 @@ export function getMeetingStatusMeta(status: MeetingRow['status']): {
   }
 }
 
+/**
+ * Whether a meeting is mid-pipeline, so the row can show a skeleton where its
+ * summary will land instead of the flat "Open this meeting to process it."
+ * placeholder every unfinished row used to share.
+ */
+export function isMeetingProcessing(status: MeetingRow['status']): boolean {
+  return (
+    status === 'transcribing' ||
+    status === 'summarizing' ||
+    status === 'transcribing_local' ||
+    status === 'summarizing_local'
+  );
+}
+
+export type MeetingGroup = {
+  key: string;
+  title: string;
+  meetings: MeetingRow[];
+};
+
+function startOfDay(value: Date): number {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+}
+
+/**
+ * Buckets meetings into day sections.
+ *
+ * A flat reverse-chronological list gives no sense of when anything happened —
+ * "Today" and "three weeks ago" looked identical. Grouping is also what makes
+ * the list scannable once someone has more than a handful of recordings.
+ *
+ * `now` is injected so the boundaries are testable rather than dependent on the
+ * clock at the moment the suite runs.
+ */
+export function groupMeetingsByDay(meetings: MeetingRow[], now: Date = new Date()): MeetingGroup[] {
+  const today = startOfDay(now);
+  const dayMs = 86_400_000;
+  const groups: MeetingGroup[] = [];
+  const byKey = new Map<string, MeetingGroup>();
+
+  for (const meeting of meetings) {
+    const created = new Date(meeting.createdAt);
+    // A malformed timestamp must not drop the meeting from the list entirely.
+    const isValid = !Number.isNaN(created.getTime());
+    const day = isValid ? startOfDay(created) : Number.NaN;
+
+    let key: string;
+    let title: string;
+
+    if (!isValid) {
+      key = 'undated';
+      title = 'Undated';
+    } else if (day === today) {
+      key = 'today';
+      title = 'Today';
+    } else if (day === today - dayMs) {
+      key = 'yesterday';
+      title = 'Yesterday';
+    } else if (day > today - dayMs * 7) {
+      key = 'week';
+      title = 'Earlier this week';
+    } else {
+      key = String(day);
+      title = new Intl.DateTimeFormat('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: created.getFullYear() === now.getFullYear() ? undefined : 'numeric',
+      }).format(created);
+    }
+
+    const existing = byKey.get(key);
+
+    if (existing) {
+      existing.meetings.push(meeting);
+    } else {
+      const group = { key, title, meetings: [meeting] };
+      byKey.set(key, group);
+      groups.push(group);
+    }
+  }
+
+  return groups;
+}
+
 export function getDashboardEmptyStateCopy() {
   return {
     title: 'No meetings yet',

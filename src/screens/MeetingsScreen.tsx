@@ -1,14 +1,13 @@
 import * as DocumentPicker from 'expo-document-picker';
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
-  Pressable,
   RefreshControl,
   SafeAreaView,
+  SectionList,
   StyleSheet,
   Text,
   View,
@@ -18,7 +17,8 @@ import { FadeInView } from '../components/FadeInView';
 import { ScreenBackground } from '../components/ScreenBackground';
 import {
   PillButton,
-  SectionHeading,
+  PressableScale,
+  SkeletonParagraph,
   StatusChip,
   SurfaceCard,
 } from '../components/ui';
@@ -27,6 +27,8 @@ import {
   getDashboardEmptyStateCopy,
   getOfflineSetupCardCopy,
   getMeetingStatusMeta,
+  groupMeetingsByDay,
+  isMeetingProcessing,
 } from '../features/dashboard/presentation';
 import {
   LOCAL_MODELS_ROUTE,
@@ -37,7 +39,7 @@ import { getAuthSession } from '../services/account';
 import { createMeetingFromImport, listMeetings } from '../services/meetings';
 import { dismissOfflineSetup, getOfflineSetupSession } from '../services/offlineSetupSession';
 import type { AuthSession, MeetingRow, OfflineSetupSession } from '../types';
-import { palette, typography } from '../theme';
+import { elevation, motion, palette, radii, spacing, type, typography } from '../theme';
 import { formatDuration, formatTimestamp } from '../utils/format';
 
 const emptyCopy = getDashboardEmptyStateCopy();
@@ -130,66 +132,38 @@ export default function HomeScreen() {
       : null;
   const offlineSetupProgress = Math.round((offlineSetup?.progress ?? 0) * 100);
 
+  const sections = groupMeetingsByDay(meetings);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScreenBackground />
       <View style={styles.container}>
-        <FlatList
-          data={meetings}
+        <SectionList
+          sections={sections.map((group) => ({ ...group, data: group.meetings }))}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
+          stickySectionHeadersEnabled={false}
           ListHeaderComponent={
             <View style={styles.headerContent}>
               <FadeInView>
-                <SurfaceCard muted style={styles.heroCard}>
-                  <View style={styles.heroTopRow}>
-                    <View style={styles.heroCopy}>
-                      <Text style={styles.heroTitle}>Meetings</Text>
-                      <Text style={styles.heroSubtitle}>
-                        Capture meetings and process them when you are ready.
-                      </Text>
-                    </View>
-                    <View pointerEvents="none" style={styles.heroIllustration}>
-                      <View style={styles.heroNodePrimary} />
-                      <View style={styles.heroNodeSecondary} />
-                      <View style={styles.heroLineHorizontal} />
-                      <View style={styles.heroLineVertical} />
-                      <View style={styles.heroWaveA} />
-                      <View style={styles.heroWaveB} />
-                    </View>
-                  </View>
-                </SurfaceCard>
-              </FadeInView>
-
-              <FadeInView style={styles.primaryActions} delay={40}>
-                <PillButton
-                  label="New recording"
-                  icon={
-                    <MaterialCommunityIcons
-                      name="microphone-outline"
-                      size={18}
-                      color={palette.card}
-                    />
-                  }
-                  onPress={() => router.push(RECORD_TAB_ROUTE)}
-                />
-                <PillButton
-                  label={importButtonLabel}
-                  icon={<Feather name="upload" size={18} color={palette.ink} />}
-                  onPress={handleImport}
-                  variant="secondary"
-                  disabled={isImporting}
-                />
+                <View style={styles.masthead}>
+                  <Text style={styles.mastheadTitle}>Meetings</Text>
+                  <Text style={styles.mastheadMeta}>
+                    {meetings.length
+                      ? `${meetings.length} on this device`
+                      : 'Nothing recorded yet'}
+                  </Text>
+                </View>
               </FadeInView>
 
               {offlineSetup && offlineSetupCard ? (
-                <FadeInView delay={55}>
-                  <SurfaceCard muted style={styles.offlineSetupCard}>
-                    <View style={styles.offlineSetupHeader}>
-                      <View style={styles.cloudCopy}>
-                        <Text style={styles.cloudEyebrow}>Offline mode</Text>
-                        <Text style={styles.cloudTitle}>{offlineSetupCard.title}</Text>
-                        <Text style={styles.offlineSetupBody}>{offlineSetupCard.body}</Text>
+                <FadeInView delay={40}>
+                  <SurfaceCard muted level="flat" style={styles.noticeCard}>
+                    <View style={styles.noticeHeader}>
+                      <View style={styles.noticeCopy}>
+                        <Text style={styles.eyebrow}>OFFLINE MODE</Text>
+                        <Text style={styles.noticeTitle}>{offlineSetupCard.title}</Text>
+                        <Text style={styles.noticeBody}>{offlineSetupCard.body}</Text>
                       </View>
                       <StatusChip
                         label={
@@ -202,12 +176,9 @@ export default function HomeScreen() {
                     </View>
 
                     {offlineSetup.status === 'downloading' ? (
-                      <View style={styles.offlineSetupProgressTrack}>
+                      <View style={styles.progressTrack}>
                         <View
-                          style={[
-                            styles.offlineSetupProgressFill,
-                            { width: `${offlineSetupProgress}%` },
-                          ]}
+                          style={[styles.progressFill, { width: `${offlineSetupProgress}%` }]}
                         />
                       </View>
                     ) : null}
@@ -221,88 +192,83 @@ export default function HomeScreen() {
                         }
                         router.push(LOCAL_MODELS_ROUTE);
                       }}
-                      variant="ghost"
+                      variant="secondary"
                     />
                   </SurfaceCard>
                 </FadeInView>
               ) : null}
 
-              <FadeInView delay={70}>
-                <SurfaceCard muted style={styles.cloudCard}>
-                  <View style={styles.cloudRow}>
-                    <View style={styles.cloudCopy}>
-                      <Text style={styles.cloudEyebrow}>Cloud</Text>
-                      <Text style={styles.cloudTitle}>{cloudStatus.title}</Text>
-                    </View>
-                    <PillButton
-                      label={cloudStatus.actionLabel}
-                      onPress={() => router.push('/account')}
-                      variant="ghost"
-                    />
-                  </View>
-                </SurfaceCard>
-              </FadeInView>
-
-              <SectionHeading
-                title="Recent meetings"
-                subtitle={`${meetings.length} stored on this device`}
-              />
+              {cloudStatus.title === 'Cloud not connected' ? (
+                <FadeInView delay={60}>
+                  <PressableScale
+                    onPress={() => router.push('/account')}
+                    accessibilityLabel={cloudStatus.actionLabel}
+                    style={styles.cloudRow}
+                  >
+                    <Feather name="cloud-off" size={16} color={palette.mutedInk} />
+                    <Text style={styles.cloudText}>{cloudStatus.title}</Text>
+                    <Text style={styles.cloudAction}>{cloudStatus.actionLabel}</Text>
+                  </PressableScale>
+                </FadeInView>
+              ) : null}
             </View>
           }
-          renderItem={({ item }) => {
+          renderSectionHeader={({ section }) => (
+            <Text style={styles.sectionHeader}>{section.title}</Text>
+          )}
+          renderItem={({ item, index }) => {
             const statusMeta = getMeetingStatusMeta(item.status);
+            const processing = isMeetingProcessing(item.status);
 
             return (
-              <Pressable
-                onPress={() => router.push(getMeetingDetailRoute(item.id))}
-                style={({ pressed }) => (pressed ? styles.meetingRowPressed : null)}
-              >
-                <SurfaceCard style={styles.meetingCard}>
+              <FadeInView delay={Math.min(index, motion.stagger.maxItems) * motion.stagger.step}>
+                <PressableScale
+                  onPress={() => router.push(getMeetingDetailRoute(item.id))}
+                  accessibilityLabel={`${item.title}, ${statusMeta.label}`}
+                  style={styles.meetingCard}
+                >
                   <View style={styles.meetingHeader}>
                     <Text numberOfLines={1} style={styles.meetingTitle}>
                       {item.title}
                     </Text>
                     <StatusChip label={statusMeta.label} tone={statusMeta.tone} />
                   </View>
+
                   <Text style={styles.meetingMeta}>
                     {formatTimestamp(item.createdAt)}
-                    {item.durationMs ? ` • ${formatDuration(item.durationMs)}` : ''}
+                    {item.durationMs ? `  ·  ${formatDuration(item.durationMs)}` : ''}
                   </Text>
-                  <Text style={styles.meetingSnippet} numberOfLines={1}>
-                    {item.summaryShort ||
-                      item.transcriptText?.slice(0, 88) ||
-                      'Open this meeting to process it.'}
-                  </Text>
-                </SurfaceCard>
-              </Pressable>
+
+                  {processing ? (
+                    // A skeleton shaped like the summary that is coming, rather
+                    // than a line of placeholder prose that never changes.
+                    <SkeletonParagraph lines={2} style={styles.meetingSkeleton} />
+                  ) : (
+                    <Text style={styles.meetingSnippet} numberOfLines={2}>
+                      {item.summaryShort ||
+                        item.transcriptText?.slice(0, 120) ||
+                        'Not processed yet.'}
+                    </Text>
+                  )}
+                </PressableScale>
+              </FadeInView>
             );
           }}
           ListEmptyComponent={
             !hasLoaded ? (
               <View style={styles.listLoading}>
-                <ActivityIndicator color={palette.ink} />
+                <ActivityIndicator color={palette.mutedInk} />
               </View>
             ) : loadError ? (
-              <SurfaceCard muted style={styles.emptyState}>
+              <SurfaceCard muted level="flat" style={styles.emptyState}>
                 <Text style={styles.emptyTitle}>Couldn’t load your meetings</Text>
                 <Text style={styles.emptyBody}>{loadError}</Text>
-                <View style={styles.emptyActions}>
-                  <PillButton label="Try again" onPress={() => void loadMeetings()} />
-                </View>
+                <PillButton label="Try again" onPress={() => void loadMeetings()} />
               </SurfaceCard>
             ) : (
-              <SurfaceCard muted style={styles.emptyState}>
+              <SurfaceCard muted level="flat" style={styles.emptyState}>
                 <Text style={styles.emptyTitle}>{emptyCopy.title}</Text>
                 <Text style={styles.emptyBody}>{emptyCopy.body}</Text>
-                <View style={styles.emptyActions}>
-                  <PillButton label="New recording" onPress={() => router.push(RECORD_TAB_ROUTE)} />
-                  <PillButton
-                    label={importButtonLabel}
-                    onPress={handleImport}
-                    variant="secondary"
-                    disabled={isImporting}
-                  />
-                </View>
               </SurfaceCard>
             )
           }
@@ -314,239 +280,128 @@ export default function HomeScreen() {
                 await loadMeetings();
                 setIsRefreshing(false);
               }}
-              tintColor={palette.ink}
+              tintColor={palette.mutedInk}
             />
           }
         />
+
+        {/* The record affordance stays reachable from the list itself. */}
+        <View style={styles.dock}>
+          <PressableScale
+            onPress={() => router.push(RECORD_TAB_ROUTE)}
+            accessibilityLabel="New recording"
+            style={styles.dockRecord}
+          >
+            <View style={styles.dockRecordDot} />
+          </PressableScale>
+          <PillButton
+            label={importButtonLabel}
+            icon={<Feather name="upload" size={17} color={palette.ink} />}
+            onPress={handleImport}
+            variant="secondary"
+            disabled={isImporting}
+          />
+        </View>
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: palette.paper,
+  safeArea: { flex: 1, backgroundColor: palette.paper },
+  container: { flex: 1 },
+  listContent: { paddingHorizontal: spacing.xl, paddingBottom: 120 },
+  headerContent: { gap: spacing.md, paddingTop: spacing.sm },
+
+  masthead: { paddingTop: spacing.sm, paddingBottom: spacing.xs, gap: 2 },
+  mastheadTitle: { ...typography.display, ...type.display, color: palette.ink },
+  mastheadMeta: { ...typography.body, ...type.bodySm, color: palette.mutedInk },
+
+  eyebrow: { ...typography.label, ...type.micro, color: palette.mutedInk },
+
+  sectionHeader: {
+    ...typography.label,
+    ...type.micro,
+    color: palette.faintInk,
+    marginTop: spacing.xl,
+    marginBottom: spacing.sm,
+    textTransform: 'uppercase',
   },
-  container: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingVertical: 18,
-  },
-  listContent: {
-    paddingBottom: 28,
-    gap: 12,
-  },
-  headerContent: {
-    gap: 12,
-    paddingBottom: 6,
-  },
-  heroCard: {
-    gap: 12,
-    paddingVertical: 16,
-  },
-  heroTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 16,
-  },
-  heroCopy: {
-    flex: 1,
-    gap: 6,
-  },
-  heroTitle: {
-    color: palette.ink,
-    fontFamily: typography.display.fontFamily,
-    fontSize: 26,
-  },
-  heroSubtitle: {
-    color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
-    fontSize: 14,
-    lineHeight: 20,
-    maxWidth: 260,
-  },
-  heroIllustration: {
-    width: 92,
-    height: 72,
-    borderRadius: 20,
-    backgroundColor: palette.paper,
+
+  meetingCard: {
+    backgroundColor: palette.card,
+    borderRadius: radii.card,
     borderWidth: 1,
     borderColor: palette.lineSoft,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  heroNodePrimary: {
-    position: 'absolute',
-    top: 16,
-    left: 14,
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-    backgroundColor: palette.accent,
-  },
-  heroNodeSecondary: {
-    position: 'absolute',
-    right: 16,
-    bottom: 14,
-    width: 8,
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: palette.accentStrong,
-  },
-  heroLineHorizontal: {
-    position: 'absolute',
-    top: 20,
-    left: 24,
-    right: 18,
-    height: 1,
-    backgroundColor: palette.line,
-  },
-  heroLineVertical: {
-    position: 'absolute',
-    top: 20,
-    bottom: 18,
-    right: 20,
-    width: 1,
-    backgroundColor: palette.lineSoft,
-  },
-  heroWaveA: {
-    position: 'absolute',
-    left: 14,
-    right: 28,
-    bottom: 24,
-    height: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: palette.accentSoft,
-  },
-  heroWaveB: {
-    position: 'absolute',
-    left: 26,
-    right: 14,
-    bottom: 14,
-    height: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: palette.accent,
-  },
-  primaryActions: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  cloudCard: {
-    paddingVertical: 14,
-  },
-  offlineSetupCard: {
-    gap: 12,
-    paddingVertical: 16,
-    borderColor: palette.accentSoft,
-    backgroundColor: '#f8fbff',
-  },
-  offlineSetupHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  offlineSetupBody: {
-    color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  offlineSetupProgressTrack: {
-    height: 8,
-    overflow: 'hidden',
-    borderRadius: 999,
-    backgroundColor: palette.accentSoft,
-  },
-  offlineSetupProgressFill: {
-    height: '100%',
-    minWidth: 8,
-    borderRadius: 999,
-    backgroundColor: palette.accent,
-  },
-  cloudRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  cloudCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  cloudEyebrow: {
-    color: palette.accent,
-    fontFamily: typography.label.fontFamily,
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  cloudTitle: {
-    color: palette.ink,
-    fontFamily: typography.heading.fontFamily,
-    fontSize: 15,
-  },
-  meetingCard: {
-    gap: 8,
-    paddingVertical: 14,
-  },
-  meetingRowPressed: {
-    opacity: 0.82,
+    padding: spacing.lg,
+    marginBottom: spacing.sm,
+    gap: 3,
   },
   meetingHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 12,
+    gap: spacing.sm,
   },
-  meetingTitle: {
-    flex: 1,
-    color: palette.ink,
-    fontFamily: typography.heading.fontFamily,
-    fontSize: 16,
+  meetingTitle: { ...typography.bodyStrong, ...type.body, color: palette.ink, flex: 1 },
+  meetingMeta: { ...typography.mono, ...type.caption, color: palette.faintInk },
+  meetingSnippet: { ...typography.body, ...type.bodySm, color: palette.mutedInk, marginTop: 4 },
+  meetingSkeleton: { marginTop: spacing.sm, marginBottom: 2 },
+
+  noticeCard: { gap: spacing.md },
+  noticeHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md },
+  noticeCopy: { flex: 1, gap: 2 },
+  noticeTitle: { ...typography.bodyStrong, ...type.body, color: palette.ink },
+  noticeBody: { ...typography.body, ...type.bodySm, color: palette.mutedInk },
+
+  progressTrack: {
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: palette.lineSoft,
+    overflow: 'hidden',
   },
-  meetingMeta: {
-    color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
-    fontSize: 12,
-  },
-  meetingSnippet: {
-    color: palette.ink,
-    fontFamily: typography.body.fontFamily,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  emptyState: {
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 24,
-  },
-  listLoading: {
-    alignItems: 'center',
-    paddingVertical: 48,
-  },
-  emptyTitle: {
-    color: palette.ink,
-    fontFamily: typography.heading.fontFamily,
-    fontSize: 22,
-  },
-  emptyBody: {
-    color: palette.mutedInk,
-    fontFamily: typography.body.fontFamily,
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: 'center',
-    maxWidth: 300,
-  },
-  emptyActions: {
+  progressFill: { height: '100%', borderRadius: 999, backgroundColor: palette.accent },
+
+  cloudRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 10,
-    marginTop: 6,
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.md,
+    backgroundColor: palette.cardMuted,
   },
+  cloudText: { ...typography.body, ...type.bodySm, color: palette.mutedInk, flex: 1 },
+  cloudAction: { ...typography.label, ...type.label, color: palette.accent },
+
+  listLoading: { alignItems: 'center', paddingVertical: spacing.xxxl },
+  emptyState: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xxl, marginTop: spacing.lg },
+  emptyTitle: { ...typography.heading, ...type.heading, color: palette.ink },
+  emptyBody: {
+    ...typography.body,
+    ...type.bodySm,
+    color: palette.mutedInk,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+
+  dock: {
+    position: 'absolute',
+    left: spacing.xl,
+    right: spacing.xl,
+    bottom: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  dockRecord: {
+    width: 52,
+    height: 52,
+    borderRadius: 999,
+    backgroundColor: palette.clay,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...elevation.floating,
+  },
+  dockRecordDot: { width: 19, height: 19, borderRadius: 999, backgroundColor: palette.paper },
 });
