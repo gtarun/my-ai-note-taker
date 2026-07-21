@@ -45,7 +45,7 @@ import { getLegalConfig } from '../services/legal';
 import { getInstalledModels, getInstalledModelsForKind } from '../services/localModels';
 import { defaultProviderConfigs, providerDefinitions, providerMap } from '../services/providers';
 import { getAppSettings, sanitizeAppSettings, saveAppSettings } from '../services/settings';
-import { palette, radii, typography } from '../theme';
+import { palette, radii, spacing, type, typography } from '../theme';
 import type {
   AppSettings,
   InstalledModelRow,
@@ -720,20 +720,20 @@ function NavRow({
 
 const makeStyles = (palette: Palette) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: palette.paper },
-  container: { padding: 20, gap: 18, paddingBottom: 48 },
+  container: { padding: spacing.xl, gap: spacing.lg, paddingBottom: spacing.xxxl },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 24 },
-  loadingText: { color: palette.mutedInk, ...typography.body, fontSize: 15 },
+  loadingText: { color: palette.mutedInk, ...typography.body, ...type.bodySm },
   body: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 13,
-    lineHeight: 19,
+    ...type.bodySm,
   },
   eyebrow: {
-    color: palette.tertiary,
+    // Was clay — the colour reserved for record and destructive. A section
+    // label is neither, so it borrows meaning it should not have.
+    color: palette.mutedInk,
     ...typography.label,
-    fontSize: 11,
-    letterSpacing: 1.6,
+    ...type.micro,
     textTransform: 'uppercase',
   },
 
@@ -751,22 +751,21 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   },
   activeCopy: { flex: 1, gap: 2 },
   activeKind: {
-    color: palette.mutedInk,
+    color: palette.faintInk,
     ...typography.label,
-    fontSize: 11,
-    letterSpacing: 0.6,
+    ...type.micro,
     textTransform: 'uppercase',
   },
   activeProvider: {
     color: palette.ink,
     ...typography.label,
-    fontSize: 15,
+    ...type.body,
   },
   activeDot: { color: palette.line },
   activeModel: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 13,
+    ...type.bodySm,
   },
   activeDivider: {
     height: 1,
@@ -779,7 +778,13 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
 
   // Mini / nav rows
   miniCard: { gap: 0 },
-  miniRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 4 },
+  miniRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: 44,
+    paddingVertical: spacing.xs,
+  },
   miniIcon: {
     width: 36,
     height: 36,
@@ -791,13 +796,13 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   miniCopy: { flex: 1, gap: 2 },
   miniTitle: {
     color: palette.ink,
-    ...typography.label,
-    fontSize: 14,
+    ...typography.bodyStrong,
+    ...type.bodySm,
   },
   miniMeta: {
     color: palette.mutedInk,
     ...typography.body,
-    fontSize: 12,
+    ...type.caption,
   },
 
   // More card
@@ -805,8 +810,11 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   navRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
+    gap: spacing.md,
+    // 44pt is Apple's minimum touch target; this row was 32 + 12 = 44 only by
+    // accident of its icon, and dropped below it whenever the icon was absent.
+    minHeight: 44,
+    paddingVertical: spacing.sm,
   },
   navIcon: {
     width: 32,
@@ -819,8 +827,8 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   navLabel: {
     flex: 1,
     color: palette.ink,
-    ...typography.label,
-    fontSize: 14,
+    ...typography.bodyStrong,
+    ...type.body,
   },
 
   // Saved provider rows
