@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { defaultProviderConfigs } from '../../services/providers';
 import type { InstalledModelRow, ProviderConfig, ProviderId } from '../../types';
 import {
+  buildLocalModelLibraryMeta,
   buildProviderEditorSelection,
   buildProcessingModeDetails,
   buildProviderPickerOptionCopy,
@@ -29,6 +30,17 @@ describe('settings presentation', () => {
     expect(getConfiguredProviderIds(providers)).toEqual(['openai', 'openrouter', 'local']);
     expect(getConfiguredProviderIds(providers, 'transcription')).toEqual(['openai', 'openrouter', 'local']);
     expect(getConfiguredProviderIds(providers, 'summary')).toEqual(['openai', 'openrouter', 'local']);
+  });
+
+  test('describes a library whose only model ships with the OS', () => {
+    /*
+     * Apple Speech is installed but occupies no disk, so the byte total is
+     * legitimately zero. formatBytes renders that as "size unknown", which
+     * turned the good news into what looks like a bookkeeping failure.
+     */
+    expect(buildLocalModelLibraryMeta(1, 0)).toBe('1 installed · no storage used');
+    expect(buildLocalModelLibraryMeta(0, 0)).toBe('No models installed yet');
+    expect(buildLocalModelLibraryMeta(2, 147951465)).toBe('2 installed · 141 MB');
   });
 
   test('formats bytes and display labels predictably', () => {

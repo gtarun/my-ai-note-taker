@@ -35,6 +35,24 @@ export function displayModelLabel(models: InstalledModelRow[], modelId: string) 
   return models.find((model) => model.id === modelId)?.displayName ?? modelId;
 }
 
+/**
+ * Summary line for the local model library row.
+ *
+ * Zero total bytes is not missing information — on iOS it means the only
+ * installed model is Apple Speech, which ships with the OS and occupies no
+ * disk. The row read "1 installed · size unknown", which sounds like the app
+ * lost track of something rather than like the good news it is.
+ */
+export function buildLocalModelLibraryMeta(installedCount: number, totalBytes: number) {
+  if (installedCount === 0) {
+    return 'No models installed yet';
+  }
+
+  const storage = totalBytes > 0 ? formatBytes(totalBytes) : 'no storage used';
+
+  return `${installedCount} installed · ${storage}`;
+}
+
 export function formatBytes(value: number) {
   if (!value) {
     return 'size unknown';

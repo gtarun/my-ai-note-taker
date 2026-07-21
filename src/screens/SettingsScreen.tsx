@@ -23,7 +23,10 @@ import {
   StatusChip,
   SurfaceCard,
 } from '../components/ui';
-import { formatBytes, getConfiguredProviderIds } from '../features/settings/presentation';
+import {
+  buildLocalModelLibraryMeta,
+  getConfiguredProviderIds,
+} from '../features/settings/presentation';
 import {
   DEBUG_LOGS_ROUTE,
   LAYERS_ROUTE,
@@ -474,9 +477,7 @@ export default function SettingsScreen() {
               <View style={styles.miniCopy}>
                 <Text style={styles.miniTitle}>Local model library</Text>
                 <Text style={styles.miniMeta}>
-                  {installedModels.length
-                    ? `${installedModels.length} installed · ${formatBytes(totalInstalledBytes)}`
-                    : 'No models installed yet'}
+                  {buildLocalModelLibraryMeta(installedModels.length, totalInstalledBytes)}
                 </Text>
               </View>
               <Feather name="chevron-right" size={18} color={palette.mutedInk} />
