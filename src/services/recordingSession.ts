@@ -21,6 +21,14 @@ import { createMeetingFromRecording } from './meetings';
 import { getActiveRecordingAudioMode, getIdleRecordingAudioMode } from './recordingAudioMode';
 import { getAppSettings } from './settings';
 
+/**
+ * Exported so the Record screen can recognize this specific failure and offer a
+ * route into system settings. Once the user denies the microphone prompt, iOS
+ * never shows it again — without that route the Record tab is permanently dead
+ * with no in-app way to fix it.
+ */
+export const MICROPHONE_PERMISSION_ERROR = 'Microphone permission is required to record audio.';
+
 type RecordingPhase = 'idle' | 'recording' | 'saving' | 'error';
 
 type RecordingSessionSnapshot = {
@@ -341,7 +349,7 @@ export function createRecordingSession(overrides: Partial<RecordingSessionDeps> 
         const permission = await deps.requestRecordingPermissionsAsync();
 
         if (!permission.granted) {
-          throw new Error('Microphone permission is required to record audio.');
+          throw new Error(MICROPHONE_PERMISSION_ERROR);
         }
 
         const activeRecorder = ensureRecorder();

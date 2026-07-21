@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, SafeAreaView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, SafeAreaView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { FadeInView } from '../components/FadeInView';
 import { KeyboardAwareScrollView } from '../components/KeyboardAwareScrollView';
@@ -31,7 +31,7 @@ import {
   getTitlePlaceholder,
 } from '../features/recording/presentation';
 import { getMeetingDetailRoute } from '../navigation/routes';
-import { recordingSession } from '../services/recordingSession';
+import { MICROPHONE_PERMISSION_ERROR, recordingSession } from '../services/recordingSession';
 import { formatDuration } from '../utils/format';
 import { palette, typography } from '../theme';
 
@@ -76,7 +76,24 @@ export default function RecordScreen() {
     try {
       await recordingSession.startRecording();
     } catch (error) {
-      Alert.alert('Recording failed', error instanceof Error ? error.message : 'Unable to start recording.');
+      const message = error instanceof Error ? error.message : 'Unable to start recording.';
+
+      // iOS only ever shows the microphone prompt once. After a denial the only
+      // way back is the system settings app, so offer it rather than leaving the
+      // Record tab permanently unusable.
+      if (message === MICROPHONE_PERMISSION_ERROR) {
+        Alert.alert(
+          'Microphone access needed',
+          'AI Notes needs microphone access to record meetings. You can turn it on in Settings.',
+          [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => void Linking.openSettings() },
+          ]
+        );
+        return;
+      }
+
+      Alert.alert('Recording failed', message);
     }
   };
 

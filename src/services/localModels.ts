@@ -254,6 +254,25 @@ export async function getInstalledModels(): Promise<InstalledModelRow[]> {
   return dbRows;
 }
 
+/**
+ * Clears download rows orphaned by an app restart.
+ *
+ * `activeModelDownloadIds` lives in memory and the resumable-download handle is
+ * never persisted, so no download can survive the JS context going away. A row
+ * left at `status: 'downloading'` is therefore always stale — and because
+ * nothing reconciled it at boot, the model would sit at "Downloading…" forever
+ * with no way to retry.
+ */
+export async function reconcileInterruptedModelDownloads(): Promise<void> {
+  const db = getDatabase();
+  await db.runAsync(
+    `UPDATE installed_models
+     SET status = 'failed', error_message = ?
+     WHERE status = 'downloading'`,
+    'Download was interrupted. Tap to try again.'
+  );
+}
+
 export async function getInstalledModel(id: string): Promise<InstalledModelRow | null> {
   if (id === APPLE_SPEECH_MODEL_ID && shouldExposeAppleSpeech()) {
     return buildAppleSpeechSyntheticRow();

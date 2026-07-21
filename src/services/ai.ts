@@ -163,12 +163,23 @@ export async function summarizeAndExtractTranscript(params: SummarizeAndExtractP
     });
   }
 
-  const [summary, extractedValues] = await Promise.all([
+  // allSettled rather than all: with Promise.all, if both calls reject the
+  // second rejection has no handler attached and surfaces as an unhandled
+  // rejection.
+  const [summaryResult, extractionResult] = await Promise.allSettled([
     summarizeTranscript(params),
     extractStructuredData(params),
   ]);
 
-  return { summary, extractedValues };
+  if (summaryResult.status === 'rejected') {
+    throw summaryResult.reason;
+  }
+
+  if (extractionResult.status === 'rejected') {
+    throw extractionResult.reason;
+  }
+
+  return { summary: summaryResult.value, extractedValues: extractionResult.value };
 }
 
 async function transcribeOpenAICompatible(provider: ProviderConfig, audioUri: string) {
@@ -318,7 +329,7 @@ async function summarizeWithOpenAICompatible(
     throw new Error('Summary API returned no content.');
   }
 
-  return JSON.parse(content) as SummaryPayload;
+  return parseModelJson<SummaryPayload>(content, 'The summary provider');
 }
 
 async function summarizeWithAnthropic(provider: ProviderConfig, transcriptText: string) {
@@ -359,7 +370,7 @@ ${transcriptText}`,
     throw new Error('Anthropic returned no content.');
   }
 
-  return JSON.parse(extractJson(content)) as SummaryPayload;
+  return parseModelJson<SummaryPayload>(content, 'Anthropic');
 }
 
 async function summarizeWithGemini(provider: ProviderConfig, transcriptText: string) {
@@ -411,7 +422,7 @@ async function summarizeWithGemini(provider: ProviderConfig, transcriptText: str
     throw new Error('Gemini returned no content.');
   }
 
-  return JSON.parse(content) as SummaryPayload;
+  return parseModelJson<SummaryPayload>(content, 'Gemini');
 }
 
 async function extractWithOpenAICompatible(
@@ -464,7 +475,7 @@ async function extractWithOpenAICompatible(
     throw new Error('Extraction API returned no content.');
   }
 
-  return JSON.parse(content);
+  return parseModelJson<Record<string, unknown>>(content, 'The extraction provider');
 }
 
 async function extractWithAnthropic(
@@ -506,7 +517,7 @@ async function extractWithAnthropic(
     throw new Error('Anthropic returned no extraction content.');
   }
 
-  return JSON.parse(extractJson(content));
+  return parseModelJson<Record<string, unknown>>(content, 'Anthropic');
 }
 
 async function extractWithGemini(
@@ -561,7 +572,7 @@ async function extractWithGemini(
     throw new Error('Gemini returned no extraction content.');
   }
 
-  return JSON.parse(content);
+  return parseModelJson<Record<string, unknown>>(content, 'Gemini');
 }
 
 function buildSummaryMessages(transcriptText: string) {
@@ -689,4 +700,27 @@ function extractJson(content: string) {
   const trimmed = content.trim();
   const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
   return jsonMatch?.[0] ?? trimmed;
+}
+
+/**
+ * Parses a model's JSON response defensively.
+ *
+ * Even with structured-output schemas requested, providers sometimes wrap JSON
+ * in a markdown fence or prepend prose. A bare JSON.parse surfaced the raw
+ * `SyntaxError: Unexpected token` straight into an Alert, which tells the user
+ * nothing actionable. This falls back to extracting the JSON body and, failing
+ * that, reports which provider misbehaved.
+ */
+function parseModelJson<T>(content: string, label: string): T {
+  try {
+    return JSON.parse(content) as T;
+  } catch {
+    try {
+      return JSON.parse(extractJson(content)) as T;
+    } catch {
+      throw new Error(
+        `${label} returned a response that was not valid JSON. Try again, or switch to a different model for this meeting.`
+      );
+    }
+  }
 }

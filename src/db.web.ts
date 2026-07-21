@@ -596,6 +596,17 @@ const db = {
       return;
     }
 
+    if (source.includes("SET status = 'failed', error_message = ?") && source.includes("WHERE status = 'downloading'")) {
+      for (const model of state.installedModels) {
+        if (model.status === 'downloading') {
+          model.status = 'failed';
+          model.error_message = String(params[0]);
+        }
+      }
+      writeState(state);
+      return;
+    }
+
     if (source.includes('UPDATE meetings SET title = ?, updated_at = ?')) {
       const meeting = state.meetings.find((row) => row.id === params[2]);
       if (meeting) {
